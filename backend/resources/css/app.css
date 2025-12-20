@@ -1,0 +1,34 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+    --better-bg: #050816;
+    --better-surface: rgba(15, 23, 42, 0.75);
+    --better-border: rgba(226, 232, 240, 0.08);
+    --better-primary: #6366f1;
+    --better-accent: #22d3ee;
+}
+
+body {
+    @apply bg-slate-950 text-slate-100 antialiased;
+    background-image:
+        radial-gradient(circle at 20% 20%, rgba(34, 211, 238, 0.08), transparent 40%),
+        radial-gradient(circle at 80% 0%, rgba(129, 140, 248, 0.12), transparent 40%),
+        radial-gradient(circle at 0% 80%, rgba(236, 72, 153, 0.08), transparent 35%);
+    min-height: 100vh;
+}
+
+@layer components {
+    .better-card {
+        @apply bg-slate-900/70 backdrop-blur-xl border border-slate-800/60 rounded-3xl shadow-2xl shadow-black/40;
+    }
+
+    .better-pill {
+        @apply inline-flex items-center gap-2 rounded-full border border-slate-800/70 px-3 py-1 text-xs font-semibold uppercase tracking-wide;
+    }
+
+    .better-gradient {
+        background: linear-gradient(120deg, rgba(99, 102, 241, 0.35), rgba(14, 165, 233, 0.35));
+    }
+}

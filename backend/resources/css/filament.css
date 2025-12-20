@@ -1,0 +1,31 @@
+/* Make white logo visible on white background */
+.fi-sidebar-header img,
+.fi-sidebar-header svg,
+[data-sidebar-header] img,
+[data-sidebar-header] svg {
+    filter: invert(1) brightness(0.1) !important;
+    padding: 0.75rem !important;
+    background: rgba(0, 0, 0, 0.08) !important;
+    border-radius: 0.5rem !important;
+}
+
+/* Make logo visible on login page */
+.fi-simple-main-ctn img,
+.fi-simple-main-ctn svg,
+.fi-simple-header img,
+.fi-simple-header svg {
+    filter: invert(1) brightness(0.1) !important;
+    padding: 1rem !important;
+    background: rgba(0, 0, 0, 0.08) !important;
+    border-radius: 0.75rem !important;
+    display: inline-block !important;
+}
+
+/* Alternative: Add subtle background to sidebar header */
+.fi-sidebar-header {
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.05) 0%, rgba(14, 165, 233, 0.05) 100%) !important;
+    padding: 1rem !important;
+    border-radius: 0.75rem !important;
+    margin: 0.5rem !important;
+}
+
