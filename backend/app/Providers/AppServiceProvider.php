@@ -63,21 +63,32 @@ class AppServiceProvider extends ServiceProvider
 
         // Ensure Livewire routes are registered (required for Filament)
         // Configure Livewire to use the correct base path for subdirectory deployments
-        \Livewire\Livewire::setUpdateRoute(function ($handle) {
-            // Get base path from environment variable or APP_URL
-            // For production: set LIVEWIRE_BASE_PATH=/backend/backend/public in .env
-            $basePath = env('LIVEWIRE_BASE_PATH', '');
+        $basePath = env('LIVEWIRE_BASE_PATH', '');
+        
+        if ($basePath) {
+            // Remove leading/trailing slashes
+            $basePath = trim($basePath, '/');
+            $fullBasePath = '/' . $basePath;
             
-            if ($basePath) {
-                // Remove leading/trailing slashes and add the livewire update path
-                $basePath = trim($basePath, '/');
-                $updatePath = '/' . $basePath . '/livewire/update';
-            } else {
-                $updatePath = '/livewire/update';
-            }
+            // Set the update route with base path
+            \Livewire\Livewire::setUpdateRoute(function ($handle) use ($fullBasePath) {
+                return \Illuminate\Support\Facades\Route::post($fullBasePath . '/livewire/update', $handle)
+                    ->middleware(['web']);
+            });
             
-            return \Illuminate\Support\Facades\Route::post($updatePath, $handle)
-                ->middleware(['web']);
-        });
+            // Set the script route with base path (for Livewire assets)
+            \Livewire\Livewire::setScriptRoute(function ($handle) use ($fullBasePath) {
+                return \Illuminate\Support\Facades\Route::get($fullBasePath . '/livewire/livewire.js', $handle);
+            });
+            
+            // Configure asset URL so Livewire knows the base path for generating URLs
+            \Livewire\Livewire::setAssetUrl(url($fullBasePath));
+        } else {
+            // Default configuration for local development
+            \Livewire\Livewire::setUpdateRoute(function ($handle) {
+                return \Illuminate\Support\Facades\Route::post('/livewire/update', $handle)
+                    ->middleware(['web']);
+            });
+        }
     }
 }
