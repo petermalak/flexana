@@ -62,8 +62,21 @@ class AppServiceProvider extends ServiceProvider
         );
 
         // Ensure Livewire routes are registered (required for Filament)
+        // Configure Livewire to use the correct base path for subdirectory deployments
         \Livewire\Livewire::setUpdateRoute(function ($handle) {
-            return \Illuminate\Support\Facades\Route::post('/livewire/update', $handle)
+            // Get base path from environment variable or APP_URL
+            // For production: set LIVEWIRE_BASE_PATH=/backend/backend/public in .env
+            $basePath = env('LIVEWIRE_BASE_PATH', '');
+            
+            if ($basePath) {
+                // Remove leading/trailing slashes and add the livewire update path
+                $basePath = trim($basePath, '/');
+                $updatePath = '/' . $basePath . '/livewire/update';
+            } else {
+                $updatePath = '/livewire/update';
+            }
+            
+            return \Illuminate\Support\Facades\Route::post($updatePath, $handle)
                 ->middleware(['web']);
         });
     }
