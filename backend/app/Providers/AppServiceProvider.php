@@ -54,11 +54,17 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Vite::prefetch(concurrency: 3);
-        
+
         // Add custom CSS to make white logo visible
         \Filament\Support\Facades\FilamentView::registerRenderHook(
             'panels::head.start',
             fn (): string => '<link rel="stylesheet" href="' . asset('css/logo-styles.css') . '">'
         );
+
+        // // Ensure Livewire routes are registered (required for Filament)
+        // \Livewire\Livewire::setUpdateRoute(function ($handle) {
+        //     return \Illuminate\Support\Facades\Route::post('/livewire/update', $handle)
+        //         ->middleware(['web']);
+        // });
     }
 }
