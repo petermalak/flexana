@@ -168,10 +168,13 @@ return [
     | the cookie from being sent to you when it can't be done securely.
     |
     | If null, Laravel will automatically detect if the request is secure.
+    | We also check APP_URL to determine if we should use secure cookies.
     |
     */
 
-    'secure' => env('SESSION_SECURE_COOKIE', null),
+    'secure' => env('SESSION_SECURE_COOKIE') !== null 
+        ? (bool) env('SESSION_SECURE_COOKIE')
+        : (str_starts_with(env('APP_URL', 'http://localhost'), 'https://')),
 
     /*
     |--------------------------------------------------------------------------
