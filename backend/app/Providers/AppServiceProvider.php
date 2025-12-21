@@ -80,9 +80,6 @@ class AppServiceProvider extends ServiceProvider
             \Livewire\Livewire::setScriptRoute(function ($handle) use ($fullBasePath) {
                 return \Illuminate\Support\Facades\Route::get($fullBasePath . '/livewire/livewire.js', $handle);
             });
-            
-            // Configure asset URL so Livewire knows the base path for generating URLs
-            \Livewire\Livewire::setAssetUrl(url($fullBasePath));
         } else {
             // Default configuration for local development
             \Livewire\Livewire::setUpdateRoute(function ($handle) {
