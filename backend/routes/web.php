@@ -8,13 +8,14 @@ use Inertia\Inertia;
 require __DIR__.'/auth.php';
 
 // Dashboard route (protected by auth middleware)
-Route::middleware(['auth', 'verified'])->group(function () {
+// Redirects to Filament admin panel since Inertia Dashboard component doesn't exist
+Route::middleware(['auth'])->group(function () {
     Route::get('/dashboard', function () {
-        return Inertia::render('Dashboard');
+        return redirect('/admin');
     })->name('dashboard');
 });
 
-// Root route - redirect to dashboard if authenticated, otherwise to login
+// Root route - redirect to dashboard (which redirects to Filament admin) if authenticated, otherwise to login
 Route::get('/', function () {
     if (Auth::check()) {
         return redirect()->route('dashboard');
