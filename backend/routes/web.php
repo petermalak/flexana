@@ -1,5 +1,6 @@
 <?php
 
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -15,7 +16,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
 // Root route - redirect to dashboard if authenticated, otherwise to login
 Route::get('/', function () {
-    if (auth()->check()) {
+    if (Auth::check()) {
         return redirect()->route('dashboard');
     }
     return redirect()->route('login');
