@@ -61,10 +61,10 @@ class AppServiceProvider extends ServiceProvider
             fn (): string => '<link rel="stylesheet" href="' . asset('css/logo-styles.css') . '">'
         );
 
-        // // Ensure Livewire routes are registered (required for Filament)
-        // \Livewire\Livewire::setUpdateRoute(function ($handle) {
-        //     return \Illuminate\Support\Facades\Route::post('/livewire/update', $handle)
-        //         ->middleware(['web']);
-        // });
+        // Ensure Livewire routes are registered (required for Filament)
+        \Livewire\Livewire::setUpdateRoute(function ($handle) {
+            return \Illuminate\Support\Facades\Route::post('/livewire/update', $handle)
+                ->middleware(['web']);
+        });
     }
 }
