@@ -79,6 +79,18 @@ class AdminPanelProvider extends PanelProvider
                 }
                 return asset('favicon.ico');
             })
+            ->renderHook(
+                'panels::head.start',
+                function (): string {
+                    $basePath = env('LIVEWIRE_BASE_PATH', '');
+                    if ($basePath) {
+                        $fullBasePath = '/' . trim($basePath, '/');
+                        // Use base tag to make all relative URLs resolve to the correct base path
+                        return '<base href="' . url($fullBasePath) . '/">';
+                    }
+                    return '';
+                }
+            )
             ->middleware([
                 EncryptCookies::class,
                 AddQueuedCookiesToResponse::class,
