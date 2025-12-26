@@ -26,11 +26,6 @@ use Illuminate\Support\ServiceProvider;
 class AppServiceProvider extends ServiceProvider
 {
     /**
-     * Store Livewire handler for proxy route
-     */
-    protected static $livewireHandler = null;
-
-    /**
      * Register any application services.
      */
     public function register(): void
@@ -75,28 +70,26 @@ class AppServiceProvider extends ServiceProvider
             $basePath = trim($basePath, '/');
             $fullBasePath = '/' . $basePath;
 
-            // Set the update route with base path and store the handler
+            // Set the update route with base path and also register at root level
             \Livewire\Livewire::setUpdateRoute(function ($handle) use ($fullBasePath) {
-                self::$livewireHandler = $handle;
-                return \Illuminate\Support\Facades\Route::post($fullBasePath . '/livewire/update', $handle)
+                // Register the route with base path
+                $routeWithBase = \Illuminate\Support\Facades\Route::post($fullBasePath . '/livewire/update', $handle)
                     ->middleware(['web']);
+
+                // Also register at root level to catch /livewire/update requests
+                \Illuminate\Support\Facades\Route::post('/livewire/update', $handle)
+                    ->middleware(['web']);
+
+                return $routeWithBase;
             });
 
             // Set the script route with base path (for Livewire assets)
             \Livewire\Livewire::setScriptRoute(function ($handle) use ($fullBasePath) {
-                return \Illuminate\Support\Facades\Route::get($fullBasePath . '/livewire/livewire.js', $handle);
+                // Register both routes
+                $routeWithBase = \Illuminate\Support\Facades\Route::get($fullBasePath . '/livewire/livewire.js', $handle);
+                \Illuminate\Support\Facades\Route::get('/livewire/livewire.js', $handle);
+                return $routeWithBase;
             });
-
-            // Register proxy route at root level to catch /livewire/update requests
-            // Use the stored handler closure directly
-            \Illuminate\Support\Facades\Route::post('/livewire/update', function () {
-                if (self::$livewireHandler) {
-                    // Call the handler closure with the current request
-                    return call_user_func(self::$livewireHandler, request());
-                }
-                // Fallback: return error
-                return response('Livewire handler not available', 500);
-            })->middleware(['web']);
         } else {
             // Default configuration for local development
             \Livewire\Livewire::setUpdateRoute(function ($handle) {
