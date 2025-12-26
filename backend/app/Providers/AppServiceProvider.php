@@ -88,11 +88,13 @@ class AppServiceProvider extends ServiceProvider
             });
 
             // Register proxy route at root level to catch /livewire/update requests
+            // Use the stored handler closure directly
             \Illuminate\Support\Facades\Route::post('/livewire/update', function () {
                 if (self::$livewireHandler) {
-                    return (self::$livewireHandler)(request());
+                    // Call the handler closure with the current request
+                    return call_user_func(self::$livewireHandler, request());
                 }
-                // Fallback if handler not set
+                // Fallback: return error
                 return response('Livewire handler not available', 500);
             })->middleware(['web']);
         } else {
