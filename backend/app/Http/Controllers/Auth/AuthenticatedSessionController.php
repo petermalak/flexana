@@ -34,6 +34,7 @@ class AuthenticatedSessionController extends Controller
         $request->session()->regenerate();
 
         // Redirect to Filament admin panel instead of Inertia dashboard
+        // Use route helper to ensure correct path
         return redirect()->intended('/admin');
     }
 
