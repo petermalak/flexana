@@ -26,6 +26,11 @@ use Illuminate\Support\ServiceProvider;
 class AppServiceProvider extends ServiceProvider
 {
     /**
+     * Store Livewire handler for proxy route
+     */
+    protected static $livewireHandler = null;
+
+    /**
      * Register any application services.
      */
     public function register(): void
@@ -64,22 +69,32 @@ class AppServiceProvider extends ServiceProvider
         // Ensure Livewire routes are registered (required for Filament)
         // Configure Livewire to use the correct base path for subdirectory deployments
         $basePath = env('LIVEWIRE_BASE_PATH', '');
-        
+
         if ($basePath) {
             // Remove leading/trailing slashes
             $basePath = trim($basePath, '/');
             $fullBasePath = '/' . $basePath;
-            
-            // Set the update route with base path
+
+            // Set the update route with base path and store the handler
             \Livewire\Livewire::setUpdateRoute(function ($handle) use ($fullBasePath) {
+                self::$livewireHandler = $handle;
                 return \Illuminate\Support\Facades\Route::post($fullBasePath . '/livewire/update', $handle)
                     ->middleware(['web']);
             });
-            
+
             // Set the script route with base path (for Livewire assets)
             \Livewire\Livewire::setScriptRoute(function ($handle) use ($fullBasePath) {
                 return \Illuminate\Support\Facades\Route::get($fullBasePath . '/livewire/livewire.js', $handle);
             });
+
+            // Register proxy route at root level to catch /livewire/update requests
+            \Illuminate\Support\Facades\Route::post('/livewire/update', function () {
+                if (self::$livewireHandler) {
+                    return (self::$livewireHandler)(request());
+                }
+                // Fallback if handler not set
+                return response('Livewire handler not available', 500);
+            })->middleware(['web']);
         } else {
             // Default configuration for local development
             \Livewire\Livewire::setUpdateRoute(function ($handle) {
