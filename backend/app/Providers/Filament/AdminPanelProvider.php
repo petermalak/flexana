@@ -80,13 +80,24 @@ class AdminPanelProvider extends PanelProvider
                 return asset('favicon.ico');
             })
             ->renderHook(
-                'panels::head.start',
+                'panels::head.end',
                 function (): string {
                     $basePath = env('LIVEWIRE_BASE_PATH', '');
                     if ($basePath) {
                         $fullBasePath = '/' . trim($basePath, '/');
-                        // Use base tag to make all relative URLs resolve to the correct base path
-                        return '<base href="' . url($fullBasePath) . '/">';
+                        $updateUrl = $fullBasePath . '/livewire/update';
+                        // Inject script to override Livewire's endpoint URL
+                        // This must run before Livewire initializes
+                        return '<script>
+                            window.livewireConfig = window.livewireConfig || {};
+                            window.livewireConfig.updateEndpoint = "' . $updateUrl . '";
+                            // Override Livewire\'s default endpoint
+                            document.addEventListener("DOMContentLoaded", function() {
+                                if (window.Livewire) {
+                                    window.Livewire.config.updateEndpoint = "' . $updateUrl . '";
+                                }
+                            });
+                        </script>';
                     }
                     return '';
                 }
