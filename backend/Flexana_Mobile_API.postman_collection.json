@@ -1,0 +1,703 @@
+{
+	"info": {
+		"_postman_id": "flexana-mobile-api-2024",
+		"name": "Flexana Mobile API",
+		"description": "API collection for Flexana mobile app",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Home Screen",
+			"item": [
+				{
+					"name": "Get Banners",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/mobile/banners",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"mobile",
+								"banners"
+							]
+						},
+						"description": "Get banners for home screen"
+					},
+					"response": [
+						{
+							"name": "Success",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/api/mobile/banners",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"mobile",
+										"banners"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "[\n    {\n        \"image\": \"https://example.com/banner1.jpg\",\n        \"URL\": \"https://example.com/promo1\"\n    }\n]"
+						}
+					]
+				},
+				{
+					"name": "Get Instructors (Full)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/mobile/instructors",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"mobile",
+								"instructors"
+							]
+						},
+						"description": "Get instructors with full details for home screen"
+					},
+					"response": [
+						{
+							"name": "Success",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/api/mobile/instructors",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"mobile",
+										"instructors"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "[\n    {\n        \"id\": \"1\",\n        \"name\": \"John Doe\",\n        \"image\": \"https://example.com/instructor1.jpg\",\n        \"position\": \"Senior Yoga Instructor\",\n        \"brief\": \"10 years of experience in yoga and meditation\"\n    }\n]"
+						}
+					]
+				},
+				{
+					"name": "Get Services (Full)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/mobile/service",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"mobile",
+								"service"
+							]
+						},
+						"description": "Get services with full details for home screen"
+					},
+					"response": [
+						{
+							"name": "Success",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/api/mobile/service",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"mobile",
+										"service"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "[\n    {\n        \"id\": \"1\",\n        \"name\": \"Yoga Class\",\n        \"level\": \"Beginner\",\n        \"image\": \"https://example.com/service1.jpg\",\n        \"brief\": \"A relaxing yoga class for beginners\"\n    }\n]"
+						}
+					]
+				}
+			],
+			"description": "APIs for the home screen"
+		},
+		{
+			"name": "Schedule Screen",
+			"item": [
+				{
+					"name": "Get Instructors (Simple)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/mobile/instructors/simple",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"mobile",
+								"instructors",
+								"simple"
+							]
+						},
+						"description": "Get simple list of instructors for schedule screen"
+					},
+					"response": [
+						{
+							"name": "Success",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/api/mobile/instructors/simple",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"mobile",
+										"instructors",
+										"simple"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "[\n    {\n        \"id\": \"1\",\n        \"name\": \"John Doe\"\n    }\n]"
+						}
+					]
+				},
+				{
+					"name": "Get Services (Simple)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/mobile/service/simple",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"mobile",
+								"service",
+								"simple"
+							]
+						},
+						"description": "Get simple list of services for schedule screen"
+					},
+					"response": [
+						{
+							"name": "Success",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/api/mobile/service/simple",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"mobile",
+										"service",
+										"simple"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "[\n    {\n        \"id\": \"1\",\n        \"name\": \"Yoga Class\"\n    }\n]"
+						}
+					]
+				},
+				{
+					"name": "Get Sessions",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/mobile/sessions?date=2024-01-20&serviceID=1&instructorID=1",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"mobile",
+								"sessions"
+							],
+							"query": [
+								{
+									"key": "date",
+									"value": "2024-01-20",
+									"description": "Date filter (YYYY-MM-DD)"
+								},
+								{
+									"key": "serviceID",
+									"value": "1",
+									"description": "Service ID filter (optional)"
+								},
+								{
+									"key": "instructorID",
+									"value": "1",
+									"description": "Instructor ID filter (optional)"
+								}
+							]
+						},
+						"description": "Get sessions based on filters (date, serviceID, instructorID)"
+					},
+					"response": [
+						{
+							"name": "Success",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/api/mobile/sessions?date=2024-01-20&serviceID=1&instructorID=1",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"mobile",
+										"sessions"
+									],
+									"query": [
+										{
+											"key": "date",
+											"value": "2024-01-20"
+										},
+										{
+											"key": "serviceID",
+											"value": "1"
+										},
+										{
+											"key": "instructorID",
+											"value": "1"
+										}
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "[\n    {\n        \"id\": \"1\",\n        \"instructor\": \"John Doe\",\n        \"service\": \"Yoga Class\",\n        \"date\": \"2024-01-20T10:00:00Z\",\n        \"isBooked\": false,\n        \"isFull\": false,\n        \"canCancel\": false,\n        \"canBook\": true,\n        \"minutesBeforeCancellation\": 60\n    }\n]"
+						}
+					]
+				},
+				{
+					"name": "Book Session",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"sessionID\": 1,\n    \"customerId\": 1,\n    \"persons\": 1\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/api/mobile/bookings",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"mobile",
+								"bookings"
+							]
+						},
+						"description": "Book a session using sessionID"
+					},
+					"response": [
+						{
+							"name": "Success",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"sessionID\": 1,\n    \"customerId\": 1,\n    \"persons\": 1\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/api/mobile/bookings",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"mobile",
+										"bookings"
+									]
+								}
+							},
+							"status": "Created",
+							"code": 201,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"success\": true,\n    \"message\": \"Booking created successfully\",\n    \"data\": {\n        \"id\": \"1\",\n        \"sessionID\": \"1\",\n        \"customerId\": \"1\"\n    }\n}"
+						},
+						{
+							"name": "With New Customer",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"sessionID\": 1,\n    \"customer\": {\n        \"firstName\": \"Jane\",\n        \"lastName\": \"Doe\",\n        \"email\": \"jane@example.com\",\n        \"phone\": \"+1234567890\"\n    },\n    \"persons\": 1\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/api/mobile/bookings",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"mobile",
+										"bookings"
+									]
+								}
+							},
+							"status": "Created",
+							"code": 201,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"success\": true,\n    \"message\": \"Booking created successfully\",\n    \"data\": {\n        \"id\": \"1\",\n        \"sessionID\": \"1\",\n        \"customerId\": \"2\"\n    }\n}"
+						}
+					]
+				},
+				{
+					"name": "Cancel Booking",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"sessionID\": 1,\n    \"customerBookingId\": 1\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/api/mobile/cancel",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"mobile",
+								"cancel"
+							]
+						},
+						"description": "Cancel a booking using sessionID"
+					},
+					"response": [
+						{
+							"name": "Success",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"sessionID\": 1,\n    \"customerBookingId\": 1\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/api/mobile/cancel",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"mobile",
+										"cancel"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"success\": true,\n    \"message\": \"Booking canceled successfully\"\n}"
+						}
+					]
+				}
+			],
+			"description": "APIs for the schedule screen"
+		},
+		{
+			"name": "Packages Screen",
+			"item": [
+				{
+					"name": "Get Packages",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/mobile/packages",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"mobile",
+								"packages"
+							]
+						},
+						"description": "Get packages list"
+					},
+					"response": [
+						{
+							"name": "Success",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/api/mobile/packages",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"mobile",
+										"packages"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "[\n    {\n        \"id\": 1,\n        \"name\": \"Monthly Package\",\n        \"price\": 99.99,\n        \"sessions\": 10,\n        \"description\": \"10 sessions valid for 1 month\",\n        \"expirationMonths\": 1\n    }\n]"
+						}
+					]
+				},
+				{
+					"name": "Purchase Package",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"packageId\": 1,\n    \"customerId\": 1\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/api/mobile/purchase",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"mobile",
+								"purchase"
+							]
+						},
+						"description": "Purchase a package"
+					},
+					"response": [
+						{
+							"name": "Success",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"packageId\": 1,\n    \"customerId\": 1\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/api/mobile/purchase",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"mobile",
+										"purchase"
+									]
+								}
+							},
+							"status": "Created",
+							"code": 201,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"success\": true,\n    \"message\": \"Package purchased successfully\",\n    \"data\": {\n        \"id\": \"1\",\n        \"packageId\": \"1\",\n        \"customerId\": \"1\"\n    }\n}"
+						},
+						{
+							"name": "With New Customer",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"packageId\": 1,\n    \"customer\": {\n        \"firstName\": \"Jane\",\n        \"lastName\": \"Doe\",\n        \"email\": \"jane@example.com\",\n        \"phone\": \"+1234567890\"\n    }\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/api/mobile/purchase",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"mobile",
+										"purchase"
+									]
+								}
+							},
+							"status": "Created",
+							"code": 201,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"success\": true,\n    \"message\": \"Package purchased successfully\",\n    \"data\": {\n        \"id\": \"1\",\n        \"packageId\": \"1\",\n        \"customerId\": \"2\"\n    }\n}"
+						}
+					]
+				}
+			],
+			"description": "APIs for the packages screen"
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://127.0.0.1:8000",
+			"type": "string"
+		}
+	]
+}

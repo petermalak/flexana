@@ -5,6 +5,12 @@ use App\Interfaces\Http\Controllers\Api\ClassTypeController;
 use App\Interfaces\Http\Controllers\Api\CustomerController;
 use App\Interfaces\Http\Controllers\Api\EventController;
 use App\Interfaces\Http\Controllers\Api\EventInstanceController;
+use App\Interfaces\Http\Controllers\Api\Mobile\BannerController;
+use App\Interfaces\Http\Controllers\Api\Mobile\MobileBookingController;
+use App\Interfaces\Http\Controllers\Api\Mobile\MobileInstructorController;
+use App\Interfaces\Http\Controllers\Api\Mobile\MobilePackageController;
+use App\Interfaces\Http\Controllers\Api\Mobile\MobileServiceController;
+use App\Interfaces\Http\Controllers\Api\Mobile\MobileSessionController;
 use App\Interfaces\Http\Controllers\Api\PackageController;
 use App\Interfaces\Http\Controllers\Api\ServiceController;
 use App\Interfaces\Http\Controllers\Api\StaffController;
@@ -68,3 +74,22 @@ Route::prefix('v1')
         Route::post('users/customers', [CustomerController::class, 'storeFlutter']);
     });
 
+// Mobile API Routes (without authentication middleware for now)
+Route::prefix('mobile')
+    ->group(function (): void {
+        // Home Screen
+        Route::get('banners', [BannerController::class, 'index']);
+        Route::get('instructors', [MobileInstructorController::class, 'index']); // Full details
+        Route::get('service', [MobileServiceController::class, 'index']); // Full details
+
+        // Schedule Screen
+        Route::get('instructors/simple', [MobileInstructorController::class, 'simple']); // Simple list
+        Route::get('service/simple', [MobileServiceController::class, 'simple']); // Simple list
+        Route::get('sessions', [MobileSessionController::class, 'index']);
+        Route::post('bookings', [MobileBookingController::class, 'store']); // Book a session
+        Route::post('cancel', [MobileBookingController::class, 'cancel']); // Cancel booking
+
+        // Packages Screen
+        Route::get('packages', [MobilePackageController::class, 'index']);
+        Route::post('purchase', [MobilePackageController::class, 'purchase']);
+    });

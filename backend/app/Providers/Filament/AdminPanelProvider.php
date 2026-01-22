@@ -65,6 +65,7 @@ class AdminPanelProvider extends PanelProvider
             ->discoverWidgets(in: app_path('Filament/Widgets'), for: 'App\Filament\Widgets')
             ->widgets([
                 AccountWidget::class,
+                \App\Filament\Widgets\AmeliaStatsOverview::class,
             ])
             ->brandName('Flexana')
             ->brandLogo(url('images/logo.png'))
