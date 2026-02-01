@@ -16,6 +16,7 @@ class StaffModel extends Model
 
     protected $fillable = [
         'uuid',
+        'amelia_user_id',
         'name',
         'email',
         'phone',

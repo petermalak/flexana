@@ -15,9 +15,9 @@ class MobileSessionController extends Controller
 {
     /**
      * Get sessions based on filters
-     * 
+     *
      * Query params: date, serviceID, instructorID
-     * 
+     *
      * @param Request $request
      * @return JsonResponse
      */
@@ -49,33 +49,38 @@ class MobileSessionController extends Controller
 
         $appointments = $query->get();
 
-        $sessions = $appointments->map(function ($appointment) {
+        $ameliaUserId = null;
+        if ($request->user() && $request->user()->amelia_user_id) {
+            $ameliaUserId = $request->user()->amelia_user_id;
+        }
+
+        $sessions = $appointments->map(function ($appointment) use ($ameliaUserId) {
             $service = $appointment->service;
             $provider = $appointment->provider;
             $customerBookings = $appointment->customerBookings;
-            
-            // Count approved bookings
-            $approvedBookings = $customerBookings->where('status', 'approved')->count();
-            $totalPersons = $customerBookings->where('status', 'approved')->sum('persons');
-            
-            // Get service capacity
+            $approvedBookings = $customerBookings->where('status', 'approved');
+            $totalPersons = $approvedBookings->sum('persons');
             $maxCapacity = $service ? ($service->maxCapacity ?? 1) : 1;
             $isFull = $totalPersons >= $maxCapacity;
-            
-            // Check if current user has a booking (you may need to pass user ID)
-            $isBooked = false; // TODO: Check if current user has booking
-            $canCancel = false; // TODO: Check cancellation rules
-            $canBook = !$isFull && $appointment->bookingStart > Carbon::now();
-            
-            // Get cancellation minutes from service settings
-            $settings = is_string($service->settings ?? null) 
-                ? json_decode($service->settings, true) 
+
+            $myBooking = $ameliaUserId
+                ? $approvedBookings->where('customerId', $ameliaUserId)->first()
+                : null;
+            $isBooked = $myBooking !== null;
+
+            $settings = is_string($service->settings ?? null)
+                ? json_decode($service->settings, true)
                 : ($service->settings ?? []);
             $minutesBeforeCancellation = $settings['timeBefore'] ?? $service->timeBefore ?? 0;
+            $canCancelUntil = $myBooking
+                ? Carbon::parse($appointment->bookingStart)->subMinutes($minutesBeforeCancellation)
+                : null;
+            $canCancel = $isBooked && $canCancelUntil && Carbon::now() <= $canCancelUntil;
+            $canBook = ! $isFull && $appointment->bookingStart > Carbon::now();
 
             return [
                 'id' => (string) $appointment->id,
-                'instructor' => $provider 
+                'instructor' => $provider
                     ? trim(($provider->firstName ?? '') . ' ' . ($provider->lastName ?? ''))
                     : '',
                 'service' => $service ? $service->name : '',

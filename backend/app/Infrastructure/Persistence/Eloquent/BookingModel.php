@@ -18,6 +18,8 @@ class BookingModel extends Model
         'uuid',
         'event_id',
         'event_instance_id',
+        'appointment_id',
+        'amelia_customer_booking_id',
         'customer_id',
         'package_id',
         'service_id',
@@ -78,6 +80,11 @@ class BookingModel extends Model
     public function eventInstance(): BelongsTo
     {
         return $this->belongsTo(EventInstanceModel::class, 'event_instance_id');
+    }
+
+    public function appointment(): BelongsTo
+    {
+        return $this->belongsTo(AppointmentModel::class, 'appointment_id');
     }
 
     public function customer(): BelongsTo

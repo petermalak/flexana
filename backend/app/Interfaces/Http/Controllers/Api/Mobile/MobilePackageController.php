@@ -2,8 +2,12 @@
 
 namespace App\Interfaces\Http\Controllers\Api\Mobile;
 
+use App\Application\Auth\AmeliaCustomerResolver;
 use App\Http\Controllers\Controller;
 use App\Infrastructure\Persistence\Eloquent\AmeliaPackageModel;
+use App\Infrastructure\Persistence\Eloquent\AmeliaUserModel;
+use App\Infrastructure\Persistence\Eloquent\CustomerPackagePurchaseModel;
+use App\Models\Customer;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -12,10 +16,13 @@ use Illuminate\Support\Facades\Validator;
 
 class MobilePackageController extends Controller
 {
+    public function __construct(
+        private readonly AmeliaCustomerResolver $ameliaResolver,
+    ) {
+    }
+
     /**
-     * Get packages
-     * 
-     * @return JsonResponse
+     * Get package offers (Amelia packages).
      */
     public function index(): JsonResponse
     {
@@ -24,11 +31,6 @@ class MobilePackageController extends Controller
             ->orderBy('position', 'asc')
             ->get()
             ->map(function ($package) {
-                $settings = is_string($package->settings) 
-                    ? json_decode($package->settings, true) 
-                    : ($package->settings ?? []);
-                
-                // Calculate expiration months from duration
                 $expirationMonths = 0;
                 if ($package->durationType === 'months') {
                     $expirationMonths = $package->durationCount ?? 0;
@@ -36,17 +38,16 @@ class MobilePackageController extends Controller
                     $expirationMonths = (int) ceil(($package->durationCount ?? 0) / 30);
                 }
 
-                // Count sessions from package services
-                $sessions = DB::connection('wordpress')
+                $sessions = (int) DB::connection('wordpress')
                     ->table('rueyn_amelia_packages_services')
                     ->where('packageId', $package->id)
-                    ->sum('quantity') ?? 0;
+                    ->sum('quantity');
 
                 return [
                     'id' => (int) $package->id,
                     'name' => $package->name ?? '',
                     'price' => (float) ($package->price ?? 0),
-                    'sessions' => (int) $sessions,
+                    'sessions' => $sessions,
                     'description' => $package->description ?? '',
                     'expirationMonths' => $expirationMonths,
                 ];
@@ -58,23 +59,13 @@ class MobilePackageController extends Controller
     }
 
     /**
-     * Purchase a package
-     * 
-     * Body: { packageId, customerId (optional), customer (optional) }
-     * 
-     * @param Request $request
-     * @return JsonResponse
+     * Purchase a package. Uses authenticated customer (Bearer token).
+     * Body: { packageId }
      */
     public function purchase(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
             'packageId' => 'required|integer',
-            'customerId' => 'nullable|integer',
-            'customer' => 'nullable|array',
-            'customer.firstName' => 'required_with:customer|string',
-            'customer.lastName' => 'nullable|string',
-            'customer.email' => 'nullable|email',
-            'customer.phone' => 'nullable|string',
         ]);
 
         if ($validator->fails()) {
@@ -85,78 +76,55 @@ class MobilePackageController extends Controller
             ], 422);
         }
 
-        $data = $validator->validated();
-        $packageId = $data['packageId'];
+        $packageId = (int) $validator->validated()['packageId'];
 
-        // Get package
+        /** @var Customer $laravelCustomer */
+        $laravelCustomer = $request->user();
+
         $package = AmeliaPackageModel::on('wordpress')->find($packageId);
 
-        if (!$package || $package->status !== 'visible') {
+        if (! $package || $package->status !== 'visible') {
             return response()->json([
                 'success' => false,
                 'message' => 'Package not found or not available',
             ], 404);
         }
 
-        // Validate customerId if provided
-        if (!empty($data['customerId'])) {
-            $customerExists = \App\Infrastructure\Persistence\Eloquent\AmeliaUserModel::on('wordpress')
-                ->where('type', 'customer')
-                ->where('id', $data['customerId'])
-                ->exists();
-            
-            if (!$customerExists) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Customer not found',
-                ], 404);
-            }
-        }
-
-        // Get or create customer
-        $customer = null;
-        if (!empty($data['customerId'])) {
-            $customer = \App\Infrastructure\Persistence\Eloquent\AmeliaUserModel::on('wordpress')
-                ->where('type', 'customer')
-                ->find($data['customerId']);
-            
-            if (!$customer) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Customer not found',
-                ], 404);
-            }
-        } elseif (!empty($data['customer'])) {
-            // Create new customer
-            $customerData = $data['customer'];
-            $customer = \App\Infrastructure\Persistence\Eloquent\AmeliaUserModel::on('wordpress')->create([
-                'firstName' => $customerData['firstName'],
-                'lastName' => $customerData['lastName'] ?? null,
-                'email' => $customerData['email'] ?? null,
-                'phone' => $customerData['phone'] ?? null,
-                'type' => 'customer',
-                'status' => 'visible',
-                'created' => Carbon::now(),
-            ]);
-        } else {
+        $ameliaUser = $this->ameliaResolver->resolveAmeliaUser($laravelCustomer);
+        if (! $ameliaUser) {
             return response()->json([
                 'success' => false,
-                'message' => 'Customer ID or customer data is required',
-            ], 422);
+                'message' => 'Could not resolve or create Amelia customer.',
+            ], 500);
         }
 
-        // Create package customer record
+        $totalSessions = (int) DB::connection('wordpress')
+            ->table('rueyn_amelia_packages_services')
+            ->where('packageId', $package->id)
+            ->sum('quantity');
+
         DB::connection('wordpress')->beginTransaction();
         try {
-            $packageCustomer = DB::connection('wordpress')
+            $packageCustomerId = DB::connection('wordpress')
                 ->table('rueyn_amelia_packages_customers')
                 ->insertGetId([
                     'packageId' => $package->id,
-                    'customerId' => $customer->id,
+                    'customerId' => $ameliaUser->id,
                     'price' => $package->price,
                     'purchased' => Carbon::now()->format('Y-m-d H:i:s'),
                     'status' => 'approved',
                 ]);
+
+            CustomerPackagePurchaseModel::query()->create([
+                'customer_id' => $laravelCustomer->id,
+                'package_id' => null,
+                'amelia_package_id' => $package->id,
+                'total_sessions' => $totalSessions,
+                'remaining_sessions' => $totalSessions,
+                'purchase_date' => Carbon::now(),
+                'status' => 'active',
+                'amelia_package_customer_id' => $packageCustomerId,
+            ]);
 
             DB::connection('wordpress')->commit();
 
@@ -164,14 +132,14 @@ class MobilePackageController extends Controller
                 'success' => true,
                 'message' => 'Package purchased successfully',
                 'data' => [
-                    'id' => (string) $packageCustomer,
+                    'id' => (string) $packageCustomerId,
                     'packageId' => (string) $package->id,
-                    'customerId' => (string) $customer->id,
+                    'customerId' => (string) $laravelCustomer->id,
                 ],
             ], 201);
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             DB::connection('wordpress')->rollBack();
-            
+
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to purchase package',

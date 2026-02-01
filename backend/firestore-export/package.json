@@ -1,0 +1,12 @@
+{
+  "name": "flexana-firestore-export",
+  "version": "1.0.0",
+  "description": "Export Firestore collections to JSON for Laravel migration",
+  "private": true,
+  "scripts": {
+    "export": "node export.js"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.0.0"
+  }
+}

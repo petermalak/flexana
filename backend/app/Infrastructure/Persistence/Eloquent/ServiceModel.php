@@ -16,6 +16,7 @@ class ServiceModel extends Model
 
     protected $fillable = [
         'uuid',
+        'amelia_service_id',
         'name',
         'description',
         'duration',
@@ -89,7 +90,7 @@ class ServiceModel extends Model
     public function packages(): BelongsToMany
     {
         return $this->belongsToMany(PackageModel::class, 'package_service', 'service_id', 'package_id')
-            ->withPivot(['provider_id', 'location_id'])
+            ->withPivot(['provider_id', 'location_id', 'quantity'])
             ->withTimestamps();
     }
 }

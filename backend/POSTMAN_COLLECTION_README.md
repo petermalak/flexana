@@ -1,13 +1,42 @@
-# Flexana API Postman Collection
+# Flexana API Postman Collections
 
-This Postman collection provides all the API endpoints for the Flexana backend, formatted to be compatible with the Emilia frontend format.
+There are two Postman collections:
+
+1. **Flexana API Collection** – Admin/frontend API (API Key + HMAC signature).
+2. **Flexana Mobile API (v1)** – Mobile app API (Bearer token from send-code → verify).
+
+---
+
+## Flexana Mobile API (v1) — Mobile app
+
+**File:** `Flexana_Mobile_API.postman_collection.json`
+
+- **Base path:** `/api/v1`
+- **Auth:** All data endpoints require `Authorization: Bearer <token>`. Get the token from **Auth → Verify** (after **Auth → Send Code**).
+- **Variables:** `base_url` (e.g. `http://127.0.0.1:8000`), `bearer_token` (set automatically by the Verify request’s test script).
+
+**Flow:**
+
+1. **Auth → Send Code** – POST body: `{ "phone": "+201234567890" }` (optional: firstName, lastName, email).
+2. **Auth → Verify** – POST body: `{ "phone": "...", "code": "123456" }` → response includes `token`; the collection test script saves it to `bearer_token`.
+3. Use any other request; they use collection auth (Bearer `{{bearer_token}}`).
+
+**Folders:** Auth (send-code, verify, logout, me, update me), Home Screen (banners, instructors, service), Schedule Screen (instructors/simple, service/simple, sessions, session-bookings, cancel-booking), Packages Screen (package-offers, purchase-package).
+
+---
+
+## Flexana API Collection — Admin / frontend
+
+**File:** `Flexana_API_Collection.postman_collection.json`
+
+This collection provides the admin/frontend API, formatted to be compatible with the Emilia frontend format.
 
 ## 📦 Import Instructions
 
 1. Open Postman
 2. Click **Import** button (top left)
-3. Select the `Flexana_API_Collection.postman_collection.json` file
-4. The collection will be imported with all endpoints organized by category
+3. Select `Flexana_API_Collection.postman_collection.json` and/or `Flexana_Mobile_API.postman_collection.json`
+4. The collection(s) will be imported with all endpoints organized by category
 
 ## 🔧 Setup Environment Variables
 

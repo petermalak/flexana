@@ -2,6 +2,8 @@
 
 namespace App\Providers;
 
+use App\Application\Auth\SmsVerificationServiceInterface;
+use App\Application\Auth\SmsVerificationService;
 use App\Domain\Bookings\BookingRepositoryInterface;
 use App\Domain\ClassTypes\ClassTypeRepositoryInterface;
 use App\Domain\Customers\CustomerRepositoryInterface;
@@ -38,6 +40,7 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(ServiceRepositoryInterface::class, ServiceRepository::class);
         $this->app->bind(ClassTypeRepositoryInterface::class, ClassTypeRepository::class);
         $this->app->bind(PackageRepositoryInterface::class, PackageRepository::class);
+        $this->app->bind(SmsVerificationServiceInterface::class, SmsVerificationService::class);
 
         $this->app->singleton(FirebaseTokenVerifier::class, function ($app) {
             return new FirebaseTokenVerifier(

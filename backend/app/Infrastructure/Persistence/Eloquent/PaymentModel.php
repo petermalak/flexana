@@ -17,6 +17,7 @@ class PaymentModel extends Model
         'booking_id',
         'provider',
         'provider_reference',
+        'transaction_id',
         'status',
         'amount',
         'currency',

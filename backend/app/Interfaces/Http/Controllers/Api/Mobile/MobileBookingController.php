@@ -2,10 +2,11 @@
 
 namespace App\Interfaces\Http\Controllers\Api\Mobile;
 
+use App\Application\Auth\AmeliaCustomerResolver;
 use App\Http\Controllers\Controller;
 use App\Infrastructure\Persistence\Eloquent\AmeliaAppointmentModel;
 use App\Infrastructure\Persistence\Eloquent\AmeliaCustomerBookingModel;
-use App\Infrastructure\Persistence\Eloquent\AmeliaUserModel;
+use App\Models\Customer;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -14,25 +15,20 @@ use Illuminate\Support\Facades\Validator;
 
 class MobileBookingController extends Controller
 {
+    public function __construct(
+        private readonly AmeliaCustomerResolver $ameliaResolver,
+    ) {
+    }
+
     /**
-     * Book a session
-     * 
-     * Body: { sessionID, customerId (optional), customer (optional) }
-     * 
-     * @param Request $request
-     * @return JsonResponse
+     * Book a session. Uses authenticated customer (Bearer token).
+     * Body: { sessionID, persons (optional, default 1) }
      */
     public function store(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
             'sessionID' => 'required|integer',
-            'customerId' => 'nullable|integer',
-            'customer' => 'nullable|array',
-            'customer.firstName' => 'required_with:customer|string',
-            'customer.lastName' => 'nullable|string',
-            'customer.email' => 'nullable|email',
-            'customer.phone' => 'nullable|string',
-            'persons' => 'nullable|integer|min:1|default:1',
+            'persons' => 'nullable|integer|min:1|max:20',
         ]);
 
         if ($validator->fails()) {
@@ -44,41 +40,27 @@ class MobileBookingController extends Controller
         }
 
         $data = $validator->validated();
-        $sessionID = $data['sessionID'];
-        $persons = $data['persons'] ?? 1;
+        $sessionID = (int) $data['sessionID'];
+        $persons = (int) ($data['persons'] ?? 1);
 
-        // Get appointment
+        /** @var Customer $laravelCustomer */
+        $laravelCustomer = $request->user();
+
         $appointment = AmeliaAppointmentModel::on('wordpress')
             ->with(['service', 'customerBookings'])
             ->find($sessionID);
 
-        if (!$appointment) {
+        if (! $appointment) {
             return response()->json([
                 'success' => false,
                 'message' => 'Session not found',
             ], 404);
         }
 
-        // Validate customerId if provided
-        if (!empty($data['customerId'])) {
-            $customerExists = AmeliaUserModel::on('wordpress')
-                ->where('type', 'customer')
-                ->where('id', $data['customerId'])
-                ->exists();
-            
-            if (!$customerExists) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Customer not found',
-                ], 404);
-            }
-        }
-
-        // Check if session is full
         $service = $appointment->service;
         $maxCapacity = $service ? ($service->maxCapacity ?? 1) : 1;
         $currentBookings = $appointment->customerBookings->where('status', 'approved')->sum('persons');
-        
+
         if (($currentBookings + $persons) > $maxCapacity) {
             return response()->json([
                 'success' => false,
@@ -86,7 +68,6 @@ class MobileBookingController extends Controller
             ], 400);
         }
 
-        // Check if session is in the past
         if ($appointment->bookingStart <= Carbon::now()) {
             return response()->json([
                 'success' => false,
@@ -94,48 +75,22 @@ class MobileBookingController extends Controller
             ], 400);
         }
 
-        // Get or create customer
-        $customer = null;
-        if (!empty($data['customerId'])) {
-            $customer = AmeliaUserModel::on('wordpress')
-                ->where('type', 'customer')
-                ->find($data['customerId']);
-            
-            if (!$customer) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Customer not found',
-                ], 404);
-            }
-        } elseif (!empty($data['customer'])) {
-            // Create new customer
-            $customerData = $data['customer'];
-            $customer = AmeliaUserModel::on('wordpress')->create([
-                'firstName' => $customerData['firstName'],
-                'lastName' => $customerData['lastName'] ?? null,
-                'email' => $customerData['email'] ?? null,
-                'phone' => $customerData['phone'] ?? null,
-                'type' => 'customer',
-                'status' => 'visible',
-                'created' => Carbon::now(),
-            ]);
-        } else {
+        $ameliaUser = $this->ameliaResolver->resolveAmeliaUser($laravelCustomer);
+        if (! $ameliaUser) {
             return response()->json([
                 'success' => false,
-                'message' => 'Customer ID or customer data is required',
-            ], 422);
+                'message' => 'Could not resolve or create Amelia customer.',
+            ], 500);
         }
 
-        // Calculate price
         $servicePrice = $service ? ($service->price ?? 0) : 0;
         $totalPrice = $servicePrice * $persons;
 
-        // Create customer booking
         DB::connection('wordpress')->beginTransaction();
         try {
             $customerBooking = AmeliaCustomerBookingModel::on('wordpress')->create([
                 'appointmentId' => $appointment->id,
-                'customerId' => $customer->id,
+                'customerId' => $ameliaUser->id,
                 'status' => 'approved',
                 'price' => $totalPrice,
                 'persons' => $persons,
@@ -150,12 +105,12 @@ class MobileBookingController extends Controller
                 'data' => [
                     'id' => (string) $customerBooking->id,
                     'sessionID' => (string) $appointment->id,
-                    'customerId' => (string) $customer->id,
+                    'customerId' => (string) $laravelCustomer->id,
                 ],
             ], 201);
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             DB::connection('wordpress')->rollBack();
-            
+
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to create booking',
@@ -165,12 +120,8 @@ class MobileBookingController extends Controller
     }
 
     /**
-     * Cancel a booking
-     * 
-     * Body: { sessionID, customerBookingId (optional) }
-     * 
-     * @param Request $request
-     * @return JsonResponse
+     * Cancel a booking. Only the authenticated customer's booking can be canceled.
+     * Body: { sessionID [, customerBookingId ] }
      */
     public function cancel(Request $request): JsonResponse
     {
@@ -188,29 +139,35 @@ class MobileBookingController extends Controller
         }
 
         $data = $validator->validated();
-        $sessionID = $data['sessionID'];
-        $customerBookingId = $data['customerBookingId'] ?? null;
+        $sessionID = (int) $data['sessionID'];
+        $customerBookingId = isset($data['customerBookingId']) ? (int) $data['customerBookingId'] : null;
 
-        // Get appointment
+        /** @var Customer $laravelCustomer */
+        $laravelCustomer = $request->user();
+        $ameliaUserId = $laravelCustomer->amelia_user_id;
+        if (! $ameliaUserId) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Booking not found',
+            ], 404);
+        }
+
         $appointment = AmeliaAppointmentModel::on('wordpress')
             ->with(['service', 'customerBookings'])
             ->find($sessionID);
 
-        if (!$appointment) {
+        if (! $appointment) {
             return response()->json([
                 'success' => false,
                 'message' => 'Session not found',
             ], 404);
         }
 
-        // Check cancellation time
         $service = $appointment->service;
-        $settings = is_string($service->settings ?? null) 
-            ? json_decode($service->settings, true) 
+        $settings = is_string($service->settings ?? null)
+            ? json_decode($service->settings, true)
             : ($service->settings ?? []);
         $minutesBeforeCancellation = $settings['timeBefore'] ?? $service->timeBefore ?? 0;
-        
-        // Calculate the deadline (booking start time minus cancellation minutes)
         $canCancelUntil = Carbon::parse($appointment->bookingStart)->subMinutes($minutesBeforeCancellation);
         if (Carbon::now() > $canCancelUntil) {
             return response()->json([
@@ -219,40 +176,36 @@ class MobileBookingController extends Controller
             ], 400);
         }
 
-        // Find customer booking
         $query = AmeliaCustomerBookingModel::on('wordpress')
             ->where('appointmentId', $sessionID)
+            ->where('customerId', $ameliaUserId)
             ->where('status', 'approved');
 
-        if ($customerBookingId) {
+        if ($customerBookingId !== null) {
             $query->where('id', $customerBookingId);
         }
 
         $customerBooking = $query->first();
 
-        if (!$customerBooking) {
+        if (! $customerBooking) {
             return response()->json([
                 'success' => false,
                 'message' => 'Booking not found',
             ], 404);
         }
 
-        // Cancel booking
         DB::connection('wordpress')->beginTransaction();
         try {
-            $customerBooking->update([
-                'status' => 'canceled',
-            ]);
-
+            $customerBooking->update(['status' => 'canceled']);
             DB::connection('wordpress')->commit();
 
             return response()->json([
                 'success' => true,
                 'message' => 'Booking canceled successfully',
             ], 200);
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             DB::connection('wordpress')->rollBack();
-            
+
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to cancel booking',
