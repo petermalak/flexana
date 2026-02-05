@@ -12,7 +12,7 @@ return new class extends Migration
             $table->id();
             $table->string('code')->unique()->index();
             $table->string('name')->nullable();
-            $table->unsignedDecimal('percent_discount', 5, 2)->default(0); // 0-100
+            $table->decimal('percent_discount', 5, 2)->unsigned()->default(0); // 0-100
             $table->timestamp('valid_from')->nullable();
             $table->timestamp('valid_until')->nullable();
             $table->unsignedInteger('usage_limit')->nullable(); // null = unlimited
