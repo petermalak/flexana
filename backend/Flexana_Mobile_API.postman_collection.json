@@ -2,7 +2,7 @@
 	"info": {
 		"_postman_id": "flexana-mobile-api-v1",
 		"name": "Flexana Mobile API (v1)",
-		"description": "API collection for Flexana mobile app. All data endpoints require Bearer token (get from Auth → Verify). Base: /api/v1",
+		"description": "API collection for Flexana mobile app. Auth: Login (phone+password) or Signup → Verify (OTP). All data endpoints require Bearer token. Base: /api/v1",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"auth": {
@@ -18,36 +18,26 @@
 	"item": [
 		{
 			"name": "Auth",
-			"description": "Public: send-code, verify. After Verify, use the returned token as Bearer for all other requests.",
+			"description": "Login (phone+password, no OTP). Signup sends OTP only; then Verify with code (optional: password to set). Forgot/Reset password by email. After Login or Verify, use returned token as Bearer.",
 			"item": [
 				{
-					"name": "Send Code",
+					"name": "Login",
 					"request": {
-						"auth": {
-							"type": "noauth"
-						},
+						"auth": { "type": "noauth" },
 						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"phone\": \"+201234567890\",\n    \"firstName\": \"Jane\",\n    \"lastName\": \"Doe\",\n    \"email\": \"jane@example.com\"\n}"
+							"raw": "{\n    \"phone\": \"+201234567890\",\n    \"password\": \"secret123\"\n}"
 						},
 						"url": {
-							"raw": "{{base_url}}/api/v1/auth/send-code",
+							"raw": "{{base_url}}/api/v1/auth/login",
 							"host": ["{{base_url}}"],
-							"path": ["api", "v1", "auth", "send-code"]
+							"path": ["api", "v1", "auth", "login"]
 						},
-						"description": "Send SMS verification code. Optional: firstName, lastName, email."
+						"description": "Login with phone + password. Returns token + customer. No OTP."
 					},
-					"response": []
-				},
-				{
-					"name": "Verify",
+					"response": [],
 					"event": [
 						{
 							"listen": "test",
@@ -61,44 +51,130 @@
 								"type": "text/javascript"
 							}
 						}
-					],
+					]
+				},
+				{
+					"name": "Signup",
 					"request": {
-						"auth": {
-							"type": "noauth"
-						},
+						"auth": { "type": "noauth" },
 						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"phone\": \"+201234567890\",\n    \"code\": \"123456\"\n}"
+							"raw": "{\n    \"phone\": \"+201234567890\",\n    \"firstName\": \"Jane\",\n    \"lastName\": \"Doe\",\n    \"email\": \"jane@example.com\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/auth/signup",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "auth", "signup"]
+						},
+						"description": "Send OTP SMS for signup. Optional: firstName, lastName, email. Then call Verify with the code (and optional password)."
+					},
+					"response": []
+				},
+				{
+					"name": "Verify",
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"phone\": \"+201234567890\",\n    \"code\": \"123456\",\n    \"password\": \"secret123\",\n    \"password_confirmation\": \"secret123\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/v1/auth/verify",
 							"host": ["{{base_url}}"],
 							"path": ["api", "v1", "auth", "verify"]
 						},
-						"description": "Verify code and get token. Saves token to collection variable bearer_token for other requests."
+						"description": "Verify OTP. Optional: password + password_confirmation to set password for new signups. Saves token to bearer_token."
 					},
-					"response": [
+					"response": [],
+					"event": [
 						{
-							"name": "Success",
-							"originalRequest": {
-								"method": "POST",
-								"header": [{"key": "Content-Type", "value": "application/json"}],
-								"body": {"mode": "raw", "raw": "{\n    \"phone\": \"+201234567890\",\n    \"code\": \"123456\"\n}"},
-								"url": {"raw": "{{base_url}}/api/v1/auth/verify", "host": ["{{base_url}}"], "path": ["api", "v1", "auth", "verify"]}
-							},
-							"status": "OK",
-							"code": 200,
-							"header": [{"key": "Content-Type", "value": "application/json"}],
-							"body": "{\n    \"success\": true,\n    \"message\": \"Verified.\",\n    \"token\": \"1|abc...\",\n    \"token_type\": \"Bearer\",\n    \"customer\": {\n        \"id\": \"1\",\n        \"uid\": \"uuid\",\n        \"firstName\": \"Jane\",\n        \"lastName\": \"Doe\",\n        \"email\": \"jane@example.com\",\n        \"phone\": \"+201234567890\",\n        \"phoneVerifiedAt\": \"2024-01-20T12:00:00.000000Z\",\n        \"emailVerifiedAt\": null\n    }\n}"
+							"listen": "test",
+							"script": {
+								"exec": [
+									"const res = pm.response.json();",
+									"if (res.token) {",
+									"    pm.collectionVariables.set('bearer_token', res.token);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
 						}
 					]
+				},
+				{
+					"name": "Verify Firebase",
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"idToken\": \"<Firebase ID token from phone sign-in>\",\n    \"phone\": \"+201234567890\",\n    \"firstName\": \"Jane\",\n    \"lastName\": \"Doe\",\n    \"email\": \"jane@example.com\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/auth/verify-firebase",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "auth", "verify-firebase"]
+						},
+						"description": "After Firebase phone verification on the client: send the Firebase ID token. Optional: phone (required if backend has no Firebase Admin), firstName, lastName, email. Returns Sanctum token; save to bearer_token."
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"const res = pm.response.json();",
+									"if (res.token) {",
+									"    pm.collectionVariables.set('bearer_token', res.token);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					]
+				},
+				{
+					"name": "Forgot Password",
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"jane@example.com\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/auth/forgot-password",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "auth", "forgot-password"]
+						},
+						"description": "Request password reset link. Sends email if customer exists."
+					},
+					"response": []
+				},
+				{
+					"name": "Reset Password",
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"jane@example.com\",\n    \"token\": \"reset-token-from-email\",\n    \"password\": \"newsecret123\",\n    \"password_confirmation\": \"newsecret123\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/auth/reset-password",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "auth", "reset-password"]
+						},
+						"description": "Reset password using token from forgot-password email."
+					},
+					"response": []
 				},
 				{
 					"name": "Logout",
@@ -132,9 +208,7 @@
 					"name": "Update Me",
 					"request": {
 						"method": "PUT",
-						"header": [
-							{"key": "Content-Type", "value": "application/json"}
-						],
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
 						"body": {
 							"mode": "raw",
 							"raw": "{\n    \"firstName\": \"Jane\",\n    \"lastName\": \"Doe\",\n    \"email\": \"jane@example.com\"\n}"
@@ -144,7 +218,57 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "v1", "auth", "me"]
 						},
-						"description": "Update profile. Requires Bearer."
+						"description": "Update profile. To change phone: first call Send Phone Change Code, then send phone + phoneChangeCode here. Requires Bearer."
+					},
+					"response": []
+				},
+				{
+					"name": "Send Phone Change Code",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"newPhone\": \"+201234567890\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/auth/send-phone-change-code",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "auth", "send-phone-change-code"]
+						},
+						"description": "Send OTP to new phone before changing phone. Then PUT auth/me with phone + phoneChangeCode. Requires Bearer."
+					},
+					"response": []
+				},
+				{
+					"name": "Change Password",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"currentPassword\": \"oldsecret\",\n    \"password\": \"newsecret123\",\n    \"password_confirmation\": \"newsecret123\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/auth/change-password",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "auth", "change-password"]
+						},
+						"description": "Change password. Requires current password. Requires Bearer."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Account",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/auth/delete-account",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "auth", "delete-account"]
+						},
+						"description": "Permanently delete the customer account and revoke all tokens. Requires Bearer."
 					},
 					"response": []
 				}
@@ -158,81 +282,33 @@
 					"request": {
 						"method": "GET",
 						"header": [],
-						"url": {
-							"raw": "{{base_url}}/api/v1/banners",
-							"host": ["{{base_url}}"],
-							"path": ["api", "v1", "banners"]
-						},
+						"url": { "raw": "{{base_url}}/api/v1/banners", "host": ["{{base_url}}"], "path": ["api", "v1", "banners"] },
 						"description": "Response: [{ image, URL }, ...]. Requires Bearer."
 					},
-					"response": [
-						{
-							"name": "Success",
-							"originalRequest": {
-								"method": "GET",
-								"url": {"raw": "{{base_url}}/api/v1/banners", "host": ["{{base_url}}"], "path": ["api", "v1", "banners"]}
-							},
-							"status": "OK",
-							"code": 200,
-							"header": [{"key": "Content-Type", "value": "application/json"}],
-							"body": "[\n    {\n        \"image\": \"https://example.com/banner1.jpg\",\n        \"URL\": \"https://example.com/promo1\"\n    }\n]"
-						}
-					]
+					"response": []
 				},
 				{
 					"name": "Get Instructors (Full)",
 					"request": {
 						"method": "GET",
 						"header": [],
-						"url": {
-							"raw": "{{base_url}}/api/v1/instructors",
-							"host": ["{{base_url}}"],
-							"path": ["api", "v1", "instructors"]
-						},
+						"url": { "raw": "{{base_url}}/api/v1/instructors", "host": ["{{base_url}}"], "path": ["api", "v1", "instructors"] },
 						"description": "Response: [{ id, name, image, position, brief }, ...]. Requires Bearer."
 					},
-					"response": [
-						{
-							"name": "Success",
-							"originalRequest": {
-								"method": "GET",
-								"url": {"raw": "{{base_url}}/api/v1/instructors", "host": ["{{base_url}}"], "path": ["api", "v1", "instructors"]}
-							},
-							"status": "OK",
-							"code": 200,
-							"header": [{"key": "Content-Type", "value": "application/json"}],
-							"body": "[\n    {\n        \"id\": \"1\",\n        \"name\": \"John Doe\",\n        \"image\": \"https://example.com/instructor1.jpg\",\n        \"position\": \"Senior Yoga Instructor\",\n        \"brief\": \"10 years of experience\"\n    }\n]"
-						}
-					]
+					"response": []
 				},
 				{
 					"name": "Get Service (Full)",
 					"request": {
 						"method": "GET",
 						"header": [],
-						"url": {
-							"raw": "{{base_url}}/api/v1/service",
-							"host": ["{{base_url}}"],
-							"path": ["api", "v1", "service"]
-						},
+						"url": { "raw": "{{base_url}}/api/v1/service", "host": ["{{base_url}}"], "path": ["api", "v1", "service"] },
 						"description": "Response: [{ id, name, level, image, brief }, ...]. Requires Bearer."
 					},
-					"response": [
-						{
-							"name": "Success",
-							"originalRequest": {
-								"method": "GET",
-								"url": {"raw": "{{base_url}}/api/v1/service", "host": ["{{base_url}}"], "path": ["api", "v1", "service"]}
-							},
-							"status": "OK",
-							"code": 200,
-							"header": [{"key": "Content-Type", "value": "application/json"}],
-							"body": "[\n    {\n        \"id\": \"1\",\n        \"name\": \"Yoga Class\",\n        \"level\": \"Beginner\",\n        \"image\": \"https://example.com/service1.jpg\",\n        \"brief\": \"A relaxing yoga class\"\n    }\n]"
-						}
-					]
+					"response": []
 				}
 			],
-			"description": "APIs for the home screen. All require Authorization: Bearer <token>."
+			"description": "APIs for the home screen. All require Authorization: Bearer token."
 		},
 		{
 			"name": "Schedule Screen",
@@ -242,52 +318,20 @@
 					"request": {
 						"method": "GET",
 						"header": [],
-						"url": {
-							"raw": "{{base_url}}/api/v1/instructors/simple",
-							"host": ["{{base_url}}"],
-							"path": ["api", "v1", "instructors", "simple"]
-						},
+						"url": { "raw": "{{base_url}}/api/v1/instructors/simple", "host": ["{{base_url}}"], "path": ["api", "v1", "instructors", "simple"] },
 						"description": "Response: [{ id, name }, ...]. Requires Bearer."
 					},
-					"response": [
-						{
-							"name": "Success",
-							"originalRequest": {
-								"method": "GET",
-								"url": {"raw": "{{base_url}}/api/v1/instructors/simple", "host": ["{{base_url}}"], "path": ["api", "v1", "instructors", "simple"]}
-							},
-							"status": "OK",
-							"code": 200,
-							"header": [{"key": "Content-Type", "value": "application/json"}],
-							"body": "[{\"id\": \"1\", \"name\": \"John Doe\"}]"
-						}
-					]
+					"response": []
 				},
 				{
 					"name": "Get Service (Simple)",
 					"request": {
 						"method": "GET",
 						"header": [],
-						"url": {
-							"raw": "{{base_url}}/api/v1/service/simple",
-							"host": ["{{base_url}}"],
-							"path": ["api", "v1", "service", "simple"]
-						},
+						"url": { "raw": "{{base_url}}/api/v1/service/simple", "host": ["{{base_url}}"], "path": ["api", "v1", "service", "simple"] },
 						"description": "Response: [{ id, name }, ...]. Requires Bearer."
 					},
-					"response": [
-						{
-							"name": "Success",
-							"originalRequest": {
-								"method": "GET",
-								"url": {"raw": "{{base_url}}/api/v1/service/simple", "host": ["{{base_url}}"], "path": ["api", "v1", "service", "simple"]}
-							},
-							"status": "OK",
-							"code": 200,
-							"header": [{"key": "Content-Type", "value": "application/json"}],
-							"body": "[{\"id\": \"1\", \"name\": \"Yoga Class\"}]"
-						}
-					]
+					"response": []
 				},
 				{
 					"name": "Get Sessions",
@@ -295,28 +339,27 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/api/v1/sessions?date=2024-01-20&serviceID=1&instructorID=1",
+							"raw": "{{base_url}}/api/v1/sessions?date=2024-01-20&serviceID=1&instructorID=1&per_page=15&page=1",
 							"host": ["{{base_url}}"],
 							"path": ["api", "v1", "sessions"],
 							"query": [
-								{"key": "date", "value": "2024-01-20", "description": "YYYY-MM-DD"},
-								{"key": "serviceID", "value": "1", "description": "Optional"},
-								{"key": "instructorID", "value": "1", "description": "Optional"}
+								{ "key": "date", "value": "2024-01-20", "description": "YYYY-MM-DD" },
+								{ "key": "serviceID", "value": "1", "description": "Optional" },
+								{ "key": "instructorID", "value": "1", "description": "Optional" },
+								{ "key": "per_page", "value": "15", "description": "Default 15, max 50" },
+								{ "key": "page", "value": "1", "description": "Page number" }
 							]
 						},
-						"description": "Query: date, serviceID, instructorID. Response: [{ id, instructor, service, date, isBooked, isFull, canCancel, canBook, minutesBeforeCancellation }, ...]. Requires Bearer."
+						"description": "Paginated. Response: { data: [{ id, instructor, service, date, isBooked, isFull, canCancel, canBook, minutesBeforeCancellation }, ...], meta: { current_page, last_page, per_page, total } }. Requires Bearer."
 					},
 					"response": [
 						{
 							"name": "Success",
-							"originalRequest": {
-								"method": "GET",
-								"url": {"raw": "{{base_url}}/api/v1/sessions?date=2024-01-20&serviceID=1&instructorID=1", "host": ["{{base_url}}"], "path": ["api", "v1", "sessions"], "query": [{"key": "date", "value": "2024-01-20"}, {"key": "serviceID", "value": "1"}, {"key": "instructorID", "value": "1"}]}
-							},
+							"originalRequest": { "method": "GET", "url": { "raw": "{{base_url}}/api/v1/sessions?date=2024-01-20&per_page=15&page=1", "host": ["{{base_url}}"], "path": ["api", "v1", "sessions"], "query": [{ "key": "date", "value": "2024-01-20" }, { "key": "per_page", "value": "15" }, { "key": "page", "value": "1" }] },
 							"status": "OK",
 							"code": 200,
-							"header": [{"key": "Content-Type", "value": "application/json"}],
-							"body": "[\n    {\n        \"id\": \"1\",\n        \"instructor\": \"John Doe\",\n        \"service\": \"Yoga Class\",\n        \"date\": \"2024-01-20T10:00:00.000000Z\",\n        \"isBooked\": false,\n        \"isFull\": false,\n        \"canCancel\": false,\n        \"canBook\": true,\n        \"minutesBeforeCancellation\": 60\n    }\n]"
+							"header": [{ "key": "Content-Type", "value": "application/json" }],
+							"body": "{\n    \"data\": [\n        {\n            \"id\": \"1\",\n            \"instructor\": \"John Doe\",\n            \"service\": \"Yoga Class\",\n            \"date\": \"2024-01-20T10:00:00.000000Z\",\n            \"isBooked\": false,\n            \"isFull\": false,\n            \"canCancel\": false,\n            \"canBook\": true,\n            \"minutesBeforeCancellation\": 60\n        }\n    ],\n    \"meta\": {\n        \"current_page\": 1,\n        \"last_page\": 1,\n        \"per_page\": 15,\n        \"total\": 1\n    }\n}"
 						}
 					]
 				},
@@ -324,32 +367,21 @@
 					"name": "Book Session",
 					"request": {
 						"method": "POST",
-						"header": [
-							{"key": "Content-Type", "value": "application/json"}
-						],
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"sessionID\": 1,\n    \"persons\": 1\n}"
+							"raw": "{\n    \"sessionID\": 1,\n    \"persons\": 1,\n    \"promoCode\": \"SAVE10\"\n}"
 						},
-						"url": {
-							"raw": "{{base_url}}/api/v1/session-bookings",
-							"host": ["{{base_url}}"],
-							"path": ["api", "v1", "session-bookings"]
-						},
-						"description": "Book one session using sessionID. Customer from Bearer token. Optional: persons (default 1). Requires Bearer."
+						"url": { "raw": "{{base_url}}/api/v1/session-bookings", "host": ["{{base_url}}"], "path": ["api", "v1", "session-bookings"] },
+						"description": "Book one session. Body: sessionID (required), persons (optional, default 1), promoCode (optional). Requires Bearer."
 					},
 					"response": [
 						{
 							"name": "Success",
-							"originalRequest": {
-								"method": "POST",
-								"header": [{"key": "Content-Type", "value": "application/json"}],
-								"body": {"mode": "raw", "raw": "{\n    \"sessionID\": 1,\n    \"persons\": 1\n}"},
-								"url": {"raw": "{{base_url}}/api/v1/session-bookings", "host": ["{{base_url}}"], "path": ["api", "v1", "session-bookings"]}
-							},
+							"originalRequest": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n    \"sessionID\": 1,\n    \"persons\": 1\n}" }, "url": { "raw": "{{base_url}}/api/v1/session-bookings", "host": ["{{base_url}}"], "path": ["api", "v1", "session-bookings"] } },
 							"status": "Created",
 							"code": 201,
-							"header": [{"key": "Content-Type", "value": "application/json"}],
+							"header": [{ "key": "Content-Type", "value": "application/json" }],
 							"body": "{\n    \"success\": true,\n    \"message\": \"Booking created successfully\",\n    \"data\": {\n        \"id\": \"1\",\n        \"sessionID\": \"1\",\n        \"customerId\": \"1\"\n    }\n}"
 						}
 					]
@@ -358,38 +390,36 @@
 					"name": "Cancel Booking",
 					"request": {
 						"method": "POST",
-						"header": [
-							{"key": "Content-Type", "value": "application/json"}
-						],
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
 						"body": {
 							"mode": "raw",
 							"raw": "{\n    \"sessionID\": 1,\n    \"customerBookingId\": 1\n}"
 						},
-						"url": {
-							"raw": "{{base_url}}/api/v1/cancel-booking",
-							"host": ["{{base_url}}"],
-							"path": ["api", "v1", "cancel-booking"]
-						},
-						"description": "Cancel one booking using sessionID. Optional: customerBookingId. Requires Bearer."
+						"url": { "raw": "{{base_url}}/api/v1/cancel-booking", "host": ["{{base_url}}"], "path": ["api", "v1", "cancel-booking"] },
+						"description": "Cancel one booking. sessionID required; customerBookingId optional. Requires Bearer."
 					},
-					"response": [
-						{
-							"name": "Success",
-							"originalRequest": {
-								"method": "POST",
-								"header": [{"key": "Content-Type", "value": "application/json"}],
-								"body": {"mode": "raw", "raw": "{\n    \"sessionID\": 1,\n    \"customerBookingId\": 1\n}"},
-								"url": {"raw": "{{base_url}}/api/v1/cancel-booking", "host": ["{{base_url}}"], "path": ["api", "v1", "cancel-booking"]}
-							},
-							"status": "OK",
-							"code": 200,
-							"header": [{"key": "Content-Type", "value": "application/json"}],
-							"body": "{\n    \"success\": true,\n    \"message\": \"Booking canceled successfully\"\n}"
-						}
-					]
+					"response": []
+				},
+				{
+					"name": "Get Appointments History",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/appointments/history?per_page=15&page=1",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "appointments", "history"],
+							"query": [
+								{ "key": "per_page", "value": "15", "description": "Default 15, max 50" },
+								{ "key": "page", "value": "1", "description": "Page number" }
+							]
+						},
+						"description": "Paginated list of the authenticated customer's appointments/bookings. Response: { data: [{ id, sessionID, serviceName, instructorName, bookedAt, status, paymentStatus, partySize, totalAmount, currency }, ...], meta }. Requires Bearer."
+					},
+					"response": []
 				}
 			],
-			"description": "APIs for the schedule screen. All require Bearer token."
+			"description": "Schedule screen. All require Bearer token."
 		},
 		{
 			"name": "Packages Screen",
@@ -400,23 +430,24 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/api/v1/package-offers",
+							"raw": "{{base_url}}/api/v1/package-offers?per_page=15&page=1",
 							"host": ["{{base_url}}"],
-							"path": ["api", "v1", "package-offers"]
+							"path": ["api", "v1", "package-offers"],
+							"query": [
+								{ "key": "per_page", "value": "15", "description": "Default 15, max 50" },
+								{ "key": "page", "value": "1", "description": "Page number" }
+							]
 						},
-						"description": "Response: [{ id, name, price, sessions, description, expirationMonths }, ...]. Requires Bearer."
+						"description": "Paginated. Response: { data: [{ id, name, price, sessions, description, expirationMonths }, ...], meta: { current_page, last_page, per_page, total } }. Requires Bearer."
 					},
 					"response": [
 						{
 							"name": "Success",
-							"originalRequest": {
-								"method": "GET",
-								"url": {"raw": "{{base_url}}/api/v1/package-offers", "host": ["{{base_url}}"], "path": ["api", "v1", "package-offers"]}
-							},
+							"originalRequest": { "method": "GET", "url": { "raw": "{{base_url}}/api/v1/package-offers?per_page=15&page=1", "host": ["{{base_url}}"], "path": ["api", "v1", "package-offers"], "query": [{ "key": "per_page", "value": "15" }, { "key": "page", "value": "1" }] },
 							"status": "OK",
 							"code": 200,
-							"header": [{"key": "Content-Type", "value": "application/json"}],
-							"body": "[\n    {\n        \"id\": 1,\n        \"name\": \"Monthly Package\",\n        \"price\": 99.99,\n        \"sessions\": 10,\n        \"description\": \"10 sessions valid for 1 month\",\n        \"expirationMonths\": 1\n    }\n]"
+							"header": [{ "key": "Content-Type", "value": "application/json" }],
+							"body": "{\n    \"data\": [\n        {\n            \"id\": 1,\n            \"name\": \"Monthly Package\",\n            \"price\": 99.99,\n            \"sessions\": 10,\n            \"description\": \"10 sessions valid for 1 month\",\n            \"expirationMonths\": 1\n        }\n    ],\n    \"meta\": {\n        \"current_page\": 1,\n        \"last_page\": 1,\n        \"per_page\": 15,\n        \"total\": 1\n    }\n}"
 						}
 					]
 				},
@@ -424,50 +455,31 @@
 					"name": "Purchase Package",
 					"request": {
 						"method": "POST",
-						"header": [
-							{"key": "Content-Type", "value": "application/json"}
-						],
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"packageId\": 1\n}"
+							"raw": "{\n    \"packageId\": 1,\n    \"promoCode\": \"SAVE10\"\n}"
 						},
-						"url": {
-							"raw": "{{base_url}}/api/v1/purchase-package",
-							"host": ["{{base_url}}"],
-							"path": ["api", "v1", "purchase-package"]
-						},
-						"description": "Purchase one package. Customer from Bearer token. Body: packageId only. Requires Bearer."
+						"url": { "raw": "{{base_url}}/api/v1/purchase-package", "host": ["{{base_url}}"], "path": ["api", "v1", "purchase-package"] },
+						"description": "Purchase one package. Body: packageId (required), promoCode (optional, percentage discount). Requires Bearer."
 					},
 					"response": [
 						{
 							"name": "Success",
-							"originalRequest": {
-								"method": "POST",
-								"header": [{"key": "Content-Type", "value": "application/json"}],
-								"body": {"mode": "raw", "raw": "{\n    \"packageId\": 1\n}"},
-								"url": {"raw": "{{base_url}}/api/v1/purchase-package", "host": ["{{base_url}}"], "path": ["api", "v1", "purchase-package"]}
-							},
+							"originalRequest": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n    \"packageId\": 1\n}" }, "url": { "raw": "{{base_url}}/api/v1/purchase-package", "host": ["{{base_url}}"], "path": ["api", "v1", "purchase-package"] } },
 							"status": "Created",
 							"code": 201,
-							"header": [{"key": "Content-Type", "value": "application/json"}],
+							"header": [{ "key": "Content-Type", "value": "application/json" }],
 							"body": "{\n    \"success\": true,\n    \"message\": \"Package purchased successfully\",\n    \"data\": {\n        \"id\": \"1\",\n        \"packageId\": \"1\",\n        \"customerId\": \"1\"\n    }\n}"
 						}
 					]
 				}
 			],
-			"description": "APIs for the packages screen. All require Bearer token."
+			"description": "Packages screen. All require Bearer token."
 		}
 	],
 	"variable": [
-		{
-			"key": "base_url",
-			"value": "http://127.0.0.1:8000",
-			"type": "string"
-		},
-		{
-			"key": "bearer_token",
-			"value": "",
-			"type": "string"
-		}
+		{ "key": "base_url", "value": "http://127.0.0.1:8000", "type": "string" },
+		{ "key": "bearer_token", "value": "", "type": "string" }
 	]
 }

@@ -2,11 +2,12 @@
 
 namespace App\Interfaces\Http\Controllers\Api\Mobile;
 
-use App\Application\Auth\AmeliaCustomerResolver;
 use App\Http\Controllers\Controller;
-use App\Infrastructure\Persistence\Eloquent\AmeliaPackageModel;
-use App\Infrastructure\Persistence\Eloquent\AmeliaUserModel;
+use App\Infrastructure\Persistence\Eloquent\BookingModel;
 use App\Infrastructure\Persistence\Eloquent\CustomerPackagePurchaseModel;
+use App\Infrastructure\Persistence\Eloquent\PackageModel;
+use App\Infrastructure\Persistence\Eloquent\PaymentModel;
+use App\Infrastructure\Persistence\Eloquent\PromoCodeModel;
 use App\Models\Customer;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -16,56 +17,58 @@ use Illuminate\Support\Facades\Validator;
 
 class MobilePackageController extends Controller
 {
-    public function __construct(
-        private readonly AmeliaCustomerResolver $ameliaResolver,
-    ) {
-    }
-
     /**
-     * Get package offers (Amelia packages).
+     * Get package offers (Laravel packages) with pagination.
+     * Query params: per_page (default 15), page
      */
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
-        $packages = AmeliaPackageModel::on('wordpress')
-            ->where('status', 'visible')
-            ->orderBy('position', 'asc')
-            ->get()
-            ->map(function ($package) {
-                $expirationMonths = 0;
-                if ($package->durationType === 'months') {
-                    $expirationMonths = $package->durationCount ?? 0;
-                } elseif ($package->durationType === 'days') {
-                    $expirationMonths = (int) ceil(($package->durationCount ?? 0) / 30);
-                }
+        $perPage = max(1, min(50, (int) $request->query('per_page', 15)));
 
-                $sessions = (int) DB::connection('wordpress')
-                    ->table('rueyn_amelia_packages_services')
-                    ->where('packageId', $package->id)
-                    ->sum('quantity');
+        $packages = PackageModel::query()
+            ->with('services')
+            ->where('status', 'active')
+            ->orderBy('title')
+            ->paginate($perPage);
 
-                return [
-                    'id' => (int) $package->id,
-                    'name' => $package->name ?? '',
-                    'price' => (float) ($package->price ?? 0),
-                    'sessions' => $sessions,
-                    'description' => $package->description ?? '',
-                    'expirationMonths' => $expirationMonths,
-                ];
-            })
-            ->values()
-            ->toArray();
+        $items = $packages->getCollection()->map(function ($package) {
+            $sessions = (int) $package->services->sum(fn ($s) => (int) ($s->pivot->quantity ?? 1));
+            $expiry = $package->expiry;
+            $expirationMonths = 0;
+            if ($expiry) {
+                $expirationMonths = (int) max(0, Carbon::now()->diffInMonths($expiry, false));
+            }
 
-        return response()->json($packages);
+            return [
+                'id' => (int) $package->id,
+                'name' => $package->title ?? '',
+                'price' => (float) ($package->price ?? 0),
+                'sessions' => $sessions ?: 1,
+                'description' => $package->description ?? '',
+                'expirationMonths' => $expirationMonths,
+            ];
+        });
+
+        return response()->json([
+            'data' => $items->values()->toArray(),
+            'meta' => [
+                'current_page' => $packages->currentPage(),
+                'last_page' => $packages->lastPage(),
+                'per_page' => $packages->perPage(),
+                'total' => $packages->total(),
+            ],
+        ]);
     }
 
     /**
-     * Purchase a package. Uses authenticated customer (Bearer token).
-     * Body: { packageId }
+     * Purchase a package. Uses authenticated customer.
+     * Body: { packageId [, promoCode ] }
      */
     public function purchase(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
             'packageId' => 'required|integer',
+            'promoCode' => 'nullable|string|max:64',
         ]);
 
         if ($validator->fails()) {
@@ -77,69 +80,93 @@ class MobilePackageController extends Controller
         }
 
         $packageId = (int) $validator->validated()['packageId'];
+        $promoCode = $validator->validated()['promoCode'] ?? null;
 
-        /** @var Customer $laravelCustomer */
-        $laravelCustomer = $request->user();
+        /** @var Customer $customer */
+        $customer = $request->user();
 
-        $package = AmeliaPackageModel::on('wordpress')->find($packageId);
-
-        if (! $package || $package->status !== 'visible') {
+        $package = PackageModel::query()->with('services')->find($packageId);
+        if (! $package || $package->status !== 'active') {
             return response()->json([
                 'success' => false,
                 'message' => 'Package not found or not available',
             ], 404);
         }
 
-        $ameliaUser = $this->ameliaResolver->resolveAmeliaUser($laravelCustomer);
-        if (! $ameliaUser) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Could not resolve or create Amelia customer.',
-            ], 500);
+        $totalSessions = (int) $package->services->sum(fn ($s) => (int) ($s->pivot->quantity ?? 1)) ?: 1;
+        $price = (float) $package->price;
+        $promoRecord = null;
+
+        if ($promoCode) {
+            $promoRecord = PromoCodeModel::query()
+                ->where('code', $promoCode)
+                ->first();
+            if ($promoRecord && $promoRecord->isValid()) {
+                $price = $price * (1 - (float) $promoRecord->percent_discount / 100);
+            } else {
+                $promoRecord = null;
+            }
         }
 
-        $totalSessions = (int) DB::connection('wordpress')
-            ->table('rueyn_amelia_packages_services')
-            ->where('packageId', $package->id)
-            ->sum('quantity');
-
-        DB::connection('wordpress')->beginTransaction();
+        DB::beginTransaction();
         try {
-            $packageCustomerId = DB::connection('wordpress')
-                ->table('rueyn_amelia_packages_customers')
-                ->insertGetId([
-                    'packageId' => $package->id,
-                    'customerId' => $ameliaUser->id,
-                    'price' => $package->price,
-                    'purchased' => Carbon::now()->format('Y-m-d H:i:s'),
-                    'status' => 'approved',
-                ]);
+            if ($promoRecord) {
+                $promoRecord->increment('used_count');
+            }
+
+            $booking = BookingModel::query()->create([
+                'customer_id' => $customer->id,
+                'package_id' => $package->id,
+                'event_id' => null,
+                'event_instance_id' => null,
+                'appointment_id' => null,
+                'service_id' => null,
+                'provider_id' => null,
+                'status' => 'confirmed',
+                'payment_status' => 'pending',
+                'party_size' => 1,
+                'total_amount' => $price,
+                'deposit_amount' => 0,
+                'balance_amount' => $price,
+                'currency' => 'USD',
+                'channel' => 'mobile',
+                'booked_at' => now(),
+            ]);
 
             CustomerPackagePurchaseModel::query()->create([
-                'customer_id' => $laravelCustomer->id,
-                'package_id' => null,
-                'amelia_package_id' => $package->id,
+                'customer_id' => $customer->id,
+                'package_id' => $package->id,
+                'amelia_package_id' => null,
                 'total_sessions' => $totalSessions,
                 'remaining_sessions' => $totalSessions,
                 'purchase_date' => Carbon::now(),
                 'status' => 'active',
-                'amelia_package_customer_id' => $packageCustomerId,
+                'amelia_package_customer_id' => null,
             ]);
 
-            DB::connection('wordpress')->commit();
+            PaymentModel::query()->create([
+                'booking_id' => $booking->id,
+                'promo_code_id' => $promoRecord?->id,
+                'provider' => 'on_site',
+                'status' => 'paid',
+                'amount' => $price,
+                'currency' => 'USD',
+                'paid_at' => now(),
+            ]);
+
+            DB::commit();
 
             return response()->json([
                 'success' => true,
                 'message' => 'Package purchased successfully',
                 'data' => [
-                    'id' => (string) $packageCustomerId,
+                    'id' => (string) $booking->id,
                     'packageId' => (string) $package->id,
-                    'customerId' => (string) $laravelCustomer->id,
+                    'customerId' => (string) $customer->id,
                 ],
             ], 201);
         } catch (\Throwable $e) {
-            DB::connection('wordpress')->rollBack();
-
+            DB::rollBack();
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to purchase package',

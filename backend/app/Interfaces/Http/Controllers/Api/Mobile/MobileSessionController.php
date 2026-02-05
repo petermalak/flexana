@@ -3,10 +3,10 @@
 namespace App\Interfaces\Http\Controllers\Api\Mobile;
 
 use App\Http\Controllers\Controller;
-use App\Infrastructure\Persistence\Eloquent\AmeliaAppointmentModel;
-use App\Infrastructure\Persistence\Eloquent\AmeliaCustomerBookingModel;
-use App\Infrastructure\Persistence\Eloquent\AmeliaServiceModel;
-use App\Infrastructure\Persistence\Eloquent\AmeliaUserModel;
+use App\Infrastructure\Persistence\Eloquent\AppointmentModel;
+use App\Infrastructure\Persistence\Eloquent\BookingModel;
+use App\Infrastructure\Persistence\Eloquent\ServiceModel;
+use App\Infrastructure\Persistence\Eloquent\StaffModel;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -14,87 +14,75 @@ use Illuminate\Support\Carbon;
 class MobileSessionController extends Controller
 {
     /**
-     * Get sessions based on filters
-     *
-     * Query params: date, serviceID, instructorID
-     *
-     * @param Request $request
-     * @return JsonResponse
+     * Get sessions (appointments) with optional pagination.
+     * Query params: date, serviceID, instructorID, per_page (default 15), page
      */
     public function index(Request $request): JsonResponse
     {
         $date = $request->query('date');
         $serviceID = $request->query('serviceID');
         $instructorID = $request->query('instructorID');
+        $perPage = max(1, min(50, (int) $request->query('per_page', 15)));
 
-        $query = AmeliaAppointmentModel::on('wordpress')
-            ->with(['service', 'provider', 'customerBookings'])
+        $query = AppointmentModel::query()
+            ->with(['service', 'provider', 'bookings'])
             ->where('status', 'approved');
 
-        // Filter by date
         if ($date) {
             $dateCarbon = Carbon::parse($date);
-            $query->whereDate('bookingStart', $dateCarbon->format('Y-m-d'));
+            $query->whereDate('booking_start', $dateCarbon->format('Y-m-d'));
         }
-
-        // Filter by service
         if ($serviceID) {
-            $query->where('serviceId', $serviceID);
+            $query->where('service_id', $serviceID);
         }
-
-        // Filter by instructor/provider
         if ($instructorID) {
-            $query->where('providerId', $instructorID);
+            $query->where('provider_id', $instructorID);
         }
 
-        $appointments = $query->get();
+        $query->orderBy('booking_start');
 
-        $ameliaUserId = null;
-        if ($request->user() && $request->user()->amelia_user_id) {
-            $ameliaUserId = $request->user()->amelia_user_id;
-        }
+        $appointments = $query->paginate($perPage);
+        $customerId = $request->user()?->id;
 
-        $sessions = $appointments->map(function ($appointment) use ($ameliaUserId) {
+        $items = $appointments->getCollection()->map(function ($appointment) use ($customerId) {
             $service = $appointment->service;
             $provider = $appointment->provider;
-            $customerBookings = $appointment->customerBookings;
-            $approvedBookings = $customerBookings->where('status', 'approved');
-            $totalPersons = $approvedBookings->sum('persons');
-            $maxCapacity = $service ? ($service->maxCapacity ?? 1) : 1;
+            $approvedBookings = $appointment->bookings->where('status', 'confirmed');
+            $totalPersons = $approvedBookings->sum('party_size');
+            $maxCapacity = $service ? ($service->max_capacity ?? 1) : 1;
             $isFull = $totalPersons >= $maxCapacity;
-
-            $myBooking = $ameliaUserId
-                ? $approvedBookings->where('customerId', $ameliaUserId)->first()
+            $myBooking = $customerId
+                ? $approvedBookings->where('customer_id', $customerId)->first()
                 : null;
             $isBooked = $myBooking !== null;
-
-            $settings = is_string($service->settings ?? null)
-                ? json_decode($service->settings, true)
-                : ($service->settings ?? []);
-            $minutesBeforeCancellation = $settings['timeBefore'] ?? $service->timeBefore ?? 0;
+            $minutesBeforeCancellation = (int) ($service->time_before ?? 0);
             $canCancelUntil = $myBooking
-                ? Carbon::parse($appointment->bookingStart)->subMinutes($minutesBeforeCancellation)
+                ? Carbon::parse($appointment->booking_start)->subMinutes($minutesBeforeCancellation)
                 : null;
-            $canCancel = $isBooked && $canCancelUntil && Carbon::now() <= $canCancelUntil;
-            $canBook = ! $isFull && $appointment->bookingStart > Carbon::now();
+            $canCancel = $isBooked && $canCancelUntil && Carbon::now()->lte($canCancelUntil);
+            $canBook = ! $isFull && Carbon::parse($appointment->booking_start)->gt(Carbon::now());
 
             return [
                 'id' => (string) $appointment->id,
-                'instructor' => $provider
-                    ? trim(($provider->firstName ?? '') . ' ' . ($provider->lastName ?? ''))
-                    : '',
+                'instructor' => $provider ? $provider->name : '',
                 'service' => $service ? $service->name : '',
-                'date' => $appointment->bookingStart->toIso8601String(),
+                'date' => Carbon::parse($appointment->booking_start)->toIso8601String(),
                 'isBooked' => $isBooked,
                 'isFull' => $isFull,
                 'canCancel' => $canCancel,
                 'canBook' => $canBook,
-                'minutesBeforeCancellation' => (int) $minutesBeforeCancellation,
+                'minutesBeforeCancellation' => $minutesBeforeCancellation,
             ];
-        })
-        ->values()
-        ->toArray();
+        });
 
-        return response()->json($sessions);
+        return response()->json([
+            'data' => $items->values()->toArray(),
+            'meta' => [
+                'current_page' => $appointments->currentPage(),
+                'last_page' => $appointments->lastPage(),
+                'per_page' => $appointments->perPage(),
+                'total' => $appointments->total(),
+            ],
+        ]);
     }
 }

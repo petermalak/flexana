@@ -3,7 +3,7 @@
 There are two Postman collections:
 
 1. **Flexana API Collection** – Admin/frontend API (API Key + HMAC signature).
-2. **Flexana Mobile API (v1)** – Mobile app API (Bearer token from send-code → verify).
+2. **Flexana Mobile API (v1)** – Mobile app API (Bearer token from Login or Signup → Verify).
 
 ---
 
@@ -12,16 +12,26 @@ There are two Postman collections:
 **File:** `Flexana_Mobile_API.postman_collection.json`
 
 - **Base path:** `/api/v1`
-- **Auth:** All data endpoints require `Authorization: Bearer <token>`. Get the token from **Auth → Verify** (after **Auth → Send Code**).
-- **Variables:** `base_url` (e.g. `http://127.0.0.1:8000`), `bearer_token` (set automatically by the Verify request’s test script).
+- **Auth:** All data endpoints require `Authorization: Bearer <token>`. Get the token from **Auth → Login** (phone + password) or **Auth → Signup** then **Auth → Verify** (OTP).
+- **Variables:** `base_url` (e.g. `http://127.0.0.1:8000`), `bearer_token` (set automatically by Login or Verify request’s test script).
 
-**Flow:**
+**Auth flow (choose one):**
 
-1. **Auth → Send Code** – POST body: `{ "phone": "+201234567890" }` (optional: firstName, lastName, email).
-2. **Auth → Verify** – POST body: `{ "phone": "...", "code": "123456" }` → response includes `token`; the collection test script saves it to `bearer_token`.
-3. Use any other request; they use collection auth (Bearer `{{bearer_token}}`).
+- **Existing users:** **Auth → Login** – POST body: `{ "phone": "+201234567890", "password": "secret" }` → response includes `token`; test script saves it to `bearer_token`.
+- **New users (backend OTP):** **Auth → Signup** – POST body: `{ "phone": "...", "firstName?", "lastName?", "email?" }` (sends OTP SMS). Then **Auth → Verify** – POST body: `{ "phone": "...", "code": "123456", "password?", "password_confirmation?" }` → response includes `token`; test script saves it to `bearer_token`.
+- **New users (Firebase phone):** Use Firebase Auth on the client to verify phone (Firebase sends SMS). Then **Auth → Verify Firebase** – POST body: `{ "idToken": "<Firebase ID token>", "phone?", "firstName?", "lastName?", "email?" }` → backend verifies token, finds/creates customer, returns Sanctum token. If `FIREBASE_SERVICE_ACCOUNT_JSON` is set, phone can be omitted (backend fetches it from Firebase).
 
-**Folders:** Auth (send-code, verify, logout, me, update me), Home Screen (banners, instructors, service), Schedule Screen (instructors/simple, service/simple, sessions, session-bookings, cancel-booking), Packages Screen (package-offers, purchase-package).
+**Password:**
+
+- **Auth → Change Password** – POST `{ "currentPassword", "password", "password_confirmation" }` (authenticated).
+- **Auth → Forgot Password** – POST `{ "email": "user@example.com" }` (sends reset link).
+- **Auth → Reset Password** – POST `{ "email", "token", "password", "password_confirmation" }` (token from email).
+
+**Phone change:** **Auth → Send Phone Change Code** – POST `{ "newPhone" }` (sends OTP). Then **Auth → Update Me** – PUT with `phone` + `phoneChangeCode` to confirm.
+
+**Account:** **Auth → Delete Account** – DELETE (permanently deletes customer and revokes tokens).
+
+**Folders:** Auth (login, signup, verify, verify-firebase, forgot-password, reset-password, logout, me, update me, send-phone-change-code, change-password, delete-account), Home Screen (banners, instructors, service), Schedule Screen (instructors/simple, service/simple, **sessions**, **session-bookings**, cancel-booking, **appointments/history**), Packages Screen (**package-offers**, **purchase-package**).
 
 ---
 

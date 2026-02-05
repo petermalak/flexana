@@ -2,10 +2,10 @@
 
 namespace App\Interfaces\Http\Controllers\Api\Mobile;
 
-use App\Application\Auth\AmeliaCustomerResolver;
 use App\Http\Controllers\Controller;
-use App\Infrastructure\Persistence\Eloquent\AmeliaAppointmentModel;
-use App\Infrastructure\Persistence\Eloquent\AmeliaCustomerBookingModel;
+use App\Infrastructure\Persistence\Eloquent\AppointmentModel;
+use App\Infrastructure\Persistence\Eloquent\BookingModel;
+use App\Infrastructure\Persistence\Eloquent\ServiceModel;
 use App\Models\Customer;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -15,20 +15,65 @@ use Illuminate\Support\Facades\Validator;
 
 class MobileBookingController extends Controller
 {
-    public function __construct(
-        private readonly AmeliaCustomerResolver $ameliaResolver,
-    ) {
+    /**
+     * GET /api/v1/appointments/history
+     * Returns the authenticated customer's appointment/booking history (paginated).
+     */
+    public function history(Request $request): JsonResponse
+    {
+        $perPage = min((int) $request->get('per_page', 15), 50);
+        $page = max(1, (int) $request->get('page', 1));
+
+        /** @var Customer $customer */
+        $customer = $request->user();
+
+        $bookings = BookingModel::query()
+            ->where('customer_id', $customer->id)
+            ->with(['appointment.service', 'appointment.provider', 'service'])
+            ->orderByDesc('booked_at')
+            ->paginate($perPage, ['*'], 'page', $page);
+
+        $data = $bookings->getCollection()->map(function (BookingModel $booking) {
+            $appointment = $booking->appointment;
+            $service = $appointment?->service ?? $booking->service;
+            $provider = $appointment?->provider;
+
+            return [
+                'id' => (string) $booking->id,
+                'sessionID' => $booking->appointment_id ? (string) $booking->appointment_id : null,
+                'serviceName' => $service?->name,
+                'instructorName' => $provider?->name,
+                'bookedAt' => $booking->booked_at?->toIso8601String(),
+                'status' => $booking->status,
+                'paymentStatus' => $booking->payment_status,
+                'partySize' => $booking->party_size,
+                'totalAmount' => (float) $booking->total_amount,
+                'currency' => $booking->currency ?? 'USD',
+            ];
+        });
+
+        return response()->json([
+            'success' => true,
+            'data' => $data,
+            'meta' => [
+                'current_page' => $bookings->currentPage(),
+                'last_page' => $bookings->lastPage(),
+                'per_page' => $bookings->perPage(),
+                'total' => $bookings->total(),
+            ],
+        ], 200);
     }
 
     /**
-     * Book a session. Uses authenticated customer (Bearer token).
-     * Body: { sessionID, persons (optional, default 1) }
+     * Book a session (appointment). Uses authenticated customer.
+     * Body: { sessionID, persons (optional, default 1) [, promoCode ] }
      */
     public function store(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
             'sessionID' => 'required|integer',
             'persons' => 'nullable|integer|min:1|max:20',
+            'promoCode' => 'nullable|string|max:64',
         ]);
 
         if ($validator->fails()) {
@@ -42,12 +87,13 @@ class MobileBookingController extends Controller
         $data = $validator->validated();
         $sessionID = (int) $data['sessionID'];
         $persons = (int) ($data['persons'] ?? 1);
+        $promoCode = $data['promoCode'] ?? null;
 
-        /** @var Customer $laravelCustomer */
-        $laravelCustomer = $request->user();
+        /** @var Customer $customer */
+        $customer = $request->user();
 
-        $appointment = AmeliaAppointmentModel::on('wordpress')
-            ->with(['service', 'customerBookings'])
+        $appointment = AppointmentModel::query()
+            ->with(['service', 'bookings'])
             ->find($sessionID);
 
         if (! $appointment) {
@@ -58,8 +104,8 @@ class MobileBookingController extends Controller
         }
 
         $service = $appointment->service;
-        $maxCapacity = $service ? ($service->maxCapacity ?? 1) : 1;
-        $currentBookings = $appointment->customerBookings->where('status', 'approved')->sum('persons');
+        $maxCapacity = $service ? ($service->max_capacity ?? 1) : 1;
+        $currentBookings = $appointment->bookings->whereIn('status', ['confirmed', 'pending'])->sum('party_size');
 
         if (($currentBookings + $persons) > $maxCapacity) {
             return response()->json([
@@ -68,49 +114,77 @@ class MobileBookingController extends Controller
             ], 400);
         }
 
-        if ($appointment->bookingStart <= Carbon::now()) {
+        if (Carbon::parse($appointment->booking_start)->lte(Carbon::now())) {
             return response()->json([
                 'success' => false,
                 'message' => 'Cannot book past sessions',
             ], 400);
         }
 
-        $ameliaUser = $this->ameliaResolver->resolveAmeliaUser($laravelCustomer);
-        if (! $ameliaUser) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Could not resolve or create Amelia customer.',
-            ], 500);
-        }
-
-        $servicePrice = $service ? ($service->price ?? 0) : 0;
+        $servicePrice = $service ? (float) ($service->price ?? 0) : 0;
         $totalPrice = $servicePrice * $persons;
 
-        DB::connection('wordpress')->beginTransaction();
+        $promoRecord = null;
+        if ($promoCode) {
+            $promoRecord = \App\Infrastructure\Persistence\Eloquent\PromoCodeModel::query()
+                ->where('code', $promoCode)
+                ->first();
+            if ($promoRecord && $promoRecord->isValid()) {
+                $totalPrice = $totalPrice * (1 - (float) $promoRecord->percent_discount / 100);
+            } else {
+                $promoRecord = null;
+            }
+        }
+
+        DB::beginTransaction();
         try {
-            $customerBooking = AmeliaCustomerBookingModel::on('wordpress')->create([
-                'appointmentId' => $appointment->id,
-                'customerId' => $ameliaUser->id,
-                'status' => 'approved',
-                'price' => $totalPrice,
-                'persons' => $persons,
-                'created' => Carbon::now(),
+            if ($promoRecord) {
+                $promoRecord->increment('used_count');
+            }
+
+            $booking = BookingModel::query()->create([
+                'customer_id' => $customer->id,
+                'appointment_id' => $appointment->id,
+                'event_id' => null,
+                'event_instance_id' => null,
+                'package_id' => null,
+                'service_id' => $appointment->service_id,
+                'provider_id' => $appointment->provider_id,
+                'location_id' => $appointment->location_id,
+                'status' => 'confirmed',
+                'payment_status' => 'pending',
+                'party_size' => $persons,
+                'total_amount' => $totalPrice,
+                'deposit_amount' => 0,
+                'balance_amount' => $totalPrice,
+                'currency' => 'USD',
+                'channel' => 'mobile',
+                'booked_at' => $appointment->booking_start,
             ]);
 
-            DB::connection('wordpress')->commit();
+            \App\Infrastructure\Persistence\Eloquent\PaymentModel::query()->create([
+                'booking_id' => $booking->id,
+                'promo_code_id' => $promoRecord?->id,
+                'provider' => 'on_site',
+                'status' => 'paid',
+                'amount' => $totalPrice,
+                'currency' => 'USD',
+                'paid_at' => now(),
+            ]);
+
+            DB::commit();
 
             return response()->json([
                 'success' => true,
                 'message' => 'Booking created successfully',
                 'data' => [
-                    'id' => (string) $customerBooking->id,
+                    'id' => (string) $booking->id,
                     'sessionID' => (string) $appointment->id,
-                    'customerId' => (string) $laravelCustomer->id,
+                    'customerId' => (string) $customer->id,
                 ],
             ], 201);
         } catch (\Throwable $e) {
-            DB::connection('wordpress')->rollBack();
-
+            DB::rollBack();
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to create booking',
@@ -120,7 +194,7 @@ class MobileBookingController extends Controller
     }
 
     /**
-     * Cancel a booking. Only the authenticated customer's booking can be canceled.
+     * Cancel a booking. Only the authenticated customer's booking.
      * Body: { sessionID [, customerBookingId ] }
      */
     public function cancel(Request $request): JsonResponse
@@ -138,22 +212,14 @@ class MobileBookingController extends Controller
             ], 422);
         }
 
-        $data = $validator->validated();
-        $sessionID = (int) $data['sessionID'];
-        $customerBookingId = isset($data['customerBookingId']) ? (int) $data['customerBookingId'] : null;
+        $sessionID = (int) $validator->validated()['sessionID'];
+        $bookingId = isset($validator->validated()['customerBookingId']) ? (int) $validator->validated()['customerBookingId'] : null;
 
-        /** @var Customer $laravelCustomer */
-        $laravelCustomer = $request->user();
-        $ameliaUserId = $laravelCustomer->amelia_user_id;
-        if (! $ameliaUserId) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Booking not found',
-            ], 404);
-        }
+        /** @var Customer $customer */
+        $customer = $request->user();
 
-        $appointment = AmeliaAppointmentModel::on('wordpress')
-            ->with(['service', 'customerBookings'])
+        $appointment = AppointmentModel::query()
+            ->with(['service', 'bookings'])
             ->find($sessionID);
 
         if (! $appointment) {
@@ -164,48 +230,43 @@ class MobileBookingController extends Controller
         }
 
         $service = $appointment->service;
-        $settings = is_string($service->settings ?? null)
-            ? json_decode($service->settings, true)
-            : ($service->settings ?? []);
-        $minutesBeforeCancellation = $settings['timeBefore'] ?? $service->timeBefore ?? 0;
-        $canCancelUntil = Carbon::parse($appointment->bookingStart)->subMinutes($minutesBeforeCancellation);
-        if (Carbon::now() > $canCancelUntil) {
+        $minutesBeforeCancellation = (int) ($service->time_before ?? 0);
+        $canCancelUntil = Carbon::parse($appointment->booking_start)->subMinutes($minutesBeforeCancellation);
+        if (Carbon::now()->gt($canCancelUntil)) {
             return response()->json([
                 'success' => false,
                 'message' => 'Cancellation deadline has passed',
             ], 400);
         }
 
-        $query = AmeliaCustomerBookingModel::on('wordpress')
-            ->where('appointmentId', $sessionID)
-            ->where('customerId', $ameliaUserId)
-            ->where('status', 'approved');
+        $query = BookingModel::query()
+            ->where('appointment_id', $sessionID)
+            ->where('customer_id', $customer->id)
+            ->whereIn('status', ['confirmed', 'pending']);
 
-        if ($customerBookingId !== null) {
-            $query->where('id', $customerBookingId);
+        if ($bookingId !== null) {
+            $query->where('id', $bookingId);
         }
 
-        $customerBooking = $query->first();
+        $booking = $query->first();
 
-        if (! $customerBooking) {
+        if (! $booking) {
             return response()->json([
                 'success' => false,
                 'message' => 'Booking not found',
             ], 404);
         }
 
-        DB::connection('wordpress')->beginTransaction();
+        DB::beginTransaction();
         try {
-            $customerBooking->update(['status' => 'canceled']);
-            DB::connection('wordpress')->commit();
-
+            $booking->update(['status' => 'cancelled', 'cancelled_at' => now()]);
+            DB::commit();
             return response()->json([
                 'success' => true,
                 'message' => 'Booking canceled successfully',
             ], 200);
         } catch (\Throwable $e) {
-            DB::connection('wordpress')->rollBack();
-
+            DB::rollBack();
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to cancel booking',

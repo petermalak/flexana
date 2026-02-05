@@ -70,9 +70,13 @@ Route::prefix('v1')
 // Mobile / App API under /api/v1 — all data endpoints require Bearer token
 Route::prefix('v1')
     ->group(function (): void {
-        // Auth only (public)
-        Route::post('auth/send-code', [MobileAuthController::class, 'sendCode']);
+        // Auth (public)
+        Route::post('auth/login', [MobileAuthController::class, 'login']);
+        Route::post('auth/signup', [MobileAuthController::class, 'signup']);
         Route::post('auth/verify', [MobileAuthController::class, 'verify']);
+        Route::post('auth/verify-firebase', [MobileAuthController::class, 'verifyFirebase']);
+        Route::post('auth/forgot-password', [MobileAuthController::class, 'forgotPassword']);
+        Route::post('auth/reset-password', [MobileAuthController::class, 'resetPassword']);
 
         // All mobile app endpoints (authenticated)
         Route::middleware(['auth:sanctum:api'])->group(function (): void {
@@ -93,5 +97,9 @@ Route::prefix('v1')
             Route::post('auth/logout', [MobileAuthController::class, 'logout']);
             Route::get('auth/me', [MobileAuthController::class, 'me']);
             Route::put('auth/me', [MobileAuthController::class, 'updateMe']);
+            Route::post('auth/send-phone-change-code', [MobileAuthController::class, 'sendPhoneChangeCode']);
+            Route::post('auth/change-password', [MobileAuthController::class, 'changePassword']);
+            Route::delete('auth/delete-account', [MobileAuthController::class, 'deleteAccount']);
+            Route::get('appointments/history', [MobileBookingController::class, 'history']);
         });
     });

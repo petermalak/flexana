@@ -14,5 +14,11 @@ return [
     'app_id' => env('FIREBASE_APP_ID', '1:1021918771595:web:d95db7e3b821cfc239578e'),
     'measurement_id' => env('FIREBASE_MEASUREMENT_ID', 'G-DH6TCCBC12'),
     'gcm_sender_id' => env('FIREBASE_GCM_SENDER_ID', '1021918771595'),
+
+    /*
+    | Path to Firebase service account JSON (for Admin SDK, e.g. get user phone after phone sign-in).
+    | Set FIREBASE_SERVICE_ACCOUNT_JSON in .env to enable auth/verify-firebase without requiring phone in body.
+    */
+    'service_account_json' => env('FIREBASE_SERVICE_ACCOUNT_JSON', ''),
 ];
 

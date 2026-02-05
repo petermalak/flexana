@@ -3,7 +3,7 @@
 namespace App\Interfaces\Http\Controllers\Api\Mobile;
 
 use App\Http\Controllers\Controller;
-use App\Infrastructure\Persistence\Eloquent\AmeliaUserModel;
+use App\Infrastructure\Persistence\Eloquent\StaffModel;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -11,22 +11,20 @@ class MobileInstructorController extends Controller
 {
     /**
      * Get instructors for home screen (full details)
-     * 
-     * @return JsonResponse
      */
     public function index(Request $request): JsonResponse
     {
-        $instructors = AmeliaUserModel::on('wordpress')
-            ->where('type', 'provider')
-            ->where('status', 'visible')
+        $instructors = StaffModel::query()
+            ->where('is_active', true)
+            ->orderBy('name')
             ->get()
             ->map(function ($instructor) {
                 return [
                     'id' => (string) $instructor->id,
-                    'name' => trim(($instructor->firstName ?? '') . ' ' . ($instructor->lastName ?? '')),
-                    'image' => $instructor->picture ?? '',
-                    'position' => $instructor->description ?? '',
-                    'brief' => $instructor->note ?? '',
+                    'name' => $instructor->name ?? '',
+                    'image' => '',
+                    'position' => $instructor->role ?? '',
+                    'brief' => '',
                 ];
             })
             ->values()
@@ -37,19 +35,17 @@ class MobileInstructorController extends Controller
 
     /**
      * Get instructors for schedule screen (simple list)
-     * 
-     * @return JsonResponse
      */
     public function simple(): JsonResponse
     {
-        $instructors = AmeliaUserModel::on('wordpress')
-            ->where('type', 'provider')
-            ->where('status', 'visible')
+        $instructors = StaffModel::query()
+            ->where('is_active', true)
+            ->orderBy('name')
             ->get()
             ->map(function ($instructor) {
                 return [
                     'id' => (string) $instructor->id,
-                    'name' => trim(($instructor->firstName ?? '') . ' ' . ($instructor->lastName ?? '')),
+                    'name' => $instructor->name ?? '',
                 ];
             })
             ->values()
