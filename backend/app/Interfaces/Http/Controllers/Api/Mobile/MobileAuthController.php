@@ -2,6 +2,8 @@
 
 namespace App\Interfaces\Http\Controllers\Api\Mobile;
 
+use App\Application\Auth\FirebaseSendVerificationCodeService;
+use App\Application\Auth\FirebaseSignInWithPhoneService;
 use App\Application\Auth\PhoneVerificationService;
 use App\Http\Controllers\Controller;
 use App\Infrastructure\Auth\FirebaseTokenVerifier;
@@ -18,6 +20,8 @@ class MobileAuthController extends Controller
     public function __construct(
         private readonly PhoneVerificationService $verification,
         private readonly FirebaseTokenVerifier $firebaseVerifier,
+        private readonly FirebaseSendVerificationCodeService $firebaseSendCode,
+        private readonly FirebaseSignInWithPhoneService $firebaseSignIn,
     ) {
     }
 
@@ -65,13 +69,24 @@ class MobileAuthController extends Controller
 
     /**
      * POST /api/v1/auth/signup
-     * Body: { phone [, firstName, lastName, email ] }
-     * Sends OTP SMS only. Client must call verify to complete signup and get token.
+     * Body: { phone [, firstName, lastName, email ] } for backend OTP,
+     *       or for Firebase SMS send one of:
+     *       - recaptchaToken (+ recaptchaVersion) for web / testing,
+     *       - playIntegrityToken for Android (Play Integrity),
+     *       - safetyNetToken for Android (SafetyNet),
+     *       - iosReceipt + iosSecret for iOS.
+     * When a Firebase verification token is sent, Firebase sends the SMS and we return sessionInfo; then call verify-with-firebase-code.
      */
     public function signup(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
             'phone' => 'required|string|max:20',
+            'recaptchaToken' => 'nullable|string',
+            'recaptchaVersion' => 'nullable|string|in:v2,v3',
+            'playIntegrityToken' => 'nullable|string',
+            'safetyNetToken' => 'nullable|string',
+            'iosReceipt' => 'nullable|string',
+            'iosSecret' => 'nullable|string',
             'firstName' => 'nullable|string|max:100',
             'lastName' => 'nullable|string|max:100',
             'email' => 'nullable|email',
@@ -86,6 +101,30 @@ class MobileAuthController extends Controller
         }
 
         $data = $validator->validated();
+        $hasFirebaseToken = ! empty($data['recaptchaToken']) || ! empty($data['playIntegrityToken'])
+            || ! empty($data['safetyNetToken']) || ! empty($data['iosReceipt']);
+
+        // Firebase SMS: mobile app or web sent a verification token – use Firebase to send the SMS
+        if ($hasFirebaseToken) {
+            $result = $this->firebaseSendCode->sendCode($data['phone'], [
+                'recaptchaToken' => $data['recaptchaToken'] ?? null,
+                'recaptchaVersion' => $data['recaptchaVersion'] ?? null,
+                'playIntegrityToken' => $data['playIntegrityToken'] ?? null,
+                'safetyNetToken' => $data['safetyNetToken'] ?? null,
+                'iosReceipt' => $data['iosReceipt'] ?? null,
+                'iosSecret' => $data['iosSecret'] ?? null,
+            ]);
+            if (! $result['success']) {
+                return response()->json(['success' => false, 'message' => $result['message']], 400);
+            }
+            return response()->json([
+                'success' => true,
+                'message' => $result['message'],
+                'sessionInfo' => $result['sessionInfo'],
+            ], 200);
+        }
+
+        // Backend OTP (our 6-digit code, sent via Twilio or logged)
         $result = $this->verification->sendSignupCode(
             $data['phone'],
             $data['firstName'] ?? null,
@@ -100,10 +139,15 @@ class MobileAuthController extends Controller
             ], 400);
         }
 
-        return response()->json([
+        $response = [
             'success' => true,
             'message' => $result['message'],
-        ], 200);
+        ];
+        if (app()->environment('local', 'testing') && isset($result['code'])) {
+            $response['code'] = $result['code'];
+        }
+
+        return response()->json($response, 200);
     }
 
     /**
@@ -152,6 +196,55 @@ class MobileAuthController extends Controller
             'token' => $token,
             'token_type' => 'Bearer',
             'customer' => $this->customerToArray($customer),
+        ], 200);
+    }
+
+    /**
+     * POST /api/v1/auth/send-firebase-verification-code
+     * Body: { phoneNumber } plus one of: recaptchaToken (web), playIntegrityToken (Android), safetyNetToken (Android), iosReceipt+iosSecret (iOS).
+     * Sends SMS via Firebase. Returns sessionInfo; then call verify-with-firebase-code with sessionInfo + code + phone.
+     */
+    public function sendFirebaseVerificationCode(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'phoneNumber' => 'required|string|max:20',
+            'recaptchaToken' => 'nullable|string',
+            'recaptchaVersion' => 'nullable|string|in:v2,v3',
+            'playIntegrityToken' => 'nullable|string',
+            'safetyNetToken' => 'nullable|string',
+            'iosReceipt' => 'nullable|string',
+            'iosSecret' => 'nullable|string',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $data = $validator->validated();
+        $result = $this->firebaseSendCode->sendCode($data['phoneNumber'], [
+            'recaptchaToken' => $data['recaptchaToken'] ?? null,
+            'recaptchaVersion' => $data['recaptchaVersion'] ?? null,
+            'playIntegrityToken' => $data['playIntegrityToken'] ?? null,
+            'safetyNetToken' => $data['safetyNetToken'] ?? null,
+            'iosReceipt' => $data['iosReceipt'] ?? null,
+            'iosSecret' => $data['iosSecret'] ?? null,
+        ]);
+
+        if (! $result['success']) {
+            return response()->json([
+                'success' => false,
+                'message' => $result['message'],
+            ], 400);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => $result['message'],
+            'sessionInfo' => $result['sessionInfo'],
         ], 200);
     }
 
@@ -225,6 +318,94 @@ class MobileAuthController extends Controller
         }
         if (array_key_exists('email', $data)) {
             $customer->email = $data['email'];
+        }
+        $customer->save();
+
+        $token = $customer->createToken('mobile')->plainTextToken;
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Verified.',
+            'token' => $token,
+            'token_type' => 'Bearer',
+            'customer' => $this->customerToArray($customer),
+        ], 200);
+    }
+
+    /**
+     * POST /api/v1/auth/verify-with-firebase-code
+     * Body: { sessionInfo, code, phone [, firstName, lastName, email, password, password_confirmation ] }
+     * Use after Firebase sent the SMS (via send-firebase-verification-code). User enters code; app sends
+     * sessionInfo + code + phone. Backend exchanges them for Firebase idToken, then finds/creates customer and returns Sanctum token.
+     */
+    public function verifyWithFirebaseCode(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'sessionInfo' => 'required|string',
+            'code' => 'required|string|min:4|max:10',
+            'phone' => 'required|string|max:20',
+            'firstName' => 'nullable|string|max:100',
+            'lastName' => 'nullable|string|max:100',
+            'email' => 'nullable|email',
+            'password' => ['nullable', 'string', 'confirmed', PasswordRule::min(8)],
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $data = $validator->validated();
+        $signInResult = $this->firebaseSignIn->signIn($data['sessionInfo'], $data['code']);
+
+        if (! $signInResult['success']) {
+            return response()->json([
+                'success' => false,
+                'message' => $signInResult['message'],
+            ], 400);
+        }
+
+        try {
+            $firebaseToken = $this->firebaseVerifier->verify($signInResult['idToken']);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid verification result.',
+            ], 401);
+        }
+
+        $uid = $firebaseToken->uid;
+        $phone = $this->normalizePhone($data['phone']);
+
+        $customer = Customer::query()
+            ->where('firebase_uid', $uid)
+            ->orWhere('uid', $uid)
+            ->first();
+
+        if (! $customer) {
+            $customer = new Customer();
+            $customer->firebase_uid = $uid;
+            $customer->uid = (string) \Illuminate\Support\Str::uuid();
+            $customer->phone = $phone;
+        } else {
+            $customer->phone = $phone;
+        }
+
+        $customer->phone_verified_at = now();
+        if (! empty($data['firstName'])) {
+            $customer->first_name = $data['firstName'];
+        }
+        if (! empty($data['lastName'])) {
+            $customer->last_name = $data['lastName'];
+        }
+        if (array_key_exists('email', $data)) {
+            $customer->email = $data['email'];
+        }
+        if (! empty($data['password'])) {
+            $customer->password = Hash::make($data['password']);
         }
         $customer->save();
 

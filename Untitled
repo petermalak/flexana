@@ -1,0 +1,1 @@
+php artisan auth:test-phone-signup 01274235122 --name="Test" --password=Secret123

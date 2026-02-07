@@ -22,7 +22,7 @@ final class PhoneVerificationService
      * Signup: create or update customer by phone, store verification code, send OTP SMS.
      * Used only for new user signup. Throttles by phone. Does not return a token.
      *
-     * @return array{success: bool, message: string}
+     * @return array{success: bool, message: string, code?: string}
      */
     public function sendSignupCode(string $phone, ?string $firstName = null, ?string $lastName = null, ?string $email = null): array
     {
@@ -71,7 +71,7 @@ final class PhoneVerificationService
 
         $this->sms->sendCode($phone, $code);
 
-        return ['success' => true, 'message' => 'Verification code sent.'];
+        return ['success' => true, 'message' => 'Verification code sent.', 'code' => $code];
     }
 
     /**

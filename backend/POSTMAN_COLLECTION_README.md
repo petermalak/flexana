@@ -12,26 +12,23 @@ There are two Postman collections:
 **File:** `Flexana_Mobile_API.postman_collection.json`
 
 - **Base path:** `/api/v1`
-- **Auth:** All data endpoints require `Authorization: Bearer <token>`. Get the token from **Auth → Login** (phone + password) or **Auth → Signup** then **Auth → Verify** (OTP).
-- **Variables:** `base_url` (e.g. `http://127.0.0.1:8000`), `bearer_token` (set automatically by Login or Verify request’s test script).
+- **Auth:** All data endpoints require `Authorization: Bearer <token>`. Get the token from **Login** or **Signup → Verify** (or **Verify with Firebase Code**).
+- **Variables:** `base_url` (e.g. `http://127.0.0.1:8000`), `bearer_token` (set by Login / Verify / Verify with Firebase Code test scripts).
 
-**Auth flow (choose one):**
+**Auth requests:**
 
-- **Existing users:** **Auth → Login** – POST body: `{ "phone": "+201234567890", "password": "secret" }` → response includes `token`; test script saves it to `bearer_token`.
-- **New users (backend OTP):** **Auth → Signup** – POST body: `{ "phone": "...", "firstName?", "lastName?", "email?" }` (sends OTP SMS). Then **Auth → Verify** – POST body: `{ "phone": "...", "code": "123456", "password?", "password_confirmation?" }` → response includes `token`; test script saves it to `bearer_token`.
-- **New users (Firebase phone):** Use Firebase Auth on the client to verify phone (Firebase sends SMS). Then **Auth → Verify Firebase** – POST body: `{ "idToken": "<Firebase ID token>", "phone?", "firstName?", "lastName?", "email?" }` → backend verifies token, finds/creates customer, returns Sanctum token. If `FIREBASE_SERVICE_ACCOUNT_JSON` is set, phone can be omitted (backend fetches it from Firebase).
+- **Login** – POST `{ "phone", "password" }` → token + customer.
+- **Signup (backend OTP)** – POST `{ "phone", "firstName?", "lastName?", "email?" }` (no Firebase token). Backend sends OTP. Then **Verify** with `phone` + `code`.
+- **Signup (Firebase SMS – mobile)** – POST `phone` + one of `playIntegrityToken` (Android), `safetyNetToken` (Android), `iosReceipt`+`iosSecret` (iOS), or `recaptchaToken` (web). Returns `sessionInfo`. Then **Verify with Firebase Code** with `sessionInfo`, `code`, `phone`.
+- **Send Firebase Verification Code** – Same as above (alternative entry point). Body: `phoneNumber` + one of the mobile/web tokens.
+- **Verify** – POST `{ "phone", "code", "password?", "password_confirmation?" }` (for backend OTP flow).
+- **Verify with Firebase Code** – POST `{ "sessionInfo", "code", "phone", ... }` (after Firebase SMS; saves token).
+- **Verify Firebase (idToken)** – POST `{ "idToken", "phone?", ... }` (if app uses Firebase SDK to verify and gets idToken).
+- **Forgot Password** – POST `{ "email" }`. **Reset Password** – POST `{ "email", "token", "password", "password_confirmation" }`.
+- **Get Me** – GET profile. **Update Me** – PUT profile. **Update Me (with phone change)** – PUT `phone` + `phoneChangeCode` after **Send Phone Change Code**.
+- **Send Phone Change Code** – POST `{ "newPhone" }`. **Change Password** – POST `{ "currentPassword", "password", "password_confirmation" }`. **Delete Account** – DELETE.
 
-**Password:**
-
-- **Auth → Change Password** – POST `{ "currentPassword", "password", "password_confirmation" }` (authenticated).
-- **Auth → Forgot Password** – POST `{ "email": "user@example.com" }` (sends reset link).
-- **Auth → Reset Password** – POST `{ "email", "token", "password", "password_confirmation" }` (token from email).
-
-**Phone change:** **Auth → Send Phone Change Code** – POST `{ "newPhone" }` (sends OTP). Then **Auth → Update Me** – PUT with `phone` + `phoneChangeCode` to confirm.
-
-**Account:** **Auth → Delete Account** – DELETE (permanently deletes customer and revokes tokens).
-
-**Folders:** Auth (login, signup, verify, verify-firebase, forgot-password, reset-password, logout, me, update me, send-phone-change-code, change-password, delete-account), Home Screen (banners, instructors, service), Schedule Screen (instructors/simple, service/simple, **sessions**, **session-bookings**, cancel-booking, **appointments/history**), Packages Screen (**package-offers**, **purchase-package**).
+**Folders:** Auth (all above), Home Screen, Schedule Screen (sessions, book, cancel, **appointments/history**), Packages Screen.
 
 ---
 

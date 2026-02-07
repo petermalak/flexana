@@ -75,6 +75,8 @@ Route::prefix('v1')
         Route::post('auth/signup', [MobileAuthController::class, 'signup']);
         Route::post('auth/verify', [MobileAuthController::class, 'verify']);
         Route::post('auth/verify-firebase', [MobileAuthController::class, 'verifyFirebase']);
+        Route::post('auth/verify-with-firebase-code', [MobileAuthController::class, 'verifyWithFirebaseCode']);
+        Route::post('auth/send-firebase-verification-code', [MobileAuthController::class, 'sendFirebaseVerificationCode']);
         Route::post('auth/forgot-password', [MobileAuthController::class, 'forgotPassword']);
         Route::post('auth/reset-password', [MobileAuthController::class, 'resetPassword']);
 
