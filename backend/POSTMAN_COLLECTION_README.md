@@ -15,20 +15,17 @@ There are two Postman collections:
 - **Auth:** All data endpoints require `Authorization: Bearer <token>`. Get the token from **Login** or **Signup → Verify** (or **Verify with Firebase Code**).
 - **Variables:** `base_url` (e.g. `http://127.0.0.1:8000`), `bearer_token` (set by Login / Verify / Verify with Firebase Code test scripts).
 
-**Auth requests:**
+**Auth flow:**
 
 - **Login** – POST `{ "phone", "password" }` → token + customer.
-- **Signup (backend OTP)** – POST `{ "phone", "firstName?", "lastName?", "email?" }` (no Firebase token). Backend sends OTP. Then **Verify** with `phone` + `code`.
-- **Signup (Firebase SMS – mobile)** – POST `phone` + one of `playIntegrityToken` (Android), `safetyNetToken` (Android), `iosReceipt`+`iosSecret` (iOS), or `recaptchaToken` (web). Returns `sessionInfo`. Then **Verify with Firebase Code** with `sessionInfo`, `code`, `phone`.
-- **Send Firebase Verification Code** – Same as above (alternative entry point). Body: `phoneNumber` + one of the mobile/web tokens.
-- **Verify** – POST `{ "phone", "code", "password?", "password_confirmation?" }` (for backend OTP flow).
-- **Verify with Firebase Code** – POST `{ "sessionInfo", "code", "phone", ... }` (after Firebase SMS; saves token).
-- **Verify Firebase (idToken)** – POST `{ "idToken", "phone?", ... }` (if app uses Firebase SDK to verify and gets idToken).
+- **Signup (main flow):** 1) POST **Signup (Firebase SMS)** – `phone` + one of `playIntegrityToken` (Android), `safetyNetToken` (Android), `iosReceipt`+`iosSecret` (iOS). Returns `sessionInfo`. 2) User enters code from SMS (and optional password). 3) POST **Verify with Firebase Code** – `sessionInfo`, `code`, `phone`, optional `password`, `password_confirmation` → token + customer.
+- **Signup (legacy backend OTP):** POST **Signup (backend OTP)** – `phone` only. Then POST **Verify** – `phone`, `code`, optional password.
 - **Forgot Password** – POST `{ "email" }`. **Reset Password** – POST `{ "email", "token", "password", "password_confirmation" }`.
-- **Get Me** – GET profile. **Update Me** – PUT profile. **Update Me (with phone change)** – PUT `phone` + `phoneChangeCode` after **Send Phone Change Code**.
-- **Send Phone Change Code** – POST `{ "newPhone" }`. **Change Password** – POST `{ "currentPassword", "password", "password_confirmation" }`. **Delete Account** – DELETE.
+- **Get Me**, **Update Me**, **Update Me (with phone change)** (after **Send Phone Change Code**), **Send Phone Change Code**, **Change Password**, **Delete Account**, **Logout**.
 
-**Folders:** Auth (all above), Home Screen, Schedule Screen (sessions, book, cancel, **appointments/history**), Packages Screen.
+**Folders:** Auth, Home Screen, Schedule Screen (sessions, book, cancel, appointments/history), Packages Screen.
+
+See `docs/MOBILE_DEVELOPER_AUTH_FLOW.md` for the full mobile auth flow and attestation details.
 
 ---
 

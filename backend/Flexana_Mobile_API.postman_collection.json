@@ -2,7 +2,7 @@
 	"info": {
 		"_postman_id": "flexana-mobile-api-v1",
 		"name": "Flexana Mobile API (v1)",
-		"description": "API for Flexana mobile app (iOS/Android). Auth: Login (phone+password); Signup with backend OTP or Firebase SMS (send code → verify). Profile: me, update, change password, delete account, phone change OTP. Schedule: sessions, book, cancel, appointments history. Packages: offers, purchase. Base: /api/v1. Variables: base_url, bearer_token.",
+		"description": "Flexana mobile app API. Auth: Login (phone+password). Signup: POST /auth/signup (phone + attestation token) -> sessionInfo -> user enters code (+ optional password) -> POST /auth/verify-with-firebase-code -> token. Profile: me, update, phone change, change password, delete account, logout. Schedule: sessions, book, cancel, appointments history. Packages: offers, purchase. Base: /api/v1. Variables: base_url, bearer_token.",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"auth": {
@@ -18,7 +18,7 @@
 	"item": [
 		{
 			"name": "Auth",
-			"description": "Login (phone+password). Signup: (A) Backend OTP – phone only, then Verify with code; (B) Firebase SMS – phone + one of recaptchaToken (web), playIntegrityToken (Android), safetyNetToken (Android), iosReceipt+iosSecret (iOS), then Verify with Firebase Code. Forgot/Reset password by email. Profile: Get Me, Update Me, Send Phone Change Code, Change Password, Delete Account.",
+			"description": "Flow: (1) Login = POST /auth/login (phone, password). (2) Signup = POST /auth/signup (phone + playIntegrityToken/safetyNetToken/iosReceipt+iosSecret) -> sessionInfo -> user enters code and optional password -> POST /auth/verify-with-firebase-code (sessionInfo, code, phone, password?) -> token. Legacy: Signup without token (backend OTP) then POST /auth/verify. Forgot/Reset password, Get Me, Update Me, Send Phone Change Code, Change Password, Delete Account, Logout.",
 			"item": [
 				{
 					"name": "Login",
@@ -35,7 +35,7 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "v1", "auth", "login"]
 						},
-						"description": "Login with phone + password. Returns token + customer. No OTP."
+						"description": "Existing user. Body: phone, password. Returns token + customer. Store token; use Authorization: Bearer <token> for all other requests."
 					},
 					"response": [],
 					"event": [
@@ -68,12 +68,12 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "v1", "auth", "signup"]
 						},
-						"description": "Backend sends OTP (Twilio or log). Body: phone (required), optional firstName, lastName, email. No Firebase token. Then call Verify with phone + code (+ optional password)."
+						"description": "Legacy: backend OTP (no Firebase). Body: phone, optional firstName, lastName, email. No attestation token. Then call Verify with phone + code (+ optional password)."
 					},
 					"response": []
 				},
 				{
-					"name": "Signup (Firebase SMS – mobile)",
+					"name": "Signup (Firebase SMS - mobile)",
 					"request": {
 						"auth": { "type": "noauth" },
 						"method": "POST",
@@ -87,7 +87,7 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "v1", "auth", "signup"]
 						},
-						"description": "Firebase sends real SMS. Send phone + ONE of: playIntegrityToken (Android), safetyNetToken (Android), iosReceipt+iosSecret (iOS), or recaptchaToken (web only). Response: sessionInfo. Then call Verify with Firebase Code (sessionInfo + code + phone)."
+						"description": "Step 1 of signup. Firebase sends SMS to phone. Body: phone + ONE of playIntegrityToken (Android), safetyNetToken (Android), iosReceipt+iosSecret (iOS), recaptchaToken (web). Optional: firstName, lastName, email. Response: sessionInfo. Then show Enter code screen; user enters code (and optional password). Call Verify with Firebase Code."
 					},
 					"response": []
 				},
@@ -106,7 +106,7 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "v1", "auth", "verify"]
 						},
-						"description": "Verify backend OTP (after Signup backend OTP). Body: phone, code (6 digits), optional password + password_confirmation. Saves token to bearer_token."
+						"description": "Legacy: verify backend OTP (after Signup backend OTP). Body: phone, code (6 digits), optional password + password_confirmation. Saves token to bearer_token."
 					},
 					"response": [],
 					"event": [
@@ -123,25 +123,6 @@
 							}
 						}
 					]
-				},
-				{
-					"name": "Send Firebase Verification Code",
-					"request": {
-						"auth": { "type": "noauth" },
-						"method": "POST",
-						"header": [{ "key": "Content-Type", "value": "application/json" }],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n    \"phoneNumber\": \"+201274235122\",\n    \"playIntegrityToken\": \"<Android>\",\n    \"recaptchaToken\": \"<Web only>\",\n    \"recaptchaVersion\": \"v3\",\n    \"safetyNetToken\": \"<Android legacy>\",\n    \"iosReceipt\": \"<iOS>\",\n    \"iosSecret\": \"<iOS>\"\n}"
-						},
-						"url": {
-							"raw": "{{base_url}}/api/v1/auth/send-firebase-verification-code",
-							"host": ["{{base_url}}"],
-							"path": ["api", "v1", "auth", "send-firebase-verification-code"]
-						},
-						"description": "Firebase sends SMS. Body: phoneNumber + ONE of playIntegrityToken (Android), safetyNetToken (Android), iosReceipt+iosSecret (iOS), recaptchaToken+recaptchaVersion (web). Returns sessionInfo. Then call Verify with Firebase Code."
-					},
-					"response": []
 				},
 				{
 					"name": "Verify with Firebase Code",
@@ -151,47 +132,14 @@
 						"header": [{ "key": "Content-Type", "value": "application/json" }],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"sessionInfo\": \"<from Signup Firebase or Send Firebase Verification Code>\",\n    \"code\": \"123456\",\n    \"phone\": \"+201274235122\",\n    \"firstName\": \"Jane\",\n    \"lastName\": \"Doe\",\n    \"email\": \"jane@example.com\",\n    \"password\": \"secret123\",\n    \"password_confirmation\": \"secret123\"\n}"
+							"raw": "{\n    \"sessionInfo\": \"<from Signup (Firebase SMS) response>\",\n    \"code\": \"123456\",\n    \"phone\": \"+201274235122\",\n    \"firstName\": \"Jane\",\n    \"lastName\": \"Doe\",\n    \"email\": \"jane@example.com\",\n    \"password\": \"secret123\",\n    \"password_confirmation\": \"secret123\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/v1/auth/verify-with-firebase-code",
 							"host": ["{{base_url}}"],
 							"path": ["api", "v1", "auth", "verify-with-firebase-code"]
 						},
-						"description": "After user receives SMS and enters code. Body: sessionInfo (from signup/send-firebase response), code, phone. Optional: firstName, lastName, email, password. Returns token + customer. Saves token to bearer_token."
-					},
-					"response": [],
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"const res = pm.response.json();",
-									"if (res.token) {",
-									"    pm.collectionVariables.set('bearer_token', res.token);",
-									"}"
-								],
-								"type": "text/javascript"
-							}
-						}
-					]
-				},
-				{
-					"name": "Verify Firebase (idToken)",
-					"request": {
-						"auth": { "type": "noauth" },
-						"method": "POST",
-						"header": [{ "key": "Content-Type", "value": "application/json" }],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n    \"idToken\": \"<Firebase ID token from phone sign-in>\",\n    \"phone\": \"+201234567890\",\n    \"firstName\": \"Jane\",\n    \"lastName\": \"Doe\",\n    \"email\": \"jane@example.com\"\n}"
-						},
-						"url": {
-							"raw": "{{base_url}}/api/v1/auth/verify-firebase",
-							"host": ["{{base_url}}"],
-							"path": ["api", "v1", "auth", "verify-firebase"]
-						},
-						"description": "Alternative: if app verifies code with Firebase SDK and gets idToken, send idToken here (optional phone, firstName, lastName, email). Returns Sanctum token."
+						"description": "Step 2 of signup. User enters code from SMS (and optional password on same screen). Body: sessionInfo (from Signup Firebase SMS), code, phone. Optional: firstName, lastName, email, password, password_confirmation. Returns token + customer. Saves token to bearer_token."
 					},
 					"response": [],
 					"event": [
@@ -441,16 +389,7 @@
 						},
 						"description": "Paginated. Response: { data: [{ id, instructor, service, date, isBooked, isFull, canCancel, canBook, minutesBeforeCancellation }, ...], meta: { current_page, last_page, per_page, total } }. Requires Bearer."
 					},
-					"response": [
-						{
-							"name": "Success",
-							"originalRequest": { "method": "GET", "url": { "raw": "{{base_url}}/api/v1/sessions?date=2024-01-20&per_page=15&page=1", "host": ["{{base_url}}"], "path": ["api", "v1", "sessions"], "query": [{ "key": "date", "value": "2024-01-20" }, { "key": "per_page", "value": "15" }, { "key": "page", "value": "1" }] },
-							"status": "OK",
-							"code": 200,
-							"header": [{ "key": "Content-Type", "value": "application/json" }],
-							"body": "{\n    \"data\": [\n        {\n            \"id\": \"1\",\n            \"instructor\": \"John Doe\",\n            \"service\": \"Yoga Class\",\n            \"date\": \"2024-01-20T10:00:00.000000Z\",\n            \"isBooked\": false,\n            \"isFull\": false,\n            \"canCancel\": false,\n            \"canBook\": true,\n            \"minutesBeforeCancellation\": 60\n        }\n    ],\n    \"meta\": {\n        \"current_page\": 1,\n        \"last_page\": 1,\n        \"per_page\": 15,\n        \"total\": 1\n    }\n}"
-						}
-					]
+					"response": []
 				},
 				{
 					"name": "Book Session",
@@ -464,16 +403,7 @@
 						"url": { "raw": "{{base_url}}/api/v1/session-bookings", "host": ["{{base_url}}"], "path": ["api", "v1", "session-bookings"] },
 						"description": "Book one session. Body: sessionID (required), persons (optional, default 1), promoCode (optional). Requires Bearer."
 					},
-					"response": [
-						{
-							"name": "Success",
-							"originalRequest": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n    \"sessionID\": 1,\n    \"persons\": 1\n}" }, "url": { "raw": "{{base_url}}/api/v1/session-bookings", "host": ["{{base_url}}"], "path": ["api", "v1", "session-bookings"] } },
-							"status": "Created",
-							"code": 201,
-							"header": [{ "key": "Content-Type", "value": "application/json" }],
-							"body": "{\n    \"success\": true,\n    \"message\": \"Booking created successfully\",\n    \"data\": {\n        \"id\": \"1\",\n        \"sessionID\": \"1\",\n        \"customerId\": \"1\"\n    }\n}"
-						}
-					]
+					"response": []
 				},
 				{
 					"name": "Cancel Booking",
@@ -529,16 +459,7 @@
 						},
 						"description": "Paginated. Response: { data: [{ id, name, price, sessions, description, expirationMonths }, ...], meta: { current_page, last_page, per_page, total } }. Requires Bearer."
 					},
-					"response": [
-						{
-							"name": "Success",
-							"originalRequest": { "method": "GET", "url": { "raw": "{{base_url}}/api/v1/package-offers?per_page=15&page=1", "host": ["{{base_url}}"], "path": ["api", "v1", "package-offers"], "query": [{ "key": "per_page", "value": "15" }, { "key": "page", "value": "1" }] },
-							"status": "OK",
-							"code": 200,
-							"header": [{ "key": "Content-Type", "value": "application/json" }],
-							"body": "{\n    \"data\": [\n        {\n            \"id\": 1,\n            \"name\": \"Monthly Package\",\n            \"price\": 99.99,\n            \"sessions\": 10,\n            \"description\": \"10 sessions valid for 1 month\",\n            \"expirationMonths\": 1\n        }\n    ],\n    \"meta\": {\n        \"current_page\": 1,\n        \"last_page\": 1,\n        \"per_page\": 15,\n        \"total\": 1\n    }\n}"
-						}
-					]
+					"response": []
 				},
 				{
 					"name": "Purchase Package",
@@ -552,16 +473,7 @@
 						"url": { "raw": "{{base_url}}/api/v1/purchase-package", "host": ["{{base_url}}"], "path": ["api", "v1", "purchase-package"] },
 						"description": "Purchase one package. Body: packageId (required), promoCode (optional, percentage discount). Requires Bearer."
 					},
-					"response": [
-						{
-							"name": "Success",
-							"originalRequest": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n    \"packageId\": 1\n}" }, "url": { "raw": "{{base_url}}/api/v1/purchase-package", "host": ["{{base_url}}"], "path": ["api", "v1", "purchase-package"] } },
-							"status": "Created",
-							"code": 201,
-							"header": [{ "key": "Content-Type", "value": "application/json" }],
-							"body": "{\n    \"success\": true,\n    \"message\": \"Package purchased successfully\",\n    \"data\": {\n        \"id\": \"1\",\n        \"packageId\": \"1\",\n        \"customerId\": \"1\"\n    }\n}"
-						}
-					]
+					"response": []
 				}
 			],
 			"description": "Packages screen. All require Bearer token."
