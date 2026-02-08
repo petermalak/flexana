@@ -37,9 +37,14 @@ return new class extends Migration
             }
         }
 
+        // FK on customer_id uses the composite index; we must drop FK first, then index, add unique, re-add FK
+        Schema::table('customer_device_tokens', function (Blueprint $table) {
+            $table->dropForeign(['customer_id']);
+        });
         Schema::table('customer_device_tokens', function (Blueprint $table) {
             $table->dropIndex(['customer_id', 'device_id']);
             $table->unique(['customer_id', 'device_id']);
+            $table->foreign('customer_id')->references('id')->on('customers')->cascadeOnDelete();
         });
     }
 
@@ -49,8 +54,12 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('customer_device_tokens', function (Blueprint $table) {
+            $table->dropForeign(['customer_id']);
+        });
+        Schema::table('customer_device_tokens', function (Blueprint $table) {
             $table->dropUnique(['customer_id', 'device_id']);
             $table->index(['customer_id', 'device_id']);
+            $table->foreign('customer_id')->references('id')->on('customers')->cascadeOnDelete();
         });
     }
 };
