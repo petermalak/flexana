@@ -80,5 +80,10 @@ class CustomerModel extends Model implements AuthenticatableContract, CanResetPa
     {
         return $this->hasMany(CustomerPackagePurchaseModel::class, 'customer_id');
     }
+
+    public function deviceTokens(): HasMany
+    {
+        return $this->hasMany(CustomerDeviceTokenModel::class, 'customer_id');
+    }
 }
 

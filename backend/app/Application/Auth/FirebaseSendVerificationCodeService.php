@@ -53,16 +53,21 @@ final class FirebaseSendVerificationCodeService
             $data = $response->json();
 
             if (! $response->successful()) {
-                $message = $data['error']['message'] ?? $response->body();
+                $error = $data['error'] ?? [];
+                $rawMessage = $error['message'] ?? $response->body();
+                $errorCode = $error['code'] ?? $error['status'] ?? null;
+
                 Log::warning('Firebase sendVerificationCode failed', [
                     'phone' => $phoneNumber,
-                    'status' => $response->status(),
-                    'message' => $message,
+                    'http_status' => $response->status(),
+                    'firebase_error_code' => $errorCode,
+                    'firebase_message' => $rawMessage,
+                    'response_body' => $data,
                 ]);
 
                 return [
                     'success' => false,
-                    'message' => $this->humanMessage($data['error']['message'] ?? $message),
+                    'message' => $this->humanMessage($errorCode, is_string($rawMessage) ? $rawMessage : null),
                 ];
             }
 
@@ -103,18 +108,43 @@ final class FirebaseSendVerificationCodeService
         return $phone;
     }
 
-    private function humanMessage(string $message): string
+    /**
+     * Map Firebase error code/message to a user- and developer-friendly message.
+     * See docs/FIREBASE_PHONE_ANDROID_SETUP.md for how to fix Android/Play Integrity issues.
+     */
+    private function humanMessage(mixed $errorCode, ?string $message): string
     {
-        if (str_contains($message, 'RECAPTCHA')) {
-            return 'Verification failed. Please complete the security check and try again.';
+        $code = is_numeric($errorCode) ? (int) $errorCode : null;
+        $msg = $message ?? '';
+
+        // Known Firebase/Identity Platform error codes for sendVerificationCode
+        if ($code === 18002) {
+            return 'App not recognized by Play. Add your app SHA-256 in Firebase Console (Project settings > Your apps > Android > Add fingerprint). For debug builds use your debug keystore SHA-256.';
         }
-        if (str_contains($message, 'TOO_MANY_ATTEMPTS')) {
-            return 'Too many attempts. Please try again later.';
+        if ($code === 17028) {
+            return 'Invalid Play Integrity token. Ensure the app is signed with the same key whose SHA-256 is registered in Firebase, and that Play Integrity API is enabled for your Google Cloud project.';
         }
-        if (str_contains($message, 'INVALID_PHONE')) {
-            return 'Invalid phone number format. Use E.164 (e.g. +201274235122).';
+        if ($code === 400 || $code === 403) {
+            if (str_contains($msg, 'RECAPTCHA')) {
+                return 'Verification failed. Please complete the security check and try again.';
+            }
+            if (str_contains($msg, 'TOO_MANY_ATTEMPTS')) {
+                return 'Too many attempts. Please try again later.';
+            }
+            if (str_contains($msg, 'INVALID_PHONE')) {
+                return 'Invalid phone number format. Use E.164 (e.g. +201274235122).';
+            }
+            if (str_contains($msg, 'Internal error') || str_contains($msg, 'INTERNAL')) {
+                return 'Verification service error. On Android: add your app SHA-256 in Firebase Console (Project settings > Your apps) and use the same API key as your app. See docs/FIREBASE_PHONE_ANDROID_SETUP.md.';
+            }
+            if (str_contains($msg, 'INVALID_APP_CREDENTIAL') || str_contains($msg, 'APP_NOT_VERIFIED')) {
+                return 'App not verified. Add your app SHA-256 (Android) or bundle ID (iOS) in Firebase Console.';
+            }
         }
 
-        return $message;
+        if ($msg === '') {
+            return 'Verification service error. Please try again.';
+        }
+        return $msg;
     }
 }

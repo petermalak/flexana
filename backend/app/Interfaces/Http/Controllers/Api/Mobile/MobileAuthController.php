@@ -7,6 +7,7 @@ use App\Application\Auth\FirebaseSignInWithPhoneService;
 use App\Application\Auth\PhoneVerificationService;
 use App\Http\Controllers\Controller;
 use App\Infrastructure\Auth\FirebaseTokenVerifier;
+use App\Infrastructure\Persistence\Eloquent\CustomerDeviceTokenModel;
 use App\Models\Customer;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -27,14 +28,17 @@ class MobileAuthController extends Controller
 
     /**
      * POST /api/v1/auth/login
-     * Body: { phone, password }
-     * Returns token + customer. No OTP.
+     * Body: { phone, password [, fcmToken, platform, deviceId ] }
+     * Returns token + customer. Optional fcmToken (FCM device token) is stored for push notifications.
      */
     public function login(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
             'phone' => 'required|string|max:20',
             'password' => 'required|string',
+            'fcmToken' => 'nullable|string|max:500',
+            'platform' => 'nullable|string|in:android,ios',
+            'deviceId' => 'nullable|string|max:255',
         ]);
 
         if ($validator->fails()) {
@@ -48,7 +52,7 @@ class MobileAuthController extends Controller
         $phone = $this->normalizePhone($validator->validated()['phone']);
         $password = $validator->validated()['password'];
 
-        $customer = \App\Models\Customer::query()->where('phone', $phone)->first();
+        $customer = Customer::query()->where('phone', $phone)->first();
         if (! $customer || ! $customer->password || ! Hash::check($password, $customer->password)) {
             return response()->json([
                 'success' => false,
@@ -57,6 +61,11 @@ class MobileAuthController extends Controller
         }
 
         $token = $customer->createToken('mobile')->plainTextToken;
+
+        $data = $validator->validated();
+        if (! empty($data['fcmToken'])) {
+            $this->storeFcmToken($customer, $data['fcmToken'], $data['platform'] ?? null, $data['deviceId'] ?? null);
+        }
 
         return response()->json([
             'success' => true,
@@ -161,6 +170,9 @@ class MobileAuthController extends Controller
             'phone' => 'required|string|max:20',
             'code' => 'required|string|size:6',
             'password' => ['nullable', 'string', 'confirmed', PasswordRule::min(8)],
+            'fcmToken' => 'nullable|string|max:500',
+            'platform' => 'nullable|string|in:android,ios',
+            'deviceId' => 'nullable|string|max:255',
         ]);
 
         if ($validator->fails()) {
@@ -189,6 +201,11 @@ class MobileAuthController extends Controller
         }
 
         $token = $customer->createToken('mobile')->plainTextToken;
+
+        $data = $validator->validated();
+        if (! empty($data['fcmToken'])) {
+            $this->storeFcmToken($customer, $data['fcmToken'], $data['platform'] ?? null, $data['deviceId'] ?? null);
+        }
 
         return response()->json([
             'success' => true,
@@ -348,6 +365,9 @@ class MobileAuthController extends Controller
             'lastName' => 'nullable|string|max:100',
             'email' => 'nullable|email',
             'password' => ['nullable', 'string', 'confirmed', PasswordRule::min(8)],
+            'fcmToken' => 'nullable|string|max:500',
+            'platform' => 'nullable|string|in:android,ios',
+            'deviceId' => 'nullable|string|max:255',
         ]);
 
         if ($validator->fails()) {
@@ -410,6 +430,11 @@ class MobileAuthController extends Controller
         $customer->save();
 
         $token = $customer->createToken('mobile')->plainTextToken;
+
+        $data = $validator->validated();
+        if (! empty($data['fcmToken'])) {
+            $this->storeFcmToken($customer, $data['fcmToken'], $data['platform'] ?? null, $data['deviceId'] ?? null);
+        }
 
         return response()->json([
             'success' => true,
@@ -687,6 +712,38 @@ class MobileAuthController extends Controller
     }
 
     /**
+     * POST /api/v1/auth/fcm-token
+     * Body: { fcmToken [, platform, deviceId ] }
+     * Register or update the FCM device token for push notifications (e.g. when token is refreshed).
+     */
+    public function registerFcmToken(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'fcmToken' => 'required|string|max:500',
+            'platform' => 'nullable|string|in:android,ios',
+            'deviceId' => 'nullable|string|max:255',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $data = $validator->validated();
+        /** @var Customer $customer */
+        $customer = $request->user();
+        $this->storeFcmToken($customer, $data['fcmToken'], $data['platform'] ?? null, $data['deviceId'] ?? null);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'FCM token registered.',
+        ], 200);
+    }
+
+    /**
      * DELETE /api/v1/auth/delete-account
      * Permanently deletes the customer account and revokes all tokens.
      */
@@ -705,6 +762,24 @@ class MobileAuthController extends Controller
     private function normalizePhone(string $phone): string
     {
         return preg_replace('/\s+/', '', $phone);
+    }
+
+    /**
+     * Store or update FCM device token for push notifications.
+     * Creates a row if it does not exist, or updates it if it exists (by customer_id + device_id).
+     * When deviceId is omitted, uses empty string so there is one token per customer.
+     */
+    private function storeFcmToken(Customer $customer, string $fcmToken, ?string $platform, ?string $deviceId): void
+    {
+        $key = [
+            'customer_id' => $customer->id,
+            'device_id' => $deviceId !== null && $deviceId !== '' ? $deviceId : '',
+        ];
+
+        CustomerDeviceTokenModel::query()->updateOrCreate($key, [
+            'fcm_token' => $fcmToken,
+            'platform' => $platform ? strtolower($platform) : null,
+        ]);
     }
 
     private function customerToArray($customer): array

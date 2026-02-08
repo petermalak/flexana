@@ -37,7 +37,16 @@
 						},
 						"description": "Existing user. Body: phone, password. Returns token + customer. Store token; use Authorization: Bearer <token> for all other requests."
 					},
-					"response": [],
+					"response": [
+						{
+							"name": "Success",
+							"originalRequest": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\\n    \\\"phone\\\": \\\"+201234567890\\\",\\n    \\\"password\\\": \\\"secret123\\\"\\n}" }, "url": { "raw": "{{base_url}}/api/v1/auth/login", "host": ["{{base_url}}"], "path": ["api", "v1", "auth", "login"] } },
+							"status": "OK",
+							"code": 200,
+							"header": [{ "key": "Content-Type", "value": "application/json" }],
+							"body": "{\"success\":true,\"message\":\"Logged in.\",\"token\":\"1|abc123\",\"token_type\":\"Bearer\",\"customer\":{\"id\":\"1\",\"uid\":\"uuid\",\"firstName\":\"Jane\",\"lastName\":\"Doe\",\"email\":\"jane@example.com\",\"phone\":\"+201234567890\",\"phoneVerifiedAt\":null,\"emailVerifiedAt\":null}}"
+						}
+					],
 					"event": [
 						{
 							"listen": "test",
@@ -108,7 +117,15 @@
 						},
 						"description": "Legacy: verify backend OTP (after Signup backend OTP). Body: phone, code (6 digits), optional password + password_confirmation. Saves token to bearer_token."
 					},
-					"response": [],
+					"response": [
+						{
+							"name": "Success",
+							"status": "OK",
+							"code": 200,
+							"header": [{ "key": "Content-Type", "value": "application/json" }],
+							"body": "{\"success\":true,\"message\":\"Verified.\",\"token\":\"1|xyz\",\"token_type\":\"Bearer\",\"customer\":{\"id\":\"1\",\"firstName\":\"Jane\",\"lastName\":\"Doe\",\"email\":\"jane@example.com\",\"phone\":\"+201234567890\"}}"
+						}
+					],
 					"event": [
 						{
 							"listen": "test",
@@ -141,7 +158,15 @@
 						},
 						"description": "Step 2 of signup. User enters code from SMS (and optional password on same screen). Body: sessionInfo (from Signup Firebase SMS), code, phone. Optional: firstName, lastName, email, password, password_confirmation. Returns token + customer. Saves token to bearer_token."
 					},
-					"response": [],
+					"response": [
+						{
+							"name": "Success",
+							"status": "OK",
+							"code": 200,
+							"header": [{ "key": "Content-Type", "value": "application/json" }],
+							"body": "{\"success\":true,\"message\":\"Verified.\",\"token\":\"2|def\",\"token_type\":\"Bearer\",\"customer\":{\"id\":\"2\",\"firstName\":\"Jane\",\"lastName\":\"Doe\",\"phone\":\"+201274235122\"}}"
+						}
+					],
 					"event": [
 						{
 							"listen": "test",
@@ -174,7 +199,9 @@
 						},
 						"description": "Request password reset link. Sends email if customer exists."
 					},
-					"response": []
+					"response": [
+						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"message\":\"If an account exists, a reset link has been sent.\"}" }
+					]
 				},
 				{
 					"name": "Reset Password",
@@ -193,7 +220,9 @@
 						},
 						"description": "Reset password using token from forgot-password email."
 					},
-					"response": []
+					"response": [
+						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"message\":\"Password reset successfully.\"}" }
+					]
 				},
 				{
 					"name": "Logout",
@@ -207,7 +236,9 @@
 						},
 						"description": "Revoke current token. Requires Bearer."
 					},
-					"response": []
+					"response": [
+						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"message\":\"Logged out.\"}" }
+					]
 				},
 				{
 					"name": "Get Me",
@@ -221,7 +252,9 @@
 						},
 						"description": "Current customer profile. Requires Bearer."
 					},
-					"response": []
+					"response": [
+						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"id\":\"1\",\"uid\":\"uuid\",\"firstName\":\"Jane\",\"lastName\":\"Doe\",\"email\":\"jane@example.com\",\"phone\":\"+201234567890\",\"phoneVerifiedAt\":\"2024-01-15T10:00:00.000000Z\",\"emailVerifiedAt\":null}" }
+					]
 				},
 				{
 					"name": "Update Me",
@@ -239,7 +272,9 @@
 						},
 						"description": "Update profile (firstName, lastName, email). To change phone: first call Send Phone Change Code, then PUT with phone + phoneChangeCode. Requires Bearer."
 					},
-					"response": []
+					"response": [
+						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"message\":\"Profile updated.\",\"customer\":{\"id\":\"1\",\"firstName\":\"Jane\",\"lastName\":\"Doe\",\"email\":\"jane@example.com\",\"phone\":\"+201234567890\"}}" }
+					]
 				},
 				{
 					"name": "Update Me (with phone change)",
@@ -257,7 +292,9 @@
 						},
 						"description": "Confirm phone change after calling Send Phone Change Code. Body: phone (new number) + phoneChangeCode (from SMS). Requires Bearer."
 					},
-					"response": []
+					"response": [
+						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"message\":\"Phone updated.\",\"customer\":{\"id\":\"1\",\"phone\":\"+201234567890\"}}" }
+					]
 				},
 				{
 					"name": "Send Phone Change Code",
@@ -275,7 +312,9 @@
 						},
 						"description": "Send OTP to new phone before changing phone. Then PUT auth/me with phone + phoneChangeCode. Requires Bearer."
 					},
-					"response": []
+					"response": [
+						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"message\":\"Verification code sent to the new phone.\"}" }
+					]
 				},
 				{
 					"name": "Change Password",
@@ -293,7 +332,9 @@
 						},
 						"description": "Change password. Requires current password. Requires Bearer."
 					},
-					"response": []
+					"response": [
+						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"message\":\"Password changed.\"}" }
+					]
 				},
 				{
 					"name": "Delete Account",
@@ -307,7 +348,9 @@
 						},
 						"description": "Permanently delete the customer account and revoke all tokens. Requires Bearer."
 					},
-					"response": []
+					"response": [
+						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"message\":\"Account deleted.\"}" }
+					]
 				}
 			]
 		},
@@ -322,7 +365,9 @@
 						"url": { "raw": "{{base_url}}/api/v1/banners", "host": ["{{base_url}}"], "path": ["api", "v1", "banners"] },
 						"description": "Response: [{ image, URL }, ...]. Requires Bearer."
 					},
-					"response": []
+					"response": [
+						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "[{\"image\":\"https://example.com/banner1.jpg\",\"url\":\"https://example.com\"}]" }
+					]
 				},
 				{
 					"name": "Get Instructors (Full)",
@@ -332,7 +377,9 @@
 						"url": { "raw": "{{base_url}}/api/v1/instructors", "host": ["{{base_url}}"], "path": ["api", "v1", "instructors"] },
 						"description": "Response: [{ id, name, image, position, brief }, ...]. Requires Bearer."
 					},
-					"response": []
+					"response": [
+						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "[{\"id\":1,\"name\":\"John Doe\",\"image\":\"https://example.com/john.jpg\",\"position\":\"Instructor\",\"brief\":\"Yoga expert\"}]" }
+					]
 				},
 				{
 					"name": "Get Service (Full)",
@@ -342,7 +389,9 @@
 						"url": { "raw": "{{base_url}}/api/v1/service", "host": ["{{base_url}}"], "path": ["api", "v1", "service"] },
 						"description": "Response: [{ id, name, level, image, brief }, ...]. Requires Bearer."
 					},
-					"response": []
+					"response": [
+						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "[{\"id\":1,\"name\":\"Yoga\",\"level\":\"Beginner\",\"image\":\"https://example.com/yoga.jpg\",\"brief\":\"Relaxing yoga class\"}]" }
+					]
 				}
 			],
 			"description": "APIs for the home screen. All require Authorization: Bearer token."
@@ -358,7 +407,9 @@
 						"url": { "raw": "{{base_url}}/api/v1/instructors/simple", "host": ["{{base_url}}"], "path": ["api", "v1", "instructors", "simple"] },
 						"description": "Response: [{ id, name }, ...]. Requires Bearer."
 					},
-					"response": []
+					"response": [
+						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "[{\"id\":1,\"name\":\"John Doe\"}]" }
+					]
 				},
 				{
 					"name": "Get Service (Simple)",
@@ -368,7 +419,9 @@
 						"url": { "raw": "{{base_url}}/api/v1/service/simple", "host": ["{{base_url}}"], "path": ["api", "v1", "service", "simple"] },
 						"description": "Response: [{ id, name }, ...]. Requires Bearer."
 					},
-					"response": []
+					"response": [
+						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "[{\"id\":1,\"name\":\"Yoga\"}]" }
+					]
 				},
 				{
 					"name": "Get Sessions",
@@ -389,7 +442,9 @@
 						},
 						"description": "Paginated. Response: { data: [{ id, instructor, service, date, isBooked, isFull, canCancel, canBook, minutesBeforeCancellation }, ...], meta: { current_page, last_page, per_page, total } }. Requires Bearer."
 					},
-					"response": []
+					"response": [
+						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"data\":[{\"id\":1,\"instructor\":\"John\",\"service\":\"Yoga\",\"date\":\"2024-01-20T10:00:00.000000Z\",\"isBooked\":false,\"isFull\":false,\"canCancel\":false,\"canBook\":true,\"minutesBeforeCancellation\":60}],\"meta\":{\"current_page\":1,\"last_page\":1,\"per_page\":15,\"total\":1}}" }
+					]
 				},
 				{
 					"name": "Book Session",
@@ -403,7 +458,9 @@
 						"url": { "raw": "{{base_url}}/api/v1/session-bookings", "host": ["{{base_url}}"], "path": ["api", "v1", "session-bookings"] },
 						"description": "Book one session. Body: sessionID (required), persons (optional, default 1), promoCode (optional). Requires Bearer."
 					},
-					"response": []
+					"response": [
+						{ "name": "Success", "status": "Created", "code": 201, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"message\":\"Booking created successfully\",\"data\":{\"id\":1,\"sessionID\":1,\"customerId\":1}}" }
+					]
 				},
 				{
 					"name": "Cancel Booking",
@@ -417,7 +474,9 @@
 						"url": { "raw": "{{base_url}}/api/v1/cancel-booking", "host": ["{{base_url}}"], "path": ["api", "v1", "cancel-booking"] },
 						"description": "Cancel one booking. sessionID required; customerBookingId optional. Requires Bearer."
 					},
-					"response": []
+					"response": [
+						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"message\":\"Booking cancelled.\"}" }
+					]
 				},
 				{
 					"name": "Get Appointments History",
@@ -435,7 +494,9 @@
 						},
 						"description": "Paginated list of the authenticated customer's appointments/bookings. Response: { data: [{ id, sessionID, serviceName, instructorName, bookedAt, status, paymentStatus, partySize, totalAmount, currency }, ...], meta }. Requires Bearer."
 					},
-					"response": []
+					"response": [
+						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"data\":[{\"id\":1,\"sessionID\":1,\"serviceName\":\"Yoga\",\"instructorName\":\"John\",\"bookedAt\":\"2024-01-15T10:00:00.000000Z\",\"status\":\"confirmed\",\"paymentStatus\":\"paid\",\"partySize\":1,\"totalAmount\":50,\"currency\":\"EGP\"}],\"meta\":{\"current_page\":1,\"last_page\":1,\"per_page\":15,\"total\":1}}" }
+					]
 				}
 			],
 			"description": "Schedule screen. All require Bearer token."
@@ -459,7 +520,9 @@
 						},
 						"description": "Paginated. Response: { data: [{ id, name, price, sessions, description, expirationMonths }, ...], meta: { current_page, last_page, per_page, total } }. Requires Bearer."
 					},
-					"response": []
+					"response": [
+						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"data\":[{\"id\":1,\"name\":\"Monthly\",\"price\":99.99,\"sessions\":10,\"description\":\"10 sessions\",\"expirationMonths\":1}],\"meta\":{\"current_page\":1,\"last_page\":1,\"per_page\":15,\"total\":1}}" }
+					]
 				},
 				{
 					"name": "Purchase Package",
@@ -473,7 +536,9 @@
 						"url": { "raw": "{{base_url}}/api/v1/purchase-package", "host": ["{{base_url}}"], "path": ["api", "v1", "purchase-package"] },
 						"description": "Purchase one package. Body: packageId (required), promoCode (optional, percentage discount). Requires Bearer."
 					},
-					"response": []
+					"response": [
+						{ "name": "Success", "status": "Created", "code": 201, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"message\":\"Package purchased successfully\",\"data\":{\"id\":1,\"packageId\":1,\"customerId\":1}}" }
+					]
 				}
 			],
 			"description": "Packages screen. All require Bearer token."

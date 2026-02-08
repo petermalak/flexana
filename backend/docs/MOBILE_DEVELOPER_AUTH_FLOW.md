@@ -113,3 +113,12 @@ Example (with password):
 3. Use **`Authorization: Bearer <token>`** for all other requests.
 
 Password is set in **step 2** when the user enters the code: add password fields on that screen and send `password` and `password_confirmation` in **verify-with-firebase-code**.
+
+---
+
+## 6. Troubleshooting: Signup returns 400 / "Internal error"
+
+If **POST /auth/signup** with `playIntegrityToken` returns **400** with *"Internal error encountered"* or *"Verification service error"*, Firebase is rejecting the token. Fix it on the **Firebase and Android** side:
+
+- **See [FIREBASE_PHONE_ANDROID_SETUP.md](FIREBASE_PHONE_ANDROID_SETUP.md)** for step-by-step: add your app’s **SHA-256** in Firebase Console, enable Phone auth, use the same API key, and enable Play Integrity API in Google Cloud.
+- Backend logs the exact Firebase error: check `storage/logs/laravel.log` for `Firebase sendVerificationCode failed` and `firebase_error_code` (e.g. 18002 = app not recognized; add the correct SHA-256 for your build).

@@ -100,6 +100,7 @@ Route::prefix('v1')
             Route::put('auth/me', [MobileAuthController::class, 'updateMe']);
             Route::post('auth/send-phone-change-code', [MobileAuthController::class, 'sendPhoneChangeCode']);
             Route::post('auth/change-password', [MobileAuthController::class, 'changePassword']);
+            Route::post('auth/fcm-token', [MobileAuthController::class, 'registerFcmToken']);
             Route::delete('auth/delete-account', [MobileAuthController::class, 'deleteAccount']);
             Route::get('appointments/history', [MobileBookingController::class, 'history']);
         });
