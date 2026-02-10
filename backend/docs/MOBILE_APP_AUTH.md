@@ -4,42 +4,40 @@ This backend is built for a **mobile application**. All auth endpoints under `/a
 
 ---
 
-## Phone signup with Firebase SMS (real SMS to the user)
+## Phone signup with backend OTP (Twilio / log)
 
-When a new user signs up with a phone number, the backend asks **Firebase** to send a **real SMS** with a 6-digit code. The app must send **one** verification token so Firebase accepts the request:
+Firebase SMS integration has been removed. Phone verification is now handled **entirely in the backend**:
 
-| Platform | Send this in the request | How the app gets it |
-|----------|---------------------------|----------------------|
-| **Android** | `playIntegrityToken` (preferred) or `safetyNetToken` | Play Integrity API or SafetyNet, then pass the token to your backend |
-| **iOS** | `iosReceipt` + `iosSecret` | Firebase iOS SDK / App Check flow; get receipt and secret, then send to backend |
-| **Web / testing only** | `recaptchaToken` (+ `recaptchaVersion`: `v3`) | reCAPTCHA in a browser (e.g. the included test page) |
+- The backend generates a 6-digit code.
+- It sends the code via the configured SMS driver (`twilio` in production, `log` in local).
+- When the user enters the code, the backend verifies it and flags the account as phone verified.
 
 ### Endpoints the mobile app uses
 
-1. **Request SMS (Firebase sends the real SMS)**  
+1. **Request SMS (backend sends OTP)**  
    - **POST /api/v1/auth/signup**  
-   - Body: `phone` + one of: `playIntegrityToken`, `safetyNetToken`, or `iosReceipt` + `iosSecret`.  
-   - Optional: `firstName`, `lastName`, `email`.  
-   - Response: `sessionInfo` (store it for step 2).
+   - Body:
+     - `phone` (string, required)
+     - Optional: `firstName`, `lastName`, `email`
+   - Response:
+     - `{ "success": true, "message": "Verification code sent.", "useLegacyVerify": true }`
+     - In `local` / `testing` env only, the response may also include the raw `code` for easier manual testing.
 
 2. **User enters the code from SMS; app verifies and signs in**  
-   - **POST /api/v1/auth/verify-with-firebase-code**  
-   - Body: `sessionInfo`, `code`, `phone`. Optional: `firstName`, `lastName`, `email`, `password`, `password_confirmation`.  
-   - Response: `token` (Bearer), `customer`. Use the token for all later API calls.
-
-Alternative: you can use **POST /api/v1/auth/send-firebase-verification-code** (same body as signup with Firebase token) to request the SMS, then **verify-with-firebase-code** as above.
-
----
-
-## Backend OTP (optional, no Firebase)
-
-If you don’t use Firebase for SMS, the backend can send its own 6-digit code (via Twilio or log):
-
-- **POST /api/v1/auth/signup** with only `phone` (no Firebase token) → backend sends OTP.
-- **POST /api/v1/auth/verify** with `phone` + `code` → returns token.
+   - **POST /api/v1/auth/verify**  
+   - Body:
+     - `phone` (string, required)
+     - `code` (6-digit string, required)
+     - Optional: `password`, `password_confirmation` (to set login password at signup)
+   - Response:
+     - `{ "success": true, "token": "1|...", "customer": { ... } }`
+   - On success, the backend sets `phone_verified_at` for that customer.
 
 ---
 
-## Test page (web) – for development only
+## Test / local behavior
 
-The file **public/test-firebase-sms.html** is a **web page** for developers to test “signup → real SMS → verify” in the browser. It uses **reCAPTCHA** because browsers don’t have Play Integrity or iOS attestation. The **production** client is your mobile app, which should send **playIntegrityToken** (Android) or **iosReceipt** + **iosSecret** (iOS) instead of recaptchaToken.
+In `local` / `testing` environments and with `SMS_DRIVER=log`, the backend:
+
+- Logs the OTP to `storage/logs/laravel.log`.
+- May include the OTP directly in the JSON response from `POST /auth/signup` for easier debugging (never rely on this in production).

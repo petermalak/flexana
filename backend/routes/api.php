@@ -73,10 +73,9 @@ Route::prefix('v1')
         // Auth (public)
         Route::post('auth/login', [MobileAuthController::class, 'login']);
         Route::post('auth/signup', [MobileAuthController::class, 'signup']);
-        Route::post('auth/verify-with-firebase-code', [MobileAuthController::class, 'verifyWithFirebaseCode']);
         Route::post('auth/forgot-password', [MobileAuthController::class, 'forgotPassword']);
         Route::post('auth/reset-password', [MobileAuthController::class, 'resetPassword']);
-        // Legacy: verify backend OTP (when not using Firebase SMS)
+        // Backend OTP: verify code sent via SMS (Twilio/log)
         Route::post('auth/verify', [MobileAuthController::class, 'verify']);
 
         // All mobile app endpoints (authenticated)

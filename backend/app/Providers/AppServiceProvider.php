@@ -2,8 +2,6 @@
 
 namespace App\Providers;
 
-use App\Application\Auth\FirebaseSendVerificationCodeService;
-use App\Application\Auth\FirebaseSignInWithPhoneService;
 use App\Application\Auth\SmsVerificationServiceInterface;
 use App\Application\Auth\SmsVerificationService;
 use App\Domain\Bookings\BookingRepositoryInterface;
@@ -49,18 +47,6 @@ class AppServiceProvider extends ServiceProvider
                 cache: $app->make('cache.store'),
                 http: $app->make(HttpFactory::class),
                 projectId: (string) config('firebase.project_id'),
-            );
-        });
-
-        $this->app->singleton(FirebaseSendVerificationCodeService::class, function ($app) {
-            return new FirebaseSendVerificationCodeService(
-                apiKey: (string) config('firebase.phone_verification.api_key'),
-            );
-        });
-
-        $this->app->singleton(FirebaseSignInWithPhoneService::class, function ($app) {
-            return new FirebaseSignInWithPhoneService(
-                apiKey: (string) config('firebase.phone_verification.api_key'),
             );
         });
     }

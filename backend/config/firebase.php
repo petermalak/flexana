@@ -33,13 +33,7 @@ return [
     | For testing without real SMS: add test phone numbers under Phone → Phone numbers for testing.
     */
 
-    'phone_verification' => [
-        'enabled' => (bool) env('FIREBASE_PHONE_VERIFICATION_ENABLED', true),
-        'api_key' => env('FIREBASE_API_KEY', 'AIzaSyCKtZV0sMtAqkj0EIqFw8ROAF7r1nS8X74'),
-        'project_id' => env('FIREBASE_PROJECT_ID', 'flexana-test'),
-        // When true, if Firebase rejects playIntegrityToken (e.g. Internal error), backend sends OTP instead and returns useLegacyVerify. Use only in dev.
-        'fallback_to_backend_otp' => (bool) env('FIREBASE_SIGNUP_FALLBACK_TO_OTP', false),
-    ],
+    // Phone verification via Firebase SMS has been removed.
 
     /*
     |--------------------------------------------------------------------------
