@@ -124,6 +124,27 @@ class MobileAuthController extends Controller
                 'iosSecret' => $data['iosSecret'] ?? null,
             ]);
             if (! $result['success']) {
+                // Optional dev fallback: send backend OTP so app can use POST /auth/verify instead
+                $fallback = config('firebase.phone_verification.fallback_to_backend_otp', false);
+                if ($fallback) {
+                    $otpResult = $this->verification->sendSignupCode(
+                        $data['phone'],
+                        $data['firstName'] ?? null,
+                        $data['lastName'] ?? null,
+                        $data['email'] ?? null
+                    );
+                    if ($otpResult['success']) {
+                        $response = [
+                            'success' => true,
+                            'message' => $otpResult['message'],
+                            'useLegacyVerify' => true,
+                        ];
+                        if (app()->environment('local', 'testing') && isset($otpResult['code'])) {
+                            $response['code'] = $otpResult['code'];
+                        }
+                        return response()->json($response, 200);
+                    }
+                }
                 return response()->json(['success' => false, 'message' => $result['message']], 400);
             }
             return response()->json([
@@ -133,7 +154,7 @@ class MobileAuthController extends Controller
             ], 200);
         }
 
-        // Backend OTP (our 6-digit code, sent via Twilio or logged)
+        // Backend OTP (no captcha/Play Integrity token): we send the SMS, app calls POST /auth/verify
         $result = $this->verification->sendSignupCode(
             $data['phone'],
             $data['firstName'] ?? null,
@@ -151,6 +172,7 @@ class MobileAuthController extends Controller
         $response = [
             'success' => true,
             'message' => $result['message'],
+            'useLegacyVerify' => true,
         ];
         if (app()->environment('local', 'testing') && isset($result['code'])) {
             $response['code'] = $result['code'];

@@ -32,10 +32,12 @@ final class FirebaseSendVerificationCodeService
             return ['success' => false, 'message' => 'Invalid phone number.'];
         }
 
+        $recaptchaVersion = $this->mapRecaptchaVersionForFirebase($options['recaptchaVersion'] ?? null);
+
         $body = array_filter([
             'phoneNumber' => $phoneNumber,
             'recaptchaToken' => $options['recaptchaToken'] ?? null,
-            'recaptchaVersion' => $options['recaptchaVersion'] ?? null,
+            'recaptchaVersion' => $recaptchaVersion,
             'playIntegrityToken' => $options['playIntegrityToken'] ?? null,
             'safetyNetToken' => $options['safetyNetToken'] ?? null,
             'iosReceipt' => $options['iosReceipt'] ?? null,
@@ -94,6 +96,18 @@ final class FirebaseSendVerificationCodeService
         }
     }
 
+    /**
+     * Firebase Identity Toolkit expects RecaptchaVersion enum: RECAPTCHA_V2 or RECAPTCHA_V3, not "v2"/"v3".
+     */
+    private function mapRecaptchaVersionForFirebase(?string $version): ?string
+    {
+        return match (strtolower((string) $version)) {
+            'v2' => 'RECAPTCHA_V2',
+            'v3' => 'RECAPTCHA_V3',
+            default => null,
+        };
+    }
+
     private function normalizeToE164(string $phone): string
     {
         $phone = preg_replace('/\s+/', '', $phone);
@@ -116,30 +130,31 @@ final class FirebaseSendVerificationCodeService
     {
         $code = is_numeric($errorCode) ? (int) $errorCode : null;
         $msg = $message ?? '';
+        $msgLower = strtolower($msg);
 
-        // Known Firebase/Identity Platform error codes for sendVerificationCode
+        // Message-based mapping (check first, regardless of error code)
+        if (str_contains($msgLower, 'internal error') || str_contains($msgLower, 'internal')) {
+            return 'Verification service error. On Android: add your app SHA-256 in Firebase Console (Project settings > Your apps > Android > Add fingerprint) and ensure Play Integrity API is enabled in Google Cloud. Use the same Firebase project/API key as your app.';
+        }
+        if (str_contains($msg, 'RECAPTCHA')) {
+            return 'Verification failed. Please complete the security check and try again.';
+        }
+        if (str_contains($msg, 'TOO_MANY_ATTEMPTS')) {
+            return 'Too many attempts. Please try again later.';
+        }
+        if (str_contains($msg, 'INVALID_PHONE')) {
+            return 'Invalid phone number format. Use E.164 (e.g. +201274235122).';
+        }
+        if (str_contains($msg, 'INVALID_APP_CREDENTIAL') || str_contains($msg, 'APP_NOT_VERIFIED')) {
+            return 'App not verified. Add your app SHA-256 (Android) or bundle ID (iOS) in Firebase Console.';
+        }
+
+        // Code-based mapping
         if ($code === 18002) {
             return 'App not recognized by Play. Add your app SHA-256 in Firebase Console (Project settings > Your apps > Android > Add fingerprint). For debug builds use your debug keystore SHA-256.';
         }
         if ($code === 17028) {
             return 'Invalid Play Integrity token. Ensure the app is signed with the same key whose SHA-256 is registered in Firebase, and that Play Integrity API is enabled for your Google Cloud project.';
-        }
-        if ($code === 400 || $code === 403) {
-            if (str_contains($msg, 'RECAPTCHA')) {
-                return 'Verification failed. Please complete the security check and try again.';
-            }
-            if (str_contains($msg, 'TOO_MANY_ATTEMPTS')) {
-                return 'Too many attempts. Please try again later.';
-            }
-            if (str_contains($msg, 'INVALID_PHONE')) {
-                return 'Invalid phone number format. Use E.164 (e.g. +201274235122).';
-            }
-            if (str_contains($msg, 'Internal error') || str_contains($msg, 'INTERNAL')) {
-                return 'Verification service error. On Android: add your app SHA-256 in Firebase Console (Project settings > Your apps) and use the same API key as your app. See docs/FIREBASE_PHONE_ANDROID_SETUP.md.';
-            }
-            if (str_contains($msg, 'INVALID_APP_CREDENTIAL') || str_contains($msg, 'APP_NOT_VERIFIED')) {
-                return 'App not verified. Add your app SHA-256 (Android) or bundle ID (iOS) in Firebase Console.';
-            }
         }
 
         if ($msg === '') {

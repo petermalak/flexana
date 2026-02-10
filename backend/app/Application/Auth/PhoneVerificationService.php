@@ -45,9 +45,11 @@ final class PhoneVerificationService
             $customer = new Customer();
             $customer->phone = $phone;
             $customer->uid = (string) Str::uuid();
-        }
-        if ($firstName !== null) {
-            $customer->first_name = $firstName;
+            $customer->first_name = $firstName ?? 'Guest'; // required column, non-null
+        } else {
+            if ($firstName !== null) {
+                $customer->first_name = $firstName;
+            }
         }
         if ($lastName !== null) {
             $customer->last_name = $lastName;
