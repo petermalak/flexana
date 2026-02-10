@@ -497,6 +497,10 @@ class MobileAuthController extends Controller
 
     private function customerToArray($customer): array
     {
+        $remainingSessions = (int) $customer->packagePurchases()
+            ->where('status', 'active')
+            ->sum('remaining_sessions');
+
         return [
             'id' => (string) $customer->id,
             'uid' => $customer->uid,
@@ -506,6 +510,7 @@ class MobileAuthController extends Controller
             'phone' => $customer->phone,
             'phoneVerifiedAt' => $customer->phone_verified_at?->toIso8601String(),
             'emailVerifiedAt' => $customer->email_verified_at?->toIso8601String(),
+            'remainingSessions' => $remainingSessions,
         ];
     }
 }

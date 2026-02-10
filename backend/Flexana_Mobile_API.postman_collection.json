@@ -44,7 +44,7 @@
 							"status": "OK",
 							"code": 200,
 							"header": [{ "key": "Content-Type", "value": "application/json" }],
-							"body": "{\"success\":true,\"message\":\"Logged in.\",\"token\":\"1|abc123xyz\",\"token_type\":\"Bearer\",\"customer\":{\"id\":\"1\",\"uid\":\"550e8400-e29b-41d4-a716-446655440000\",\"firstName\":\"Jane\",\"lastName\":\"Doe\",\"email\":\"jane@example.com\",\"phone\":\"+201234567890\",\"phoneVerifiedAt\":\"2024-01-15T10:00:00.000000Z\",\"emailVerifiedAt\":null}}"
+							"body": "{\"success\":true,\"message\":\"Logged in.\",\"token\":\"1|abc123xyz\",\"token_type\":\"Bearer\",\"customer\":{\"id\":\"1\",\"uid\":\"550e8400-e29b-41d4-a716-446655440000\",\"firstName\":\"Jane\",\"lastName\":\"Doe\",\"email\":\"jane@example.com\",\"phone\":\"+201234567890\",\"phoneVerifiedAt\":\"2024-01-15T10:00:00.000000Z\",\"emailVerifiedAt\":null,\"remainingSessions\":5}}"
 						},
 						{
 							"name": "Success (with FCM token)",
@@ -52,7 +52,7 @@
 							"status": "OK",
 							"code": 200,
 							"header": [{ "key": "Content-Type", "value": "application/json" }],
-							"body": "{\"success\":true,\"message\":\"Logged in.\",\"token\":\"1|abc123\",\"token_type\":\"Bearer\",\"customer\":{\"id\":\"1\",\"uid\":\"uuid\",\"firstName\":\"Jane\",\"lastName\":\"Doe\",\"email\":\"jane@example.com\",\"phone\":\"+201234567890\",\"phoneVerifiedAt\":\"2024-01-15T10:00:00.000000Z\",\"emailVerifiedAt\":null}}"
+							"body": "{\"success\":true,\"message\":\"Logged in.\",\"token\":\"1|abc123\",\"token_type\":\"Bearer\",\"customer\":{\"id\":\"1\",\"uid\":\"uuid\",\"firstName\":\"Jane\",\"lastName\":\"Doe\",\"email\":\"jane@example.com\",\"phone\":\"+201234567890\",\"phoneVerifiedAt\":\"2024-01-15T10:00:00.000000Z\",\"emailVerifiedAt\":null,\"remainingSessions\":5}}"
 						},
 						{
 							"name": "401 Invalid credentials",
@@ -129,7 +129,7 @@
 							"status": "OK",
 							"code": 200,
 							"header": [{ "key": "Content-Type", "value": "application/json" }],
-							"body": "{\"success\":true,\"message\":\"Verified.\",\"token\":\"1|xyz\",\"token_type\":\"Bearer\",\"customer\":{\"id\":\"1\",\"firstName\":\"Jane\",\"lastName\":\"Doe\",\"email\":\"jane@example.com\",\"phone\":\"+201234567890\"}}"
+							"body": "{\"success\":true,\"message\":\"Verified.\",\"token\":\"1|xyz\",\"token_type\":\"Bearer\",\"customer\":{\"id\":\"1\",\"uid\":\"uuid\",\"firstName\":\"Jane\",\"lastName\":\"Doe\",\"email\":\"jane@example.com\",\"phone\":\"+201234567890\",\"phoneVerifiedAt\":\"2024-01-15T10:00:00.000000Z\",\"emailVerifiedAt\":null,\"remainingSessions\":0}}"
 						}
 					],
 					"event": [
@@ -218,7 +218,7 @@
 						"description": "Current customer profile. Requires Bearer."
 					},
 					"response": [
-						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"id\":\"1\",\"uid\":\"uuid\",\"firstName\":\"Jane\",\"lastName\":\"Doe\",\"email\":\"jane@example.com\",\"phone\":\"+201234567890\",\"phoneVerifiedAt\":\"2024-01-15T10:00:00.000000Z\",\"emailVerifiedAt\":null}" }
+						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"customer\":{\"id\":\"1\",\"uid\":\"uuid\",\"firstName\":\"Jane\",\"lastName\":\"Doe\",\"email\":\"jane@example.com\",\"phone\":\"+201234567890\",\"phoneVerifiedAt\":\"2024-01-15T10:00:00.000000Z\",\"emailVerifiedAt\":null,\"remainingSessions\":5}}" }
 					]
 				},
 				{

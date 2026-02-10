@@ -12,6 +12,10 @@ final class SmsVerificationService implements SmsVerificationServiceInterface
         $phone = $this->normalizeE164($phone);
         $driver = config('sms.driver', 'log');
 
+        if ($driver === 'twilio' && $this->twilioVerifyConfigured()) {
+            return $this->sendViaTwilioVerify($phone);
+        }
+
         if ($driver === 'twilio' && $this->twilioConfigured()) {
             return $this->sendViaTwilio($phone, $code);
         }
@@ -31,6 +35,27 @@ final class SmsVerificationService implements SmsVerificationServiceInterface
         return true;
     }
 
+    public function checkVerification(string $phone, string $code): ?bool
+    {
+        $phone = $this->normalizeE164($phone);
+        if ($phone === '' || $code === '') {
+            return false;
+        }
+
+        if (config('sms.driver') === 'twilio' && $this->twilioVerifyConfigured()) {
+            return $this->checkTwilioVerify($phone, $code);
+        }
+
+        return null;
+    }
+
+    private function twilioVerifyConfigured(): bool
+    {
+        return ! empty(config('sms.twilio.account_sid'))
+            && ! empty(config('sms.twilio.auth_token'))
+            && ! empty(config('sms.twilio.verify_service_sid'));
+    }
+
     private function twilioConfigured(): bool
     {
         $channel = (string) config('sms.twilio.channel', 'sms');
@@ -45,6 +70,71 @@ final class SmsVerificationService implements SmsVerificationServiceInterface
         return ! empty(config('sms.twilio.account_sid'))
             && ! empty(config('sms.twilio.auth_token'))
             && ! empty(config('sms.twilio.from'));
+    }
+
+    /**
+     * Twilio Verify API: send verification (SMS). POST .../Verifications with To, Channel=sms
+     */
+    private function sendViaTwilioVerify(string $to): bool
+    {
+        $sid = config('sms.twilio.account_sid');
+        $token = config('sms.twilio.auth_token');
+        $serviceSid = config('sms.twilio.verify_service_sid');
+        $url = "https://verify.twilio.com/v2/Services/{$serviceSid}/Verifications";
+
+        $response = Http::timeout(15)
+            ->withBasicAuth($sid, $token)
+            ->asForm()
+            ->post($url, [
+                'To' => $to,
+                'Channel' => 'sms',
+            ]);
+
+        if (! $response->successful()) {
+            Log::warning('Twilio Verify send failed', [
+                'to' => $to,
+                'status' => $response->status(),
+                'body' => $response->json() ?? $response->body(),
+            ]);
+
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Twilio Verify API: check code. POST .../VerificationCheck with To, Code
+     */
+    private function checkTwilioVerify(string $to, string $code): bool
+    {
+        $sid = config('sms.twilio.account_sid');
+        $token = config('sms.twilio.auth_token');
+        $serviceSid = config('sms.twilio.verify_service_sid');
+        $url = "https://verify.twilio.com/v2/Services/{$serviceSid}/VerificationCheck";
+
+        $response = Http::timeout(15)
+            ->withBasicAuth($sid, $token)
+            ->asForm()
+            ->post($url, [
+                'To' => $to,
+                'Code' => $code,
+            ]);
+
+        if (! $response->successful()) {
+            Log::info('Twilio Verify check failed', [
+                'to' => $to,
+                'status' => $response->status(),
+                'body' => $response->json() ?? $response->body(),
+            ]);
+
+            return false;
+        }
+
+        $data = $response->json();
+        $status = $data['status'] ?? '';
+
+        return strtolower($status) === 'approved';
     }
 
     /**

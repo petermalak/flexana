@@ -31,6 +31,8 @@ final class PhoneVerificationService
             return ['success' => false, 'message' => 'Invalid phone number.'];
         }
 
+        $useTwilioVerify = config('sms.driver') === 'twilio' && ! empty(config('sms.twilio.verify_service_sid'));
+
         $throttle = DB::table('phone_verification_codes')
             ->where('phone', $phone)
             ->where('created_at', '>=', Carbon::now()->subSeconds(self::THROTTLE_SECONDS))
@@ -59,6 +61,23 @@ final class PhoneVerificationService
         }
         $customer->save();
 
+        if ($useTwilioVerify) {
+            if (! $this->sms->sendCode($phone, '')) {
+                return ['success' => false, 'message' => 'Verification code could not be sent. Please check your number and try again.'];
+            }
+            // Throttle: insert placeholder so we don't spam Twilio (verify uses provider check, not this row)
+            DB::table('phone_verification_codes')->insert([
+                'phone' => $phone,
+                'code' => '',
+                'purpose' => 'signup',
+                'customer_id' => null,
+                'expires_at' => Carbon::now()->addMinutes(self::CODE_TTL_MINUTES),
+                'created_at' => Carbon::now(),
+            ]);
+
+            return ['success' => true, 'message' => 'Verification code sent.'];
+        }
+
         $code = $this->generateCode();
         $expiresAt = Carbon::now()->addMinutes(self::CODE_TTL_MINUTES);
 
@@ -71,7 +90,9 @@ final class PhoneVerificationService
             'created_at' => Carbon::now(),
         ]);
 
-        $this->sms->sendCode($phone, $code);
+        if (! $this->sms->sendCode($phone, $code)) {
+            return ['success' => false, 'message' => 'Verification code could not be sent. Please check your number and try again.'];
+        }
 
         return ['success' => true, 'message' => 'Verification code sent.', 'code' => $code];
     }
@@ -86,6 +107,21 @@ final class PhoneVerificationService
         $phone = $this->normalizePhone($phone);
         if (empty($phone)) {
             return ['success' => false, 'message' => 'Invalid phone number.'];
+        }
+
+        $providerResult = $this->sms->checkVerification($phone, $code);
+        if ($providerResult === true) {
+            $customer = Customer::query()->where('phone', $phone)->first();
+            if (! $customer) {
+                return ['success' => false, 'message' => 'Customer not found.'];
+            }
+            $customer->phone_verified_at = Carbon::now();
+            $customer->save();
+
+            return ['success' => true, 'message' => 'Verified.', 'customer' => $customer];
+        }
+        if ($providerResult === false) {
+            return ['success' => false, 'message' => 'Invalid or expired code.'];
         }
 
         $row = DB::table('phone_verification_codes')
@@ -109,7 +145,6 @@ final class PhoneVerificationService
         $customer->phone_verified_at = Carbon::now();
         $customer->save();
 
-        // Invalidate used code (optional: delete or mark used)
         DB::table('phone_verification_codes')
             ->where('phone', $phone)
             ->where('code', $code)
@@ -158,7 +193,9 @@ final class PhoneVerificationService
             'created_at' => Carbon::now(),
         ]);
 
-        $this->sms->sendCode($phone, $code);
+        if (! $this->sms->sendCode($phone, $code)) {
+            return ['success' => false, 'message' => 'Verification code could not be sent. Please check the number and try again.'];
+        }
 
         return ['success' => true, 'message' => 'Verification code sent.'];
     }

@@ -14,7 +14,11 @@ return [
     'twilio' => [
         'account_sid' => env('TWILIO_ACCOUNT_SID'),
         'auth_token' => env('TWILIO_AUTH_TOKEN'),
-        // Channel can be: sms | whatsapp
+
+        // Twilio Verify API (v2): when set, send via Verifications and verify via VerificationCheck
+        'verify_service_sid' => env('TWILIO_VERIFY_SERVICE_SID'), // e.g. VAc1a2ecd13b9ab2931b199c8eec1724b3
+
+        // Channel can be: sms | whatsapp (used only when not using Verify API)
         'channel' => env('TWILIO_CHANNEL', 'sms'),
 
         // SMS sender (E.164), e.g. +14472515930
