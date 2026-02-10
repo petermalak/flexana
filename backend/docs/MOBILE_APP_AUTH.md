@@ -20,15 +20,16 @@ Firebase SMS integration has been removed. Phone verification is now handled **e
      - `phone` (string, required)
      - Optional: `firstName`, `lastName`, `email`
    - Response:
-     - `{ "success": true, "message": "Verification code sent.", "useLegacyVerify": true }`
+     - `{ "success": true, "message": "Verification code sent.", "useLegacyVerify": true, "phone": "+201234567890" }`
+     - **Use the returned `phone`** in the next step so the backend knows which number is completing verification (same number that received the SMS).
      - In `local` / `testing` env only, the response may also include the raw `code` for easier manual testing.
 
 2. **User enters the code from SMS; app verifies and signs in**  
    - **POST /api/v1/auth/verify**  
    - Body:
-     - `phone` (string, required)
+     - `phone` (string, required) — **use the exact `phone` value returned from signup**
      - `code` (6-digit string, required)
-     - Optional: `password`, `password_confirmation` (to set login password at signup)
+     - Optional: `password`, `password_confirmation` (to set login password at signup), `fcmToken`, `platform`, `deviceId`
    - Response:
      - `{ "success": true, "token": "1|...", "customer": { ... } }`
    - On success, the backend sets `phone_verified_at` for that customer.

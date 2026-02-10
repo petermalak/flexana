@@ -109,10 +109,12 @@ class MobileAuthController extends Controller
             ], 400);
         }
 
+        $phone = $this->normalizePhone($data['phone']);
         $response = [
             'success' => true,
             'message' => $result['message'],
             'useLegacyVerify' => true,
+            'phone' => $phone,
         ];
         if (app()->environment('local', 'testing') && isset($result['code'])) {
             $response['code'] = $result['code'];

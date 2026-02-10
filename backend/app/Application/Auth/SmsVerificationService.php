@@ -33,6 +33,15 @@ final class SmsVerificationService implements SmsVerificationServiceInterface
 
     private function twilioConfigured(): bool
     {
+        $channel = (string) config('sms.twilio.channel', 'sms');
+
+        if ($channel === 'whatsapp') {
+            return ! empty(config('sms.twilio.account_sid'))
+                && ! empty(config('sms.twilio.auth_token'))
+                && ! empty(config('sms.twilio.whatsapp_from'))
+                && ! empty(config('sms.twilio.content_sid'));
+        }
+
         return ! empty(config('sms.twilio.account_sid'))
             && ! empty(config('sms.twilio.auth_token'))
             && ! empty(config('sms.twilio.from'));
@@ -45,6 +54,43 @@ final class SmsVerificationService implements SmsVerificationServiceInterface
     {
         $sid = config('sms.twilio.account_sid');
         $token = config('sms.twilio.auth_token');
+        $channel = (string) config('sms.twilio.channel', 'sms');
+
+        // WhatsApp template message (Content API)
+        if ($channel === 'whatsapp') {
+            $from = (string) config('sms.twilio.whatsapp_from');
+            $contentSid = (string) config('sms.twilio.content_sid');
+
+            $payload = [
+                'To' => $this->prefixWhatsApp($to),
+                'From' => $this->prefixWhatsApp($from),
+                'ContentSid' => $contentSid,
+                // ContentVariables must be a JSON string
+                'ContentVariables' => json_encode(['1' => (string) $code], JSON_UNESCAPED_SLASHES),
+            ];
+
+            $response = Http::timeout(15)
+                ->withBasicAuth($sid, $token)
+                ->asForm()
+                ->post(
+                    "https://api.twilio.com/2010-04-01/Accounts/{$sid}/Messages.json",
+                    $payload
+                );
+
+            if (! $response->successful()) {
+                Log::warning('Twilio WhatsApp OTP failed', [
+                    'to' => $to,
+                    'status' => $response->status(),
+                    'body' => $response->json() ?? $response->body(),
+                ]);
+
+                return false;
+            }
+
+            return true;
+        }
+
+        // Default: SMS message
         $from = config('sms.twilio.from');
         $body = "Your verification code is: {$code}";
 
@@ -71,6 +117,15 @@ final class SmsVerificationService implements SmsVerificationServiceInterface
         }
 
         return true;
+    }
+
+    private function prefixWhatsApp(string $value): string
+    {
+        $v = trim($value);
+        if (str_starts_with($v, 'whatsapp:')) {
+            return $v;
+        }
+        return 'whatsapp:' . $v;
     }
 
     private function smsMisrConfigured(): bool

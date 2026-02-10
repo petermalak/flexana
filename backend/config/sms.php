@@ -14,7 +14,17 @@ return [
     'twilio' => [
         'account_sid' => env('TWILIO_ACCOUNT_SID'),
         'auth_token' => env('TWILIO_AUTH_TOKEN'),
-        'from' => env('TWILIO_FROM'), // E.164, e.g. +1234567890
+        // Channel can be: sms | whatsapp
+        'channel' => env('TWILIO_CHANNEL', 'sms'),
+
+        // SMS sender (E.164), e.g. +14472515930
+        'from' => env('TWILIO_FROM'),
+
+        // WhatsApp sender (usually "whatsapp:+14155238886" or your WhatsApp-enabled number)
+        'whatsapp_from' => env('TWILIO_WHATSAPP_FROM', 'whatsapp:+14155238886'),
+
+        // For WhatsApp templates (Content API)
+        'content_sid' => env('TWILIO_CONTENT_SID'), // e.g. HX229f5a04fd0510ce1b071852155d3e75
     ],
 
     'smsmisr' => [
