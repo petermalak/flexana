@@ -2,7 +2,16 @@
 
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
+
+// Serve files from storage/app/public (works when symlink is missing or document root is not public/)
+Route::get('/storage/{path}', function (string $path) {
+    if (!Storage::disk('public')->exists($path)) {
+        abort(404);
+    }
+    return response()->file(Storage::disk('public')->path($path));
+})->where('path', '.*')->name('storage.serve');
 
 // Include authentication routes
 require __DIR__.'/auth.php';

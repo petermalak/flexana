@@ -3,7 +3,9 @@
 namespace App\Interfaces\Http\Controllers\Api\Mobile;
 
 use App\Http\Controllers\Controller;
+use App\Models\Banner;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Storage;
 
 class BannerController extends Controller
 {
@@ -13,8 +15,25 @@ class BannerController extends Controller
      */
     public function index(): JsonResponse
     {
-        // TODO: Replace with actual banner data from database/cms
-        $banners = [];
+        $banners = Banner::query()
+            ->where('is_active', true)
+            ->orderBy('sort_order')
+            ->orderByDesc('created_at')
+            ->get()
+            ->map(function (Banner $banner): array {
+                $imagePath = $banner->image_url;
+                $imageUrl = $imagePath
+                    ? Storage::disk('public')->url($imagePath)
+                    : null;
+
+                return [
+                    'title' => $banner->title,
+                    'image' => $imageUrl,
+                    'URL' => $banner->link_url,
+                ];
+            })
+            ->values()
+            ->all();
 
         return response()->json($banners);
     }
