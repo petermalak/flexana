@@ -79,7 +79,9 @@ Route::prefix('v1')
         Route::post('auth/verify', [MobileAuthController::class, 'verify']);
 
         // All mobile app endpoints (authenticated)
-        Route::middleware(['auth:sanctum:api'])->group(function (): void {
+        // Sanctum middleware does not take a guard name like "sanctum:api".
+        // Using "auth:sanctum" authenticates the Bearer token correctly.
+        Route::middleware(['auth:sanctum'])->group(function (): void {
             // Home screen
             Route::get('banners', [BannerController::class, 'index']);
             Route::get('instructors', [MobileInstructorController::class, 'index']);

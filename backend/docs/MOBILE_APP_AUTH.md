@@ -36,6 +36,17 @@ Firebase SMS integration has been removed. Phone verification is now handled **e
 
 ---
 
+## Reset password (email flow)
+
+Customers reset their password by **email**: request a reset link, then submit the token and new password.
+
+- **POST /api/v1/auth/forgot-password** — body: `{ "email" }`. Sends reset email if customer exists.
+- **POST /api/v1/auth/reset-password** — body: `{ "email", "token", "password", "password_confirmation" }`. Token comes from the email.
+
+See **[RESET_PASSWORD_FLOW.md](RESET_PASSWORD_FLOW.md)** for the full flow, validation, and optional deep-link setup for mobile.
+
+---
+
 ## Test / local behavior
 
 In `local` / `testing` environments and with `SMS_DRIVER=log`, the backend:

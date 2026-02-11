@@ -162,10 +162,10 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "v1", "auth", "forgot-password"]
 						},
-						"description": "Request password reset link. Sends email if customer exists."
+						"description": "Step 1 of reset flow. Sends an email with a reset link (token). User must use the token in Step 2. Response is always 200 with the same message (no email enumeration)."
 					},
 					"response": [
-						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"message\":\"If an account exists, a reset link has been sent.\"}" }
+						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"message\":\"If that email exists, we have sent a password reset link.\"}" }
 					]
 				},
 				{
@@ -183,10 +183,11 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "v1", "auth", "reset-password"]
 						},
-						"description": "Reset password using token from forgot-password email."
+						"description": "Step 2 of reset flow. Use the token (and email) from the forgot-password email. Body: email, token, password, password_confirmation (min 8 chars). On success user can log in with phone + new password."
 					},
 					"response": [
-						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"message\":\"Password reset successfully.\"}" }
+						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"message\":\"Password has been reset.\"}" },
+						{ "name": "400 Invalid or expired token", "status": "Bad Request", "code": 400, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":false,\"message\":\"Invalid or expired reset token.\"}" }
 					]
 				},
 				{
