@@ -113,25 +113,8 @@ return [
             // 'trust_server_certificate' => env('DB_TRUST_SERVER_CERTIFICATE', 'false'),
         ],
 
-        'wordpress' => [
-            'driver' => 'mysql',
-            'url' => env('WP_DB_URL'),
-            'host' => env('WP_DB_HOST', '127.0.0.1'),
-            'port' => env('WP_DB_PORT', '3306'),
-            'database' => env('WP_DB_DATABASE', 'cyanboutique_flexana'),
-            'username' => env('WP_DB_USERNAME', 'root'),
-            'password' => env('WP_DB_PASSWORD', ''),
-            'unix_socket' => env('WP_DB_SOCKET', ''),
-            'charset' => env('WP_DB_CHARSET', 'utf8mb4'),
-            'collation' => env('WP_DB_COLLATION', 'utf8mb4_unicode_ci'),
-            'prefix' => 'rueyn_amelia_',
-            'prefix_indexes' => true,
-            'strict' => true,
-            'engine' => null,
-            'options' => extension_loaded('pdo_mysql') ? array_filter([
-                PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
-            ]) : [],
-        ],
+        // WordPress connection disabled - all data is now in MySQL (default connection)
+        // 'wordpress' => [ ... ],
 
     ],
 

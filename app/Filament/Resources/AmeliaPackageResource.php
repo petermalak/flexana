@@ -2,7 +2,7 @@
 
 namespace App\Filament\Resources;
 
-use App\Infrastructure\Persistence\Eloquent\AmeliaPackageModel;
+use App\Infrastructure\Persistence\Eloquent\PackageModel;
 use Filament\Forms;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
@@ -12,7 +12,7 @@ use App\Filament\Resources\AmeliaPackageResource\Pages;
 
 class AmeliaPackageResource extends Resource
 {
-    protected static ?string $model = AmeliaPackageModel::class;
+    protected static ?string $model = PackageModel::class;
 
     protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-gift';
 
@@ -25,17 +25,16 @@ class AmeliaPackageResource extends Resource
     public static function form(Schema $schema): Schema
     {
         return $schema->components([
-            Forms\Components\TextInput::make('name')->required(),
+            Forms\Components\TextInput::make('title')->label('Name')->required(),
             Forms\Components\Textarea::make('description')->rows(3),
             Forms\Components\TextInput::make('price')->numeric()->prefix('$')->required(),
             Forms\Components\TextInput::make('discount')->numeric()->prefix('$')->default(0),
             Forms\Components\Select::make('status')->options([
-                'visible' => 'Visible',
+                'active' => 'Active',
                 'hidden' => 'Hidden',
-                'disabled' => 'Disabled',
             ]),
-            Forms\Components\DateTimePicker::make('endDate')->label('End Date'),
-            Forms\Components\TextInput::make('quantity')->numeric()->minValue(1)->default(1),
+            Forms\Components\DateTimePicker::make('expiry')->label('End Date'),
+            Forms\Components\TextInput::make('total_sessions')->numeric()->minValue(1)->default(1),
         ]);
     }
 
@@ -44,25 +43,23 @@ class AmeliaPackageResource extends Resource
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('id')->label('ID')->sortable(),
-                Tables\Columns\TextColumn::make('name')->searchable()->sortable(),
+                Tables\Columns\TextColumn::make('title')->label('Name')->searchable()->sortable(),
                 Tables\Columns\TextColumn::make('price')->money('USD')->sortable(),
                 Tables\Columns\TextColumn::make('discount')->money('USD')->sortable(),
                 Tables\Columns\TextColumn::make('status')
                     ->badge()
                     ->color(fn (string $state): string => match ($state) {
-                        'visible' => 'success',
+                        'active' => 'success',
                         'hidden' => 'gray',
-                        'disabled' => 'danger',
                         default => 'gray',
                     }),
-                Tables\Columns\TextColumn::make('quantity')->sortable(),
-                Tables\Columns\TextColumn::make('endDate')->dateTime('Y-m-d H:i')->sortable(),
+                Tables\Columns\TextColumn::make('total_sessions')->sortable(),
+                Tables\Columns\TextColumn::make('expiry')->dateTime('Y-m-d H:i')->sortable(),
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('status')->options([
-                    'visible' => 'Visible',
+                    'active' => 'Active',
                     'hidden' => 'Hidden',
-                    'disabled' => 'Disabled',
                 ]),
             ])
             ->actions([
@@ -80,4 +77,3 @@ class AmeliaPackageResource extends Resource
         ];
     }
 }
-

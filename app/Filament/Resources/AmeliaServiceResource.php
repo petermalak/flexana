@@ -2,7 +2,7 @@
 
 namespace App\Filament\Resources;
 
-use App\Infrastructure\Persistence\Eloquent\AmeliaServiceModel;
+use App\Infrastructure\Persistence\Eloquent\ServiceModel;
 use Filament\Forms;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
@@ -12,7 +12,7 @@ use App\Filament\Resources\AmeliaServiceResource\Pages;
 
 class AmeliaServiceResource extends Resource
 {
-    protected static ?string $model = AmeliaServiceModel::class;
+    protected static ?string $model = ServiceModel::class;
 
     protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-sparkles';
 
@@ -38,11 +38,11 @@ class AmeliaServiceResource extends Resource
                     ->numeric()
                     ->suffix('minutes')
                     ->required(),
-                Forms\Components\TextInput::make('minCapacity')
+                Forms\Components\TextInput::make('min_capacity')
                     ->label('Min Capacity')
                     ->numeric()
                     ->default(1),
-                Forms\Components\TextInput::make('maxCapacity')
+                Forms\Components\TextInput::make('max_capacity')
                     ->label('Max Capacity')
                     ->numeric()
                     ->default(1),
@@ -50,7 +50,6 @@ class AmeliaServiceResource extends Resource
                     ->options([
                         'visible' => 'Visible',
                         'hidden' => 'Hidden',
-                        'disabled' => 'Disabled',
                     ]),
             ]);
     }
@@ -71,10 +70,10 @@ class AmeliaServiceResource extends Resource
                 Tables\Columns\TextColumn::make('duration')
                     ->label('Duration (min)')
                     ->sortable(),
-                Tables\Columns\TextColumn::make('minCapacity')
+                Tables\Columns\TextColumn::make('min_capacity')
                     ->label('Min Capacity')
                     ->sortable(),
-                Tables\Columns\TextColumn::make('maxCapacity')
+                Tables\Columns\TextColumn::make('max_capacity')
                     ->label('Max Capacity')
                     ->sortable(),
                 Tables\Columns\TextColumn::make('status')
@@ -82,20 +81,14 @@ class AmeliaServiceResource extends Resource
                     ->color(fn (string $state): string => match ($state) {
                         'visible' => 'success',
                         'hidden' => 'gray',
-                        'disabled' => 'danger',
                         default => 'gray',
                     }),
-                Tables\Columns\TextColumn::make('appointments_count')
-                    ->label('Appointments')
-                    ->counts('appointments')
-                    ->sortable(),
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('status')
                     ->options([
                         'visible' => 'Visible',
                         'hidden' => 'Hidden',
-                        'disabled' => 'Disabled',
                     ]),
             ])
             ->actions([

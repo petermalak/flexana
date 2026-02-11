@@ -2,7 +2,7 @@
 
 namespace App\Filament\Resources;
 
-use App\Infrastructure\Persistence\Eloquent\AmeliaUserModel;
+use App\Infrastructure\Persistence\Eloquent\CustomerModel;
 use Filament\Forms;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
@@ -12,7 +12,7 @@ use App\Filament\Resources\AmeliaCustomerResource\Pages;
 
 class AmeliaCustomerResource extends Resource
 {
-    protected static ?string $model = AmeliaUserModel::class;
+    protected static ?string $model = CustomerModel::class;
 
     protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-users';
 
@@ -26,10 +26,10 @@ class AmeliaCustomerResource extends Resource
     {
         return $schema
             ->components([
-                Forms\Components\TextInput::make('firstName')
+                Forms\Components\TextInput::make('first_name')
                     ->label('First Name')
                     ->required(),
-                Forms\Components\TextInput::make('lastName')
+                Forms\Components\TextInput::make('last_name')
                     ->label('Last Name')
                     ->required(),
                 Forms\Components\TextInput::make('email')
@@ -42,16 +42,6 @@ class AmeliaCustomerResource extends Resource
                         'female' => 'Female',
                     ]),
                 Forms\Components\DatePicker::make('birthday'),
-                Forms\Components\Select::make('status')
-                    ->options([
-                        'visible' => 'Visible',
-                        'hidden' => 'Hidden',
-                    ]),
-                Forms\Components\Select::make('type')
-                    ->options([
-                        'customer' => 'Customer',
-                        'provider' => 'Provider',
-                    ]),
             ]);
     }
 
@@ -62,11 +52,11 @@ class AmeliaCustomerResource extends Resource
                 Tables\Columns\TextColumn::make('id')
                     ->label('ID')
                     ->sortable(),
-                Tables\Columns\TextColumn::make('firstName')
+                Tables\Columns\TextColumn::make('first_name')
                     ->label('First Name')
                     ->searchable()
                     ->sortable(),
-                Tables\Columns\TextColumn::make('lastName')
+                Tables\Columns\TextColumn::make('last_name')
                     ->label('Last Name')
                     ->searchable()
                     ->sortable(),
@@ -75,40 +65,17 @@ class AmeliaCustomerResource extends Resource
                     ->sortable(),
                 Tables\Columns\TextColumn::make('phone')
                     ->searchable(),
-                Tables\Columns\TextColumn::make('type')
-                    ->badge()
-                    ->color(fn (string $state): string => match ($state) {
-                        'customer' => 'info',
-                        'provider' => 'success',
-                        default => 'gray',
-                    }),
-                Tables\Columns\TextColumn::make('status')
-                    ->badge()
-                    ->color(fn (string $state): string => match ($state) {
-                        'visible' => 'success',
-                        'hidden' => 'gray',
-                        default => 'gray',
-                    }),
-                Tables\Columns\TextColumn::make('customerBookings_count')
+                Tables\Columns\TextColumn::make('bookings_count')
                     ->label('Bookings')
-                    ->counts('customerBookings')
+                    ->counts('bookings')
                     ->sortable(),
-                Tables\Columns\TextColumn::make('created')
+                Tables\Columns\TextColumn::make('created_at')
                     ->label('Created')
                     ->dateTime('Y-m-d H:i')
                     ->sortable(),
             ])
             ->filters([
-                Tables\Filters\SelectFilter::make('type')
-                    ->options([
-                        'customer' => 'Customer',
-                        'provider' => 'Provider',
-                    ]),
-                Tables\Filters\SelectFilter::make('status')
-                    ->options([
-                        'visible' => 'Visible',
-                        'hidden' => 'Hidden',
-                    ]),
+                //
             ])
             ->actions([
                 \Filament\Actions\EditAction::make(),
@@ -130,10 +97,5 @@ class AmeliaCustomerResource extends Resource
             'create' => Pages\CreateAmeliaCustomer::route('/create'),
             'edit' => Pages\EditAmeliaCustomer::route('/{record}/edit'),
         ];
-    }
-
-    public static function getEloquentQuery(): \Illuminate\Database\Eloquent\Builder
-    {
-        return parent::getEloquentQuery()->where('type', 'customer');
     }
 }

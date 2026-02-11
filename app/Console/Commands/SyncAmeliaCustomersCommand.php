@@ -58,6 +58,11 @@ class SyncAmeliaCustomersCommand extends Command
     {
         $this->info('Syncing Amelia customers → Laravel...');
 
+        if (! config('database.connections.wordpress')) {
+            $this->warn('WordPress database connection is disabled. All data is now in MySQL.');
+            return;
+        }
+
         try {
             DB::connection('wordpress')->getPdo();
         } catch (\Throwable $e) {

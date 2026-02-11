@@ -2,19 +2,17 @@
 
 namespace App\Filament\Resources;
 
-use App\Infrastructure\Persistence\Eloquent\AmeliaAppointmentModel;
-use App\Infrastructure\Persistence\Eloquent\AmeliaCustomerBookingModel;
+use App\Infrastructure\Persistence\Eloquent\BookingModel;
 use Filament\Forms;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Tables;
 use Filament\Tables\Table;
-use Illuminate\Database\Eloquent\Builder;
 use App\Filament\Resources\AmeliaBookingResource\Pages;
 
 class AmeliaBookingResource extends Resource
 {
-    protected static ?string $model = AmeliaCustomerBookingModel::class;
+    protected static ?string $model = BookingModel::class;
 
     protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-calendar-days';
 
@@ -28,46 +26,40 @@ class AmeliaBookingResource extends Resource
     {
         return $schema
             ->components([
-                Forms\Components\Select::make('appointmentId')
+                Forms\Components\Select::make('appointment_id')
                     ->label('Appointment')
                     ->relationship('appointment', 'id')
-                    ->getOptionLabelFromRecordUsing(fn ($record) => 
-                        "Appointment #{$record->id} - " . ($record->bookingStart ? $record->bookingStart->format('Y-m-d H:i') : 'N/A')
+                    ->getOptionLabelFromRecordUsing(fn ($record) =>
+                        $record ? 'Appointment #' . $record->id . ' - ' . ($record->booking_start ? $record->booking_start->format('Y-m-d H:i') : 'N/A') : 'N/A'
                     )
                     ->searchable()
                     ->preload(),
-                Forms\Components\Select::make('customerId')
+                Forms\Components\Select::make('customer_id')
                     ->label('Customer')
                     ->relationship('customer', 'email')
-                    ->getOptionLabelFromRecordUsing(fn ($record) => 
-                        trim("{$record->firstName} {$record->lastName} ({$record->email})")
+                    ->getOptionLabelFromRecordUsing(fn ($record) =>
+                        $record ? trim("{$record->first_name} {$record->last_name} ({$record->email})") : 'N/A'
                     )
                     ->searchable()
                     ->preload(),
                 Forms\Components\Select::make('status')
                     ->options([
-                        'approved' => 'Approved',
+                        'confirmed' => 'Confirmed',
                         'pending' => 'Pending',
-                        'canceled' => 'Canceled',
-                        'rejected' => 'Rejected',
-                        'no-show' => 'No Show',
-                        'waiting' => 'Waiting',
+                        'cancelled' => 'Cancelled',
                     ])
                     ->required(),
-                Forms\Components\TextInput::make('price')
+                Forms\Components\TextInput::make('total_amount')
                     ->numeric()
                     ->prefix('$')
                     ->required(),
-                Forms\Components\TextInput::make('persons')
+                Forms\Components\TextInput::make('party_size')
                     ->numeric()
                     ->minValue(1)
                     ->default(1)
                     ->required(),
-                Forms\Components\TextInput::make('duration')
-                    ->numeric()
-                    ->suffix('minutes'),
-                Forms\Components\DateTimePicker::make('created')
-                    ->label('Created At'),
+                Forms\Components\DateTimePicker::make('booked_at')
+                    ->label('Booked At'),
             ]);
     }
 
@@ -78,14 +70,14 @@ class AmeliaBookingResource extends Resource
                 Tables\Columns\TextColumn::make('id')
                     ->label('ID')
                     ->sortable(),
-                Tables\Columns\TextColumn::make('appointment.bookingStart')
+                Tables\Columns\TextColumn::make('appointment.booking_start')
                     ->label('Appointment Date')
                     ->dateTime('Y-m-d H:i')
                     ->sortable(),
-                Tables\Columns\TextColumn::make('customer.firstName')
+                Tables\Columns\TextColumn::make('customer.first_name')
                     ->label('Customer')
-                    ->formatStateUsing(fn ($record) => 
-                        $record->customer ? trim("{$record->customer->firstName} {$record->customer->lastName}") : 'N/A'
+                    ->formatStateUsing(fn ($record) =>
+                        $record->customer ? trim("{$record->customer->first_name} {$record->customer->last_name}") : 'N/A'
                     )
                     ->searchable(),
                 Tables\Columns\TextColumn::make('customer.email')
@@ -94,40 +86,34 @@ class AmeliaBookingResource extends Resource
                 Tables\Columns\TextColumn::make('status')
                     ->badge()
                     ->color(fn (string $state): string => match ($state) {
-                        'approved' => 'success',
+                        'confirmed' => 'success',
                         'pending' => 'warning',
-                        'canceled' => 'danger',
-                        'rejected' => 'danger',
-                        'no-show' => 'gray',
-                        'waiting' => 'info',
+                        'cancelled' => 'danger',
                         default => 'gray',
                     }),
-                Tables\Columns\TextColumn::make('price')
+                Tables\Columns\TextColumn::make('total_amount')
                     ->money('USD')
                     ->sortable(),
-                Tables\Columns\TextColumn::make('persons')
+                Tables\Columns\TextColumn::make('party_size')
                     ->label('Persons')
                     ->sortable(),
-                Tables\Columns\TextColumn::make('created')
-                    ->label('Created')
+                Tables\Columns\TextColumn::make('booked_at')
+                    ->label('Booked')
                     ->dateTime('Y-m-d H:i')
                     ->sortable(),
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('status')
                     ->options([
-                        'approved' => 'Approved',
+                        'confirmed' => 'Confirmed',
                         'pending' => 'Pending',
-                        'canceled' => 'Canceled',
-                        'rejected' => 'Rejected',
-                        'no-show' => 'No Show',
-                        'waiting' => 'Waiting',
+                        'cancelled' => 'Cancelled',
                     ]),
             ])
             ->actions([
                 \Filament\Actions\EditAction::make(),
             ])
-            ->defaultSort('created', 'desc');
+            ->defaultSort('booked_at', 'desc');
     }
 
     public static function getRelations(): array

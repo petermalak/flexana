@@ -2,63 +2,20 @@
 
 namespace App\Application\Auth;
 
-use App\Infrastructure\Persistence\Eloquent\AmeliaUserModel;
 use App\Models\Customer;
-use Illuminate\Support\Carbon;
 
+/**
+ * Resolves "Amelia" customer - now uses MySQL (Laravel) only.
+ * WordPress connection is disabled; Laravel Customer is the source of truth.
+ */
 final class AmeliaCustomerResolver
 {
     /**
-     * Resolve Amelia user from Laravel customer (use amelia_user_id or find/create by phone/email).
+     * Resolve customer for Amelia-related operations.
+     * Returns the Laravel Customer (MySQL) - no WordPress lookup.
      */
-    public function resolveAmeliaUser(Customer $laravelCustomer): ?AmeliaUserModel
+    public function resolveAmeliaUser(Customer $laravelCustomer): ?Customer
     {
-        if ($laravelCustomer->amelia_user_id) {
-            $user = AmeliaUserModel::on('wordpress')
-                ->where('type', 'customer')
-                ->find($laravelCustomer->amelia_user_id);
-            if ($user) {
-                return $user;
-            }
-        }
-
-        $ameliaUser = null;
-        if (! empty($laravelCustomer->phone)) {
-            $ameliaUser = AmeliaUserModel::on('wordpress')
-                ->where('type', 'customer')
-                ->where('phone', $laravelCustomer->phone)
-                ->first();
-        }
-        if (! $ameliaUser && ! empty($laravelCustomer->email)) {
-            $ameliaUser = AmeliaUserModel::on('wordpress')
-                ->where('type', 'customer')
-                ->where('email', $laravelCustomer->email)
-                ->first();
-        }
-
-        if ($ameliaUser) {
-            $laravelCustomer->amelia_user_id = $ameliaUser->id;
-            $laravelCustomer->save();
-
-            return $ameliaUser;
-        }
-
-        try {
-            $ameliaUser = AmeliaUserModel::on('wordpress')->create([
-                'firstName' => $laravelCustomer->first_name ?? 'Customer',
-                'lastName' => $laravelCustomer->last_name ?? null,
-                'email' => $laravelCustomer->email ?? null,
-                'phone' => $laravelCustomer->phone ?? null,
-                'type' => 'customer',
-                'status' => 'visible',
-                'created' => Carbon::now(),
-            ]);
-            $laravelCustomer->amelia_user_id = $ameliaUser->id;
-            $laravelCustomer->save();
-
-            return $ameliaUser;
-        } catch (\Throwable) {
-            return null;
-        }
+        return $laravelCustomer;
     }
 }

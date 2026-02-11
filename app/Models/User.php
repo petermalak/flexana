@@ -13,8 +13,21 @@ class User extends Authenticatable implements FilamentUser
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
     use HasFactory, HasRoles, Notifiable;
+use Illuminate\Support\Str;
 
     protected $guard_name = 'web';
+
+    /**
+     * Boot the model.
+     */
+    protected static function booted(): void
+    {
+        static::creating(function (self $user): void {
+            if (empty($user->uuid)) {
+                $user->uuid = Str::uuid()->toString();
+            }
+        });
+    }
 
     /**
      * The attributes that are mass assignable.

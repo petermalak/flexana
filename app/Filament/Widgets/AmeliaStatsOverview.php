@@ -2,10 +2,10 @@
 
 namespace App\Filament\Widgets;
 
-use App\Infrastructure\Persistence\Eloquent\AmeliaAppointmentModel;
-use App\Infrastructure\Persistence\Eloquent\AmeliaCustomerBookingModel;
-use App\Infrastructure\Persistence\Eloquent\AmeliaPaymentModel;
-use App\Infrastructure\Persistence\Eloquent\AmeliaUserModel;
+use App\Infrastructure\Persistence\Eloquent\AppointmentModel;
+use App\Infrastructure\Persistence\Eloquent\BookingModel;
+use App\Infrastructure\Persistence\Eloquent\CustomerModel;
+use App\Infrastructure\Persistence\Eloquent\PaymentModel;
 use Filament\Widgets\StatsOverviewWidget;
 use Filament\Widgets\StatsOverviewWidget\Stat;
 
@@ -16,23 +16,21 @@ class AmeliaStatsOverview extends StatsOverviewWidget
         $todayStart = now()->startOfDay();
         $todayEnd = now()->endOfDay();
 
-        $bookingsTotal = AmeliaCustomerBookingModel::query()->count();
-        $bookingsToday = AmeliaCustomerBookingModel::query()
-            ->whereBetween('created', [$todayStart, $todayEnd])
+        $bookingsTotal = BookingModel::query()->count();
+        $bookingsToday = BookingModel::query()
+            ->whereBetween('booked_at', [$todayStart, $todayEnd])
             ->count();
 
-        $appointmentsUpcoming = AmeliaAppointmentModel::query()
-            ->where('bookingStart', '>=', now())
+        $appointmentsUpcoming = AppointmentModel::query()
+            ->where('booking_start', '>=', now())
+            ->where('status', 'approved')
             ->count();
 
-        $customersTotal = AmeliaUserModel::query()
-            ->where('type', 'customer')
-            ->count();
+        $customersTotal = CustomerModel::query()->count();
 
-        // Payments table exists, but may be empty depending on gateway usage.
-        $revenueTotal = (float) AmeliaPaymentModel::query()->sum('amount');
-        $revenueToday = (float) AmeliaPaymentModel::query()
-            ->whereBetween('dateTime', [$todayStart, $todayEnd])
+        $revenueTotal = (float) PaymentModel::query()->sum('amount');
+        $revenueToday = (float) PaymentModel::query()
+            ->whereBetween('paid_at', [$todayStart, $todayEnd])
             ->sum('amount');
 
         return [
@@ -45,4 +43,3 @@ class AmeliaStatsOverview extends StatsOverviewWidget
         ];
     }
 }
-

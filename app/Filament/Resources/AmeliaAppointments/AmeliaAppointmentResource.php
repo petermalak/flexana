@@ -7,7 +7,7 @@ use App\Filament\Resources\AmeliaAppointments\Pages\EditAmeliaAppointment;
 use App\Filament\Resources\AmeliaAppointments\Pages\ListAmeliaAppointments;
 use App\Filament\Resources\AmeliaAppointments\Schemas\AmeliaAppointmentForm;
 use App\Filament\Resources\AmeliaAppointments\Tables\AmeliaAppointmentsTable;
-use App\Models\AmeliaAppointment;
+use App\Infrastructure\Persistence\Eloquent\AppointmentModel;
 use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
@@ -16,7 +16,7 @@ use Filament\Tables\Table;
 
 class AmeliaAppointmentResource extends Resource
 {
-    protected static ?string $model = AmeliaAppointment::class;
+    protected static ?string $model = AppointmentModel::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedCalendarDays;
     
