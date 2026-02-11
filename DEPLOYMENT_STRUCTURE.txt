@@ -1,0 +1,299 @@
+═══════════════════════════════════════════════════════════════════════════════
+                    FLEXANA PRODUCTION DEPLOYMENT STRUCTURE
+═══════════════════════════════════════════════════════════════════════════════
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  METHOD 1: SYMLINK (RECOMMENDED)                                            │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+Server File System:
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ /domains/admin-panel-flexana-egypt/                                         │
+│                                                                              │
+│ ├── flexana/                          ← Your Laravel Application (SECURE)  │
+│ │   ├── app/                          ← Application Code                   │
+│ │   ├── bootstrap/                    ← Bootstrap Files                    │
+│ │   ├── config/                       ← Config Files                       │
+│ │   ├── database/                     ← Migrations & Seeds                 │
+│ │   ├── public/                       ← PUBLIC FILES (Web Accessible)      │
+│ │   │   ├── index.php                 ← Laravel Entry Point ★              │
+│ │   │   ├── .htaccess                 ← URL Rewriting                      │
+│ │   │   ├── css/                      ← Compiled CSS                       │
+│ │   │   ├── js/                       ← Compiled JavaScript                │
+│ │   │   ├── images/                   ← Public Images                      │
+│ │   │   ├── fonts/                    ← Web Fonts                          │
+│ │   │   └── favicon.ico                                                     │
+│ │   ├── resources/                    ← Raw Assets & Views                 │
+│ │   ├── routes/                       ← Route Definitions                  │
+│ │   ├── storage/                      ← Logs, Cache, Uploads (PRIVATE!)    │
+│ │   ├── vendor/                       ← PHP Dependencies (PRIVATE!)        │
+│ │   ├── .env                          ← Environment Config (PRIVATE!)      │
+│ │   ├── artisan                       ← CLI Tool                           │
+│ │   ├── composer.json                                                       │
+│ │   └── package.json                                                        │
+│ │                                                                            │
+│ └── public_html ─────────────────────┐                                      │
+│     (SYMLINK)                        │                                      │
+│                                      │                                      │
+│     Points to: flexana/public/       │  ← Domain Points Here               │
+│                                      │     (Web Server Root)                │
+└──────────────────────────────────────┴──────────────────────────────────────┘
+
+Create Symlink:
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ $ cd /domains/admin-panel-flexana-egypt/                                    │
+│ $ rm -rf public_html                                                        │
+│ $ ln -s /domains/admin-panel-flexana-egypt/flexana/public public_html      │
+│ $ ls -la public_html                                                        │
+│   → public_html -> /domains/admin-panel-flexana-egypt/flexana/public       │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+Request Flow:
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│  User Browser                                                                │
+│       │                                                                      │
+│       ↓                                                                      │
+│  https://admin-panel-flexana-egypt.com                                      │
+│       │                                                                      │
+│       ↓                                                                      │
+│  Web Server (Apache/Nginx)                                                  │
+│       │                                                                      │
+│       ↓                                                                      │
+│  Document Root: /domains/admin-panel-flexana-egypt/public_html/             │
+│       │                                                                      │
+│       ↓                                                                      │
+│  Follows Symlink to: /domains/admin-panel-flexana-egypt/flexana/public/    │
+│       │                                                                      │
+│       ↓                                                                      │
+│  index.php loads Laravel                                                    │
+│       │                                                                      │
+│       ↓                                                                      │
+│  Laravel processes request                                                  │
+│       │                                                                      │
+│       ↓                                                                      │
+│  Response sent to browser                                                   │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  METHOD 2: MOVE PUBLIC CONTENTS (If symlinks don't work)                   │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+Server File System:
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ /domains/admin-panel-flexana-egypt/                                         │
+│                                                                              │
+│ ├── flexana/                          ← Your Laravel Application (SECURE)  │
+│ │   ├── app/                          ← Application Code                   │
+│ │   ├── bootstrap/                    ← Bootstrap Files                    │
+│ │   ├── config/                       ← Config Files                       │
+│ │   ├── database/                     ← Migrations & Seeds                 │
+│ │   ├── public/                       ← Original Public (for reference)    │
+│ │   ├── resources/                    ← Raw Assets & Views                 │
+│ │   ├── routes/                       ← Route Definitions                  │
+│ │   ├── storage/                      ← Logs, Cache, Uploads (PRIVATE!)    │
+│ │   ├── vendor/                       ← PHP Dependencies (PRIVATE!)        │
+│ │   └── .env                          ← Environment Config (PRIVATE!)      │
+│ │                                                                            │
+│ └── public_html/                      ← COPY of public/ (MODIFIED)         │
+│     ├── index.php                     ← MODIFIED to point to ../flexana/   │
+│     ├── .htaccess                     ← Copied from public/                │
+│     ├── css/                          ← Copied from public/                │
+│     ├── js/                           ← Copied from public/                │
+│     ├── images/                       ← Copied from public/                │
+│     └── fonts/                        ← Copied from public/                │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+Setup Commands:
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ $ cd /domains/admin-panel-flexana-egypt/                                    │
+│ $ rm -rf public_html                                                        │
+│ $ cp -r flexana/public public_html                                          │
+│ $ nano public_html/index.php  # Edit paths                                  │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+Modified index.php:
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ BEFORE:                              AFTER:                                 │
+│ ________________________________     _____________________________________  │
+│                                                                              │
+│ __DIR__.'/../storage/...'            __DIR__.'/../flexana/storage/...'     │
+│ __DIR__.'/../vendor/...'             __DIR__.'/../flexana/vendor/...'      │
+│ __DIR__.'/../bootstrap/...'          __DIR__.'/../flexana/bootstrap/...'   │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+Request Flow:
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│  User Browser                                                                │
+│       │                                                                      │
+│       ↓                                                                      │
+│  https://admin-panel-flexana-egypt.com                                      │
+│       │                                                                      │
+│       ↓                                                                      │
+│  Web Server (Apache/Nginx)                                                  │
+│       │                                                                      │
+│       ↓                                                                      │
+│  Document Root: /domains/admin-panel-flexana-egypt/public_html/             │
+│       │                                                                      │
+│       ↓                                                                      │
+│  public_html/index.php (modified paths)                                     │
+│       │                                                                      │
+│       ↓                                                                      │
+│  Loads: ../flexana/vendor/autoload.php                                      │
+│  Loads: ../flexana/bootstrap/app.php                                        │
+│       │                                                                      │
+│       ↓                                                                      │
+│  Laravel processes request                                                  │
+│       │                                                                      │
+│       ↓                                                                      │
+│  Response sent to browser                                                   │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  SECURITY MODEL: What's Public vs Private                                   │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+PUBLIC (Web Accessible via public_html):
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ ✅ index.php              - Laravel entry point                             │
+│ ✅ .htaccess              - URL rewriting rules                             │
+│ ✅ css/                   - Compiled stylesheets                            │
+│ ✅ js/                    - Compiled JavaScript                             │
+│ ✅ images/                - Public images                                   │
+│ ✅ fonts/                 - Web fonts                                       │
+│ ✅ robots.txt             - SEO instructions                                │
+│ ✅ favicon.ico            - Site icon                                       │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+PRIVATE (MUST NOT be web accessible):
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 🔒 .env                   - SECRETS & PASSWORDS                             │
+│ 🔒 vendor/                - PHP Dependencies (security risk)                │
+│ 🔒 storage/               - Logs, cache, user uploads                       │
+│ 🔒 app/                   - Application source code                         │
+│ 🔒 config/                - Configuration files                             │
+│ 🔒 database/              - Migrations & seeds                              │
+│ 🔒 routes/                - Route definitions                               │
+│ 🔒 bootstrap/cache/       - Application cache                               │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+Security Test (these should return 404):
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ ❌ https://admin-panel-flexana-egypt.com/.env                               │
+│ ❌ https://admin-panel-flexana-egypt.com/vendor/                            │
+│ ❌ https://admin-panel-flexana-egypt.com/storage/                           │
+│ ❌ https://admin-panel-flexana-egypt.com/app/                               │
+│ ❌ https://admin-panel-flexana-egypt.com/config/                            │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  DEPLOYMENT WORKFLOW                                                         │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+Step 1: Upload Application
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│  Local Machine                    →    Production Server                    │
+│                                                                              │
+│  Git Repository                        /domains/admin-panel-flexana-egypt/  │
+│  or ZIP Archive                              └── flexana/                   │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+Step 2: Install Dependencies
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│  composer install --no-dev    →    vendor/ directory created               │
+│  npm ci                       →    node_modules/ created                   │
+│  npm run build                →    public/css & public/js created          │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+Step 3: Configure Environment
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│  .env.example                 →    .env (with production values)           │
+│  php artisan key:generate     →    APP_KEY generated                       │
+│  php artisan migrate          →    Database tables created                 │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+Step 4: Link Public Folder
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│  public_html/                 →    Symlink to flexana/public/              │
+│                                    OR Copy with modified index.php          │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+Step 5: Optimize & Go Live
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│  php artisan optimize         →    Caches created                          │
+│  chmod permissions            →    Storage writable                        │
+│  Test in browser              →    Site live! 🚀                           │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  COMPARISON: Symlink vs Move Public                                         │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────┬──────────────────────┬──────────────────────────────┐
+│ Feature             │ Symlink (Method 1)   │ Move Public (Method 2)       │
+├─────────────────────┼──────────────────────┼──────────────────────────────┤
+│ Server Requirements │ Needs symlink support│ Works anywhere               │
+│ Security            │ ⭐⭐⭐⭐⭐ Excellent     │ ⭐⭐⭐⭐ Good                  │
+│ Ease of Setup       │ ⭐⭐⭐⭐⭐ Very Easy     │ ⭐⭐⭐ Medium                  │
+│ Maintenance         │ ⭐⭐⭐⭐⭐ Minimal       │ ⭐⭐⭐ Regular                 │
+│ Updates             │ Just pull code       │ Copy assets after build      │
+│ File Duplication    │ None                 │ Yes (public files)           │
+│ Recommended For     │ VPS, Dedicated       │ Shared hosting               │
+└─────────────────────┴──────────────────────┴──────────────────────────────┘
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  QUICK COMMANDS REFERENCE                                                    │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+Navigate to App:
+$ cd /domains/admin-panel-flexana-egypt/flexana
+
+Check Application:
+$ php artisan about
+
+View Routes:
+$ php artisan route:list
+
+Check Logs:
+$ tail -f storage/logs/laravel.log
+
+Clear Caches:
+$ php artisan optimize:clear
+
+Optimize App:
+$ php artisan optimize
+
+Run Migrations:
+$ php artisan migrate --force
+
+Create Admin:
+$ php artisan make:filament-user
+
+Verify Structure:
+$ ls -la /domains/admin-panel-flexana-egypt/
+$ ls -la /domains/admin-panel-flexana-egypt/public_html
+
+
+═══════════════════════════════════════════════════════════════════════════════
+                              END OF DIAGRAM
+═══════════════════════════════════════════════════════════════════════════════

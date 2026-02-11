@@ -1,0 +1,8 @@
+# Root .htaccess file for Laravel deployment
+# This file redirects all requests to the public folder
+# Place this in the root of your Laravel application if you cannot use symlinks
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^(.*)$ public/$1 [L]
+</IfModule>
