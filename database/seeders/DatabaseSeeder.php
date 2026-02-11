@@ -16,16 +16,8 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // Seed a default admin user for login
-        // Note: password is set as plain text because User model has 'password' => 'hashed' cast
-        User::query()->updateOrCreate(
-            ['email' => 'admin@example.com'],
-            [
-                'uuid' => Str::uuid()->toString(),
-                'firebase_uid' => 'admin-seeder-user',
-                'name' => 'Admin User',
-                'password' => 'password123',
-            ],
-        );
+        $this->call([
+            AdminUserSeeder::class,
+        ]);
     }
 }
