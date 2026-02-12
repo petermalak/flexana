@@ -10,6 +10,7 @@ use App\Infrastructure\Persistence\Eloquent\StaffModel;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Log;
 
 class MobileSessionController extends Controller
 {
@@ -29,8 +30,16 @@ class MobileSessionController extends Controller
             ->where('status', 'approved');
 
         if ($date) {
-            $dateCarbon = Carbon::parse($date);
-            $query->whereDate('booking_start', $dateCarbon->format('Y-m-d'));
+            try {
+                $dateCarbon = Carbon::parse($date);
+                // Use whereBetween to handle timezone correctly - filter for the entire day
+                $startOfDay = $dateCarbon->copy()->startOfDay();
+                $endOfDay = $dateCarbon->copy()->endOfDay();
+                $query->whereBetween('booking_start', [$startOfDay, $endOfDay]);
+            } catch (\Exception $e) {
+                // Invalid date format - ignore the filter
+                Log::warning('Invalid date filter in sessions API: ' . $date);
+            }
         }
         if ($serviceID) {
             $query->where('service_id', $serviceID);

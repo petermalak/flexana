@@ -38,12 +38,31 @@ class MobileBookingController extends Controller
             $service = $appointment?->service ?? $booking->service;
             $provider = $appointment?->provider;
 
+            $sessionDate = null;
+            $sessionTime = null;
+            $sessionStart = null;
+            $sessionEnd = null;
+
+            if ($appointment && $appointment->booking_start) {
+                $sessionStart = Carbon::parse($appointment->booking_start)->toIso8601String();
+                $sessionDate = Carbon::parse($appointment->booking_start)->format('Y-m-d');
+                $sessionTime = Carbon::parse($appointment->booking_start)->format('H:i:s');
+            }
+
+            if ($appointment && $appointment->booking_end) {
+                $sessionEnd = Carbon::parse($appointment->booking_end)->toIso8601String();
+            }
+
             return [
                 'id' => (string) $booking->id,
                 'sessionID' => $booking->appointment_id ? (string) $booking->appointment_id : null,
                 'serviceName' => $service?->name,
                 'instructorName' => $provider?->name,
                 'bookedAt' => $booking->booked_at?->toIso8601String(),
+                'sessionDate' => $sessionDate,
+                'sessionTime' => $sessionTime,
+                'sessionStart' => $sessionStart,
+                'sessionEnd' => $sessionEnd,
                 'status' => $booking->status,
                 'paymentStatus' => $booking->payment_status,
                 'partySize' => $booking->party_size,
@@ -66,7 +85,9 @@ class MobileBookingController extends Controller
 
     /**
      * Book a session (appointment). Uses authenticated customer.
-     * Body: { sessionID, persons (optional, default 1) [, promoCode ] }
+     * Body: { sessionID, persons (optional, default 1) [, promoCode, isDropIn ] }
+     * isDropIn: boolean flag to clarify whether this booking is a drop-in
+     *           (true) or taken from the customer's package sessions (false).
      */
     public function store(Request $request): JsonResponse
     {
@@ -74,6 +95,7 @@ class MobileBookingController extends Controller
             'sessionID' => 'required|integer',
             'persons' => 'nullable|integer|min:1|max:20',
             'promoCode' => 'nullable|string|max:64',
+            'isDropIn' => 'nullable|boolean',
         ]);
 
         if ($validator->fails()) {
@@ -88,6 +110,7 @@ class MobileBookingController extends Controller
         $sessionID = (int) $data['sessionID'];
         $persons = (int) ($data['persons'] ?? 1);
         $promoCode = $data['promoCode'] ?? null;
+        $isDropIn = array_key_exists('isDropIn', $data) ? (bool) $data['isDropIn'] : true;
 
         /** @var Customer $customer */
         $customer = $request->user();
@@ -159,6 +182,11 @@ class MobileBookingController extends Controller
                 'balance_amount' => $totalPrice,
                 'currency' => 'USD',
                 'channel' => 'mobile',
+                // Store source flag in answers JSON so we know if this booking
+                // was a drop-in or taken from a package.
+                'answers' => [
+                    'isDropIn' => $isDropIn,
+                ],
                 'booked_at' => $appointment->booking_start,
             ]);
 

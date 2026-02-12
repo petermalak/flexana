@@ -24,7 +24,7 @@ final class PhoneVerificationService
      *
      * @return array{success: bool, message: string, code?: string}
      */
-    public function sendSignupCode(string $phone, ?string $firstName = null, ?string $lastName = null, ?string $email = null): array
+    public function sendSignupCode(string $phone, ?string $firstName = null, ?string $lastName = null, ?string $email = null, ?string $profileImagePath = null): array
     {
         $phone = $this->normalizePhone($phone);
         if (empty($phone)) {
@@ -58,6 +58,9 @@ final class PhoneVerificationService
         }
         if ($email !== null) {
             $customer->email = $email;
+        }
+        if ($profileImagePath !== null) {
+            $customer->profile_image = $profileImagePath;
         }
         $customer->save();
 
@@ -233,6 +236,136 @@ final class PhoneVerificationService
             ->delete();
 
         return ['success' => true, 'message' => 'Verified.', 'phone' => $phone];
+    }
+
+    /**
+     * Send password reset OTP code to phone. Throttles by phone.
+     *
+     * @return array{success: bool, message: string, code?: string}
+     */
+    public function sendPasswordResetCode(string $phone): array
+    {
+        $phone = $this->normalizePhone($phone);
+        if (empty($phone)) {
+            return ['success' => false, 'message' => 'Invalid phone number.'];
+        }
+
+        $customer = Customer::query()->where('phone', $phone)->first();
+        if (! $customer) {
+            // Don't reveal if phone exists or not for security
+            return ['success' => true, 'message' => 'If that phone number exists, we have sent a password reset code.'];
+        }
+
+        $useTwilioVerify = config('sms.driver') === 'twilio' && ! empty(config('sms.twilio.verify_service_sid'));
+
+        $throttle = DB::table('phone_verification_codes')
+            ->where('phone', $phone)
+            ->where('purpose', 'password_reset')
+            ->where('created_at', '>=', Carbon::now()->subSeconds(self::THROTTLE_SECONDS))
+            ->exists();
+
+        if ($throttle) {
+            return ['success' => false, 'message' => 'Please wait before requesting another code.'];
+        }
+
+        if ($useTwilioVerify) {
+            if (! $this->sms->sendCode($phone, '')) {
+                return ['success' => false, 'message' => 'Verification code could not be sent. Please check your number and try again.'];
+            }
+            // Throttle: insert placeholder so we don't spam Twilio
+            DB::table('phone_verification_codes')->insert([
+                'phone' => $phone,
+                'code' => '',
+                'purpose' => 'password_reset',
+                'customer_id' => $customer->id,
+                'expires_at' => Carbon::now()->addMinutes(self::CODE_TTL_MINUTES),
+                'created_at' => Carbon::now(),
+            ]);
+
+            return ['success' => true, 'message' => 'If that phone number exists, we have sent a password reset code.'];
+        }
+
+        $code = $this->generateCode();
+        $expiresAt = Carbon::now()->addMinutes(self::CODE_TTL_MINUTES);
+
+        DB::table('phone_verification_codes')->insert([
+            'phone' => $phone,
+            'code' => $code,
+            'purpose' => 'password_reset',
+            'customer_id' => $customer->id,
+            'expires_at' => $expiresAt,
+            'created_at' => Carbon::now(),
+        ]);
+
+        if (! $this->sms->sendCode($phone, $code)) {
+            return ['success' => false, 'message' => 'Verification code could not be sent. Please check your number and try again.'];
+        }
+
+        $response = ['success' => true, 'message' => 'If that phone number exists, we have sent a password reset code.'];
+        if (app()->environment('local', 'testing')) {
+            $response['code'] = $code;
+        }
+
+        return $response;
+    }
+
+    /**
+     * Verify password reset code. Returns success and customer if valid.
+     *
+     * @return array{success: bool, message: string, customer?: Customer}
+     */
+    public function verifyPasswordResetCode(string $phone, string $code): array
+    {
+        $phone = $this->normalizePhone($phone);
+        if (empty($phone)) {
+            return ['success' => false, 'message' => 'Invalid phone number.'];
+        }
+
+        $providerResult = $this->sms->checkVerification($phone, $code);
+        if ($providerResult === true) {
+            $customer = Customer::query()->where('phone', $phone)->first();
+            if (! $customer) {
+                return ['success' => false, 'message' => 'Customer not found.'];
+            }
+
+            // Delete used code
+            DB::table('phone_verification_codes')
+                ->where('phone', $phone)
+                ->where('purpose', 'password_reset')
+                ->where('customer_id', $customer->id)
+                ->delete();
+
+            return ['success' => true, 'message' => 'Code verified.', 'customer' => $customer];
+        }
+        if ($providerResult === false) {
+            return ['success' => false, 'message' => 'Invalid or expired code.'];
+        }
+
+        $row = DB::table('phone_verification_codes')
+            ->where('phone', $phone)
+            ->where('code', $code)
+            ->where('purpose', 'password_reset')
+            ->where('expires_at', '>', Carbon::now())
+            ->orderByDesc('created_at')
+            ->first();
+
+        if (! $row) {
+            return ['success' => false, 'message' => 'Invalid or expired code.'];
+        }
+
+        $customer = Customer::query()->where('phone', $phone)->first();
+        if (! $customer) {
+            return ['success' => false, 'message' => 'Customer not found.'];
+        }
+
+        // Delete used code
+        DB::table('phone_verification_codes')
+            ->where('phone', $phone)
+            ->where('code', $code)
+            ->where('purpose', 'password_reset')
+            ->delete();
+
+        return ['success' => true, 'message' => 'Code verified.', 'customer' => $customer];
     }
 
     private function normalizePhone(string $phone): string

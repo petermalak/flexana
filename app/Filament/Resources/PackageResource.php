@@ -40,6 +40,15 @@ class PackageResource extends Resource
                             ->searchable()
                             ->preload()
                             ->required(),
+                        Forms\Components\Select::make('service_type')
+                            ->label('Service Type (Category)')
+                            ->options([
+                                'Yoga' => 'Yoga',
+                                'Reformer Pilates' => 'Reformer Pilates',
+                            ])
+                            ->searchable()
+                            ->required()
+                            ->helperText('Select the category for this package'),
                     ])->columns(2),
                 Components\Section::make('Sessions & Pricing')
                     ->schema([
@@ -90,6 +99,16 @@ class PackageResource extends Resource
                     ->sortable(),
                 Tables\Columns\TextColumn::make('classType.name')
                     ->label('Class Type')
+                    ->sortable()
+                    ->toggleable(),
+                Tables\Columns\TextColumn::make('service_type')
+                    ->label('Service Type')
+                    ->badge()
+                    ->color(fn (?string $state): string => match ($state) {
+                        'Yoga' => 'success',
+                        'Reformer Pilates' => 'info',
+                        default => 'gray',
+                    })
                     ->sortable()
                     ->toggleable(),
                 Tables\Columns\TextColumn::make('total_sessions')

@@ -18,12 +18,14 @@ class PackageModel extends Model
         'uuid',
         'amelia_package_id',
         'class_type_id',
+        'service_type',
         'title',
         'description',
         'total_sessions',
         'discount',
         'price',
         'expiry',
+        'package_duration',
         'status',
     ];
 

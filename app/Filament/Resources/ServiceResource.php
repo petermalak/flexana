@@ -59,6 +59,14 @@ class ServiceResource extends Resource
                     ])->columns(4),
                 Components\Section::make('Status')
                     ->schema([
+                        Forms\Components\Select::make('category_id')
+                            ->label('Service Type (Category)')
+                            ->options([
+                                'Yoga' => 'Yoga',
+                                'Reformer Pilates' => 'Reformer Pilates',
+                            ])
+                            ->searchable()
+                            ->helperText('Select the category for this service'),
                         Forms\Components\Select::make('status')
                             ->options([
                                 'visible' => 'Visible',
@@ -67,7 +75,7 @@ class ServiceResource extends Resource
                             ->searchable()
                             ->default('visible')
                             ->required(),
-                    ]),
+                    ])->columns(2),
             ]);
     }
 
@@ -91,6 +99,16 @@ class ServiceResource extends Resource
                 Tables\Columns\TextColumn::make('max_capacity')
                     ->label('Max')
                     ->toggleable(),
+                Tables\Columns\TextColumn::make('category_id')
+                    ->label('Category')
+                    ->badge()
+                    ->color(fn (?string $state): string => match ($state) {
+                        'Yoga' => 'success',
+                        'Reformer Pilates' => 'info',
+                        default => 'gray',
+                    })
+                    ->sortable()
+                    ->toggleable(),
                 Tables\Columns\BadgeColumn::make('status')
                     ->colors([
                         'success' => 'visible',
@@ -107,6 +125,12 @@ class ServiceResource extends Resource
                     ->options([
                         'visible' => 'Visible',
                         'hidden' => 'Hidden',
+                    ]),
+                Tables\Filters\SelectFilter::make('category_id')
+                    ->label('Service Type')
+                    ->options([
+                        'Yoga' => 'Yoga',
+                        'Reformer Pilates' => 'Reformer Pilates',
                     ]),
             ])
             ->actions([

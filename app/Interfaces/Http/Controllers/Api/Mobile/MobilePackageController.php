@@ -39,6 +39,34 @@ class MobilePackageController extends Controller
                 $expirationMonths = (int) max(0, Carbon::now()->diffInMonths($expiry, false));
             }
 
+            // Get serviceType from services table - determine category based on service names
+            $serviceType = null;
+            if ($package->services->isNotEmpty()) {
+                $yogaCount = 0;
+                $reformerPilatesCount = 0;
+
+                foreach ($package->services as $service) {
+                    $serviceName = strtolower($service->name ?? '');
+                    if (str_contains($serviceName, 'reformer pilates') || str_contains($serviceName, 'reform pilates')) {
+                        $reformerPilatesCount++;
+                    } elseif (str_contains($serviceName, 'yoga')) {
+                        $yogaCount++;
+                    }
+                }
+
+                // Determine serviceType based on majority or first match
+                if ($reformerPilatesCount > 0 && $reformerPilatesCount >= $yogaCount) {
+                    $serviceType = 'Reformer Pilates';
+                } elseif ($yogaCount > 0) {
+                    $serviceType = 'Yoga';
+                }
+            }
+
+            // Fallback to classType or service_type field if no services match
+            if (!$serviceType) {
+                $serviceType = $package->classType?->name ?? $package->service_type ?? null;
+            }
+
             return [
                 'id' => (int) $package->id,
                 'name' => $package->title ?? '',
@@ -46,6 +74,8 @@ class MobilePackageController extends Controller
                 'sessions' => $sessions ?: 1,
                 'description' => $package->description ?? '',
                 'expirationMonths' => $expirationMonths,
+                'serviceType' => $serviceType,
+                'packageDuration' => $package->package_duration,
             ];
         });
 

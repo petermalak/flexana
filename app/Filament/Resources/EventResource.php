@@ -49,8 +49,14 @@ class EventResource extends Resource
                             ->searchable()
                             ->default('draft')
                             ->required(),
-                        Forms\Components\TextInput::make('category')
-                            ->maxLength(120),
+                        Forms\Components\Select::make('category')
+                            ->label('Service Type (Category)')
+                            ->options([
+                                'Yoga' => 'Yoga',
+                                'Reformer Pilates' => 'Reformer Pilates',
+                            ])
+                            ->searchable()
+                            ->helperText('Select the category for this session'),
                         Forms\Components\TextInput::make('timezone')
                             ->default('UTC')
                             ->maxLength(60)
@@ -137,6 +143,12 @@ class EventResource extends Resource
                         'scheduled' => 'Scheduled',
                         'published' => 'Published',
                         'archived' => 'Archived',
+                    ]),
+                Tables\Filters\SelectFilter::make('category')
+                    ->label('Service Type')
+                    ->options([
+                        'Yoga' => 'Yoga',
+                        'Reformer Pilates' => 'Reformer Pilates',
                     ]),
             ])
             ->actions([

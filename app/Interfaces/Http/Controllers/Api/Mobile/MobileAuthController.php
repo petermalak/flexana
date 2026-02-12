@@ -9,7 +9,7 @@ use App\Models\Customer;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Password;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rules\Password as PasswordRule;
 
@@ -72,8 +72,9 @@ class MobileAuthController extends Controller
 
     /**
      * POST /api/v1/auth/signup
-     * Body: { phone [, firstName, lastName, email ] }
+     * Body: { phone [, firstName, lastName, email, profileImage ] }
      * Pure backend OTP: we send a 6-digit code via SMS (Twilio/log), then the app calls POST /auth/verify with phone + code.
+     * profileImage: base64 encoded image string or multipart/form-data file upload
      */
     public function signup(Request $request): JsonResponse
     {
@@ -82,6 +83,7 @@ class MobileAuthController extends Controller
             'firstName' => 'nullable|string|max:100',
             'lastName' => 'nullable|string|max:100',
             'email' => 'nullable|email',
+            'profileImage' => $this->profileImageValidationRules($request),
         ]);
 
         if ($validator->fails()) {
@@ -93,13 +95,23 @@ class MobileAuthController extends Controller
         }
 
         $data = $validator->validated();
+        $profileImagePath = null;
+
+        // Handle image upload if provided
+        if ($request->hasFile('profileImage')) {
+            $profileImagePath = $request->file('profileImage')->store('profiles', 'public');
+        } elseif ($request->has('profileImage') && !empty($request->input('profileImage'))) {
+            // Handle base64 encoded image
+            $profileImagePath = $this->storeBase64Image($request->input('profileImage'), 'profiles');
+        }
 
         // Backend OTP only: we send the SMS, app calls POST /auth/verify
         $result = $this->verification->sendSignupCode(
             $data['phone'],
             $data['firstName'] ?? null,
             $data['lastName'] ?? null,
-            $data['email'] ?? null
+            $data['email'] ?? null,
+            $profileImagePath
         );
 
         if (! $result['success']) {
@@ -125,8 +137,9 @@ class MobileAuthController extends Controller
 
     /**
      * POST /api/v1/auth/verify
-     * Body: { phone, code [, password ] }
+     * Body: { phone, code [, password, profileImage ] }
      * Verifies OTP. If password provided, sets it (for new signups). Returns token + customer.
+     * profileImage: base64 encoded image string or multipart/form-data file upload
      */
     public function verify(Request $request): JsonResponse
     {
@@ -134,6 +147,7 @@ class MobileAuthController extends Controller
             'phone' => 'required|string|max:20',
             'code' => 'required|string|size:6',
             'password' => ['nullable', 'string', 'confirmed', PasswordRule::min(8)],
+            'profileImage' => $this->profileImageValidationRules($request),
             'fcmToken' => 'nullable|string|max:500',
             'platform' => 'nullable|string|in:android,ios',
             'deviceId' => 'nullable|string|max:255',
@@ -161,8 +175,24 @@ class MobileAuthController extends Controller
         $customer = $result['customer'];
         if (! empty($data['password'])) {
             $customer->password = Hash::make($data['password']);
-            $customer->save();
         }
+
+        // Handle image upload if provided
+        if ($request->hasFile('profileImage')) {
+            // Delete old image if exists
+            if ($customer->profile_image) {
+                Storage::disk('public')->delete($customer->profile_image);
+            }
+            $customer->profile_image = $request->file('profileImage')->store('profiles', 'public');
+        } elseif ($request->has('profileImage') && !empty($request->input('profileImage'))) {
+            // Handle base64 encoded image
+            if ($customer->profile_image) {
+                Storage::disk('public')->delete($customer->profile_image);
+            }
+            $customer->profile_image = $this->storeBase64Image($request->input('profileImage'), 'profiles');
+        }
+
+        $customer->save();
 
         $token = $customer->createToken('mobile')->plainTextToken;
 
@@ -185,13 +215,13 @@ class MobileAuthController extends Controller
 
     /**
      * POST /api/v1/auth/forgot-password
-     * Body: { email }
-     * Sends password reset link to customer's email.
+     * Body: { phone }
+     * Sends password reset OTP code to customer's phone via SMS.
      */
     public function forgotPassword(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
-            'email' => 'required|email',
+            'phone' => 'required|string|max:20',
         ]);
 
         if ($validator->fails()) {
@@ -202,32 +232,38 @@ class MobileAuthController extends Controller
             ], 422);
         }
 
-        $status = Password::broker('customers')->sendResetLink(
-            $request->only('email')
-        );
+        $result = $this->verification->sendPasswordResetCode($validator->validated()['phone']);
 
-        if ($status === Password::RESET_LINK_SENT) {
+        if (! $result['success']) {
             return response()->json([
-                'success' => true,
-                'message' => 'If that email exists, we have sent a password reset link.',
-            ], 200);
+                'success' => false,
+                'message' => $result['message'],
+            ], 400);
         }
 
-        return response()->json([
+        $response = [
             'success' => true,
-            'message' => 'If that email exists, we have sent a password reset link.',
-        ], 200);
+            'message' => $result['message'],
+        ];
+
+        // Include code in development/testing environments
+        if (app()->environment('local', 'testing') && isset($result['code'])) {
+            $response['code'] = $result['code'];
+        }
+
+        return response()->json($response, 200);
     }
 
     /**
      * POST /api/v1/auth/reset-password
-     * Body: { email, token, password, password_confirmation }
+     * Body: { phone, code, password, password_confirmation }
+     * Verifies the OTP code sent to phone and resets the password.
      */
     public function resetPassword(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
-            'email' => 'required|email',
-            'token' => 'required|string',
+            'phone' => 'required|string|max:20',
+            'code' => 'required|string|size:6',
             'password' => ['required', 'confirmed', PasswordRule::min(8)],
         ]);
 
@@ -239,25 +275,24 @@ class MobileAuthController extends Controller
             ], 422);
         }
 
-        $status = Password::broker('customers')->reset(
-            $request->only('email', 'password', 'password_confirmation', 'token'),
-            function ($customer, $password) {
-                $customer->forceFill([
-                    'password' => Hash::make($password),
-                ])->save();
-            }
-        );
+        $data = $validator->validated();
+        $result = $this->verification->verifyPasswordResetCode($data['phone'], $data['code']);
 
-        if ($status !== Password::PASSWORD_RESET) {
+        if (! $result['success']) {
             return response()->json([
                 'success' => false,
-                'message' => 'Invalid or expired reset token.',
+                'message' => $result['message'],
             ], 400);
         }
 
+        /** @var \App\Models\Customer $customer */
+        $customer = $result['customer'];
+        $customer->password = Hash::make($data['password']);
+        $customer->save();
+
         return response()->json([
             'success' => true,
-            'message' => 'Password has been reset.',
+            'message' => 'Password has been reset successfully.',
         ], 200);
     }
 
@@ -288,6 +323,7 @@ class MobileAuthController extends Controller
     /**
      * PUT /api/v1/auth/me
      * To change phone: send new phone + phoneChangeCode (from send-phone-change-code).
+     * To update profile image: send profileImage (file upload or base64 string).
      */
     public function updateMe(Request $request): JsonResponse
     {
@@ -297,6 +333,7 @@ class MobileAuthController extends Controller
             'email' => 'nullable|email',
             'phone' => 'nullable|string|max:20',
             'phoneChangeCode' => 'nullable|string|size:6',
+            'profileImage' => $this->profileImageValidationRules($request),
         ]);
 
         if ($validator->fails()) {
@@ -341,6 +378,22 @@ class MobileAuthController extends Controller
         if (array_key_exists('email', $data)) {
             $customer->email = $data['email'];
         }
+
+        // Handle image upload if provided
+        if ($request->hasFile('profileImage')) {
+            // Delete old image if exists
+            if ($customer->profile_image) {
+                Storage::disk('public')->delete($customer->profile_image);
+            }
+            $customer->profile_image = $request->file('profileImage')->store('profiles', 'public');
+        } elseif ($request->has('profileImage') && !empty($request->input('profileImage'))) {
+            // Handle base64 encoded image
+            if ($customer->profile_image) {
+                Storage::disk('public')->delete($customer->profile_image);
+            }
+            $customer->profile_image = $this->storeBase64Image($request->input('profileImage'), 'profiles');
+        }
+
         $customer->save();
 
         return response()->json([
@@ -501,6 +554,11 @@ class MobileAuthController extends Controller
             ->where('status', 'active')
             ->sum('remaining_sessions');
 
+        $profileImageUrl = null;
+        if ($customer->profile_image) {
+            $profileImageUrl = Storage::disk('public')->url($customer->profile_image);
+        }
+
         return [
             'id' => (string) $customer->id,
             'uid' => $customer->uid,
@@ -508,9 +566,63 @@ class MobileAuthController extends Controller
             'lastName' => $customer->last_name,
             'email' => $customer->email,
             'phone' => $customer->phone,
+            'profileImage' => $profileImageUrl,
             'phoneVerifiedAt' => $customer->phone_verified_at?->toIso8601String(),
             'emailVerifiedAt' => $customer->email_verified_at?->toIso8601String(),
             'remainingSessions' => $remainingSessions,
         ];
+    }
+
+    /**
+     * Store base64 encoded image and return the storage path.
+     */
+    /**
+     * Validation rules for profileImage: file upload (image|mimes|max 5MB) or base64 string (string|max length ~7MB chars).
+     */
+    private function profileImageValidationRules(Request $request): array
+    {
+        $rules = ['nullable'];
+        if ($request->hasFile('profileImage')) {
+            $rules[] = 'image';
+            $rules[] = 'mimes:jpeg,png,jpg,gif';
+            $rules[] = 'max:5120'; // 5MB in KB
+        } else {
+            // Base64 string: 5MB binary ≈ 6.67MB base64; allow up to 7MB characters
+            $rules[] = 'string';
+            $rules[] = 'max:' . (7 * 1024 * 1024);
+        }
+        return $rules;
+    }
+
+    private function storeBase64Image(string $base64String, string $directory = 'profiles'): ?string
+    {
+        try {
+            // Check if it's a valid base64 image string
+            if (preg_match('/^data:image\/(\w+);base64,/', $base64String, $matches)) {
+                $imageData = substr($base64String, strpos($base64String, ',') + 1);
+                $imageType = $matches[1];
+            } else {
+                // Assume it's raw base64
+                $imageData = $base64String;
+                $imageType = 'png'; // default
+            }
+
+            $decodedImage = base64_decode($imageData, true);
+            if ($decodedImage === false) {
+                return null;
+            }
+
+            // Generate unique filename
+            $filename = uniqid('profile_', true) . '.' . $imageType;
+            $path = $directory . '/' . $filename;
+
+            // Store the image
+            Storage::disk('public')->put($path, $decodedImage);
+
+            return $path;
+        } catch (\Exception $e) {
+            \Log::error('Failed to store base64 image: ' . $e->getMessage());
+            return null;
+        }
     }
 }

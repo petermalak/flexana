@@ -2,7 +2,7 @@
 	"info": {
 		"_postman_id": "flexana-mobile-api-v1",
 		"name": "Flexana Mobile API (v1)",
-		"description": "Flexana mobile app API. Auth: Login (phone+password). Signup: POST /auth/signup (phone [+ optional profile]) -> backend sends OTP via SMS -> user enters code (+ optional password) -> POST /auth/verify -> token. Profile: me, update, phone change, change password, delete account, logout. Schedule: sessions, book, cancel, appointments history. Packages: offers, purchase. Base: /api/v1. Variables: base_url, bearer_token.",
+		"description": "Flexana mobile app API. Auth: Login (phone+password). Signup: POST /auth/signup (phone [+ optional profile]) -> backend sends OTP via SMS -> user enters code (+ optional password) -> POST /auth/verify -> token. Profile: me, update, phone change, change password, delete account, logout. Schedule: sessions, book, cancel, appointments history. Packages: offers, purchase. Base: /api/v1.\n\nVariables:\n- base_url: Main URL (default: localhost). Change this value to switch environments.\n- base_url_localhost: http://127.0.0.1:8000\n- base_url_stage: https://sdhds.net/backend/backend/public\n- bearer_token: Auto-set after login/verify\n\nTo switch to stage: Edit collection variables and set base_url to {{base_url_stage}} or directly to https://sdhds.net/backend/backend/public",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"auth": {
@@ -44,7 +44,7 @@
 							"status": "OK",
 							"code": 200,
 							"header": [{ "key": "Content-Type", "value": "application/json" }],
-							"body": "{\"success\":true,\"message\":\"Logged in.\",\"token\":\"1|abc123xyz\",\"token_type\":\"Bearer\",\"customer\":{\"id\":\"1\",\"uid\":\"550e8400-e29b-41d4-a716-446655440000\",\"firstName\":\"Jane\",\"lastName\":\"Doe\",\"email\":\"jane@example.com\",\"phone\":\"+201234567890\",\"phoneVerifiedAt\":\"2024-01-15T10:00:00.000000Z\",\"emailVerifiedAt\":null,\"remainingSessions\":5}}"
+							"body": "{\"success\":true,\"message\":\"Logged in.\",\"token\":\"1|abc123xyz\",\"token_type\":\"Bearer\",\"customer\":{\"id\":\"1\",\"uid\":\"550e8400-e29b-41d4-a716-446655440000\",\"firstName\":\"Jane\",\"lastName\":\"Doe\",\"email\":\"jane@example.com\",\"phone\":\"+201234567890\",\"profileImage\":\"http://127.0.0.1:8000/storage/profiles/profile_123.png\",\"phoneVerifiedAt\":\"2024-01-15T10:00:00.000000Z\",\"emailVerifiedAt\":null,\"remainingSessions\":5}}"
 						},
 						{
 							"name": "Success (with FCM token)",
@@ -52,7 +52,7 @@
 							"status": "OK",
 							"code": 200,
 							"header": [{ "key": "Content-Type", "value": "application/json" }],
-							"body": "{\"success\":true,\"message\":\"Logged in.\",\"token\":\"1|abc123\",\"token_type\":\"Bearer\",\"customer\":{\"id\":\"1\",\"uid\":\"uuid\",\"firstName\":\"Jane\",\"lastName\":\"Doe\",\"email\":\"jane@example.com\",\"phone\":\"+201234567890\",\"phoneVerifiedAt\":\"2024-01-15T10:00:00.000000Z\",\"emailVerifiedAt\":null,\"remainingSessions\":5}}"
+							"body": "{\"success\":true,\"message\":\"Logged in.\",\"token\":\"1|abc123\",\"token_type\":\"Bearer\",\"customer\":{\"id\":\"1\",\"uid\":\"uuid\",\"firstName\":\"Jane\",\"lastName\":\"Doe\",\"email\":\"jane@example.com\",\"phone\":\"+201234567890\",\"profileImage\":\"http://127.0.0.1:8000/storage/profiles/profile_123.png\",\"phoneVerifiedAt\":\"2024-01-15T10:00:00.000000Z\",\"emailVerifiedAt\":null,\"remainingSessions\":5}}"
 						},
 						{
 							"name": "401 Invalid credentials",
@@ -86,14 +86,14 @@
 						"header": [{ "key": "Content-Type", "value": "application/json" }],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"phone\": \"+201234567890\",\n    \"firstName\": \"Jane\",\n    \"lastName\": \"Doe\",\n    \"email\": \"jane@example.com\"\n}"
+							"raw": "{\n    \"phone\": \"+201234567890\",\n    \"firstName\": \"Jane\",\n    \"lastName\": \"Doe\",\n    \"email\": \"jane@example.com\",\n    \"profileImage\": \"data:image/png;base64,iVBORw0KGgo...\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/v1/auth/signup",
 							"host": ["{{base_url}}"],
 							"path": ["api", "v1", "auth", "signup"]
 						},
-						"description": "Step 1 of signup. Body: phone (required), optional firstName, lastName, email. Backend sends OTP to that phone. Response includes phone (canonical); use that exact phone in Verify. Then call Verify with phone + code (+ optional password)."
+						"description": "Step 1 of signup. Body: phone (required), optional firstName, lastName, email, profileImage. profileImage: send as multipart/form-data file (key: profileImage) OR base64 string in JSON (e.g. data:image/png;base64,...). Max 5MB, jpeg/png/jpg/gif. Backend sends OTP to phone. Then call Verify with phone + code (+ optional password, optional profileImage)."
 					},
 					"response": [
 						{
@@ -114,14 +114,14 @@
 						"header": [{ "key": "Content-Type", "value": "application/json" }],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"phone\": \"+201234567890\",\n    \"code\": \"123456\",\n    \"password\": \"secret123\",\n    \"password_confirmation\": \"secret123\"\n}"
+							"raw": "{\n    \"phone\": \"+201234567890\",\n    \"code\": \"123456\",\n    \"password\": \"secret123\",\n    \"password_confirmation\": \"secret123\",\n    \"profileImage\": \"data:image/png;base64,iVBORw0KGgo...\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/v1/auth/verify",
 							"host": ["{{base_url}}"],
 							"path": ["api", "v1", "auth", "verify"]
 						},
-						"description": "Step 2 of signup. Use the same phone returned from Signup (response.phone) so the backend ties verification to the number that received the SMS. Body: phone (required), code (6 digits), optional password + password_confirmation, fcmToken, platform, deviceId. On success, phone_verified_at is set and token is saved to bearer_token."
+						"description": "Step 2 of signup. Use the same phone returned from Signup. Body: phone (required), code (6 digits), optional password + password_confirmation, optional profileImage (file upload as multipart/form-data or base64 in JSON), fcmToken, platform, deviceId. On success, phone_verified_at is set and token is saved to bearer_token."
 					},
 					"response": [
 						{
@@ -129,7 +129,7 @@
 							"status": "OK",
 							"code": 200,
 							"header": [{ "key": "Content-Type", "value": "application/json" }],
-							"body": "{\"success\":true,\"message\":\"Verified.\",\"token\":\"1|xyz\",\"token_type\":\"Bearer\",\"customer\":{\"id\":\"1\",\"uid\":\"uuid\",\"firstName\":\"Jane\",\"lastName\":\"Doe\",\"email\":\"jane@example.com\",\"phone\":\"+201234567890\",\"phoneVerifiedAt\":\"2024-01-15T10:00:00.000000Z\",\"emailVerifiedAt\":null,\"remainingSessions\":0}}"
+							"body": "{\"success\":true,\"message\":\"Verified.\",\"token\":\"1|xyz\",\"token_type\":\"Bearer\",\"customer\":{\"id\":\"1\",\"uid\":\"uuid\",\"firstName\":\"Jane\",\"lastName\":\"Doe\",\"email\":\"jane@example.com\",\"phone\":\"+201234567890\",\"profileImage\":\"http://127.0.0.1:8000/storage/profiles/profile_123.png\",\"phoneVerifiedAt\":\"2024-01-15T10:00:00.000000Z\",\"emailVerifiedAt\":null,\"remainingSessions\":0}}"
 						}
 					],
 					"event": [
@@ -155,17 +155,23 @@
 						"header": [{ "key": "Content-Type", "value": "application/json" }],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"email\": \"jane@example.com\"\n}"
+							"raw": "{\n    \"phone\": \"+201234567890\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/v1/auth/forgot-password",
 							"host": ["{{base_url}}"],
 							"path": ["api", "v1", "auth", "forgot-password"]
 						},
-						"description": "Step 1 of reset flow. Sends an email with a reset link (token). User must use the token in Step 2. Response is always 200 with the same message (no email enumeration)."
+						"description": "Step 1 of reset flow (phone-based). Body: phone (required). Backend sends a 6-digit OTP code to that phone via SMS. The response is generic (does not reveal if the phone exists). Then call Reset Password with phone + code + new password."
 					},
 					"response": [
-						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"message\":\"If that email exists, we have sent a password reset link.\"}" }
+						{
+							"name": "Success",
+							"status": "OK",
+							"code": 200,
+							"header": [{ "key": "Content-Type", "value": "application/json" }],
+							"body": "{\"success\":true,\"message\":\"If that phone number exists, we have sent a password reset code.\"}"
+						}
 					]
 				},
 				{
@@ -176,18 +182,30 @@
 						"header": [{ "key": "Content-Type", "value": "application/json" }],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"email\": \"jane@example.com\",\n    \"token\": \"reset-token-from-email\",\n    \"password\": \"newsecret123\",\n    \"password_confirmation\": \"newsecret123\"\n}"
+							"raw": "{\n    \"phone\": \"+201234567890\",\n    \"code\": \"123456\",\n    \"password\": \"newsecret123\",\n    \"password_confirmation\": \"newsecret123\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/v1/auth/reset-password",
 							"host": ["{{base_url}}"],
 							"path": ["api", "v1", "auth", "reset-password"]
 						},
-						"description": "Step 2 of reset flow. Use the token (and email) from the forgot-password email. Body: email, token, password, password_confirmation (min 8 chars). On success user can log in with phone + new password."
+						"description": "Step 2 of reset flow (phone-based). Body: phone (required), code (6-digit OTP from SMS), password, password_confirmation (min 8 chars). On success user can log in with phone + new password."
 					},
 					"response": [
-						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"message\":\"Password has been reset.\"}" },
-						{ "name": "400 Invalid or expired token", "status": "Bad Request", "code": 400, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":false,\"message\":\"Invalid or expired reset token.\"}" }
+						{
+							"name": "Success",
+							"status": "OK",
+							"code": 200,
+							"header": [{ "key": "Content-Type", "value": "application/json" }],
+							"body": "{\"success\":true,\"message\":\"Password has been reset successfully.\"}"
+						},
+						{
+							"name": "400 Invalid or expired code",
+							"status": "Bad Request",
+							"code": 400,
+							"header": [{ "key": "Content-Type", "value": "application/json" }],
+							"body": "{\"success\":false,\"message\":\"Invalid or expired code.\"}"
+						}
 					]
 				},
 				{
@@ -219,7 +237,7 @@
 						"description": "Current customer profile. Requires Bearer."
 					},
 					"response": [
-						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"customer\":{\"id\":\"1\",\"uid\":\"uuid\",\"firstName\":\"Jane\",\"lastName\":\"Doe\",\"email\":\"jane@example.com\",\"phone\":\"+201234567890\",\"phoneVerifiedAt\":\"2024-01-15T10:00:00.000000Z\",\"emailVerifiedAt\":null,\"remainingSessions\":5}}" }
+						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"customer\":{\"id\":\"1\",\"uid\":\"uuid\",\"firstName\":\"Jane\",\"lastName\":\"Doe\",\"email\":\"jane@example.com\",\"phone\":\"+201234567890\",\"profileImage\":\"http://127.0.0.1:8000/storage/profiles/profile_123.png\",\"phoneVerifiedAt\":\"2024-01-15T10:00:00.000000Z\",\"emailVerifiedAt\":null,\"remainingSessions\":5}}" }
 					]
 				},
 				{
@@ -229,17 +247,41 @@
 						"header": [{ "key": "Content-Type", "value": "application/json" }],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"firstName\": \"Jane\",\n    \"lastName\": \"Doe\",\n    \"email\": \"jane@example.com\"\n}"
+							"raw": "{\n    \"firstName\": \"Jane\",\n    \"lastName\": \"Doe\",\n    \"email\": \"jane@example.com\",\n    \"profileImage\": \"data:image/png;base64,iVBORw0KGgo...\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/v1/auth/me",
 							"host": ["{{base_url}}"],
 							"path": ["api", "v1", "auth", "me"]
 						},
-						"description": "Update profile (firstName, lastName, email). To change phone: first call Send Phone Change Code, then PUT with phone + phoneChangeCode. Requires Bearer."
+						"description": "Update profile (firstName, lastName, email, profileImage). profileImage: send as multipart/form-data file (key: profileImage) OR base64 string in JSON. Max 5MB, jpeg/png/jpg/gif. To change phone: first call Send Phone Change Code, then PUT with phone + phoneChangeCode. Requires Bearer."
 					},
 					"response": [
-						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"message\":\"Profile updated.\",\"customer\":{\"id\":\"1\",\"firstName\":\"Jane\",\"lastName\":\"Doe\",\"email\":\"jane@example.com\",\"phone\":\"+201234567890\"}}" }
+						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"message\":\"Profile updated.\",\"customer\":{\"id\":\"1\",\"firstName\":\"Jane\",\"lastName\":\"Doe\",\"email\":\"jane@example.com\",\"phone\":\"+201234567890\",\"profileImage\":\"http://127.0.0.1:8000/storage/profiles/profile_123.png\"}}" }
+					]
+				},
+				{
+					"name": "Update Me (with profile image file)",
+					"request": {
+						"method": "PUT",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{ "key": "firstName", "value": "Jane", "type": "text" },
+								{ "key": "lastName", "value": "Doe", "type": "text" },
+								{ "key": "profileImage", "type": "file", "src": [] }
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/auth/me",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "auth", "me"]
+						},
+						"description": "Update profile with profile image as file upload. Use form-data: firstName, lastName, email (optional), profileImage (file). Requires Bearer."
+					},
+					"response": [
+						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"message\":\"Profile updated.\",\"customer\":{\"id\":\"1\",\"firstName\":\"Jane\",\"lastName\":\"Doe\",\"phone\":\"+201234567890\",\"profileImage\":\"http://127.0.0.1:8000/storage/profiles/profile_123.png\"}}" }
 					]
 				},
 				{
@@ -353,10 +395,16 @@
 						"method": "GET",
 						"header": [],
 						"url": { "raw": "{{base_url}}/api/v1/service", "host": ["{{base_url}}"], "path": ["api", "v1", "service"] },
-						"description": "Response: [{ id, name, level, image, brief }, ...]. Requires Bearer."
+						"description": "Response: categories for home screen. Format: [{ category: \"Yoga\" | \"Reformer Pilates\", services: [{ id, name, level, image, brief }, ...] }, ...]. Requires Bearer."
 					},
 					"response": [
-						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "[{\"id\":1,\"name\":\"Yoga\",\"level\":\"Beginner\",\"image\":\"https://example.com/yoga.jpg\",\"brief\":\"Relaxing yoga class\"}]" }
+						{
+							"name": "Success",
+							"status": "OK",
+							"code": 200,
+							"header": [{ "key": "Content-Type", "value": "application/json" }],
+							"body": "[\n  {\n    \"category\": \"Yoga\",\n    \"services\": [\n      {\n        \"id\": \"1\",\n        \"name\": \"Gentle Vinyasa- Ladies only\",\n        \"level\": \"Beginner\",\n        \"image\": \"https://example.com/yoga-gentle.jpg\",\n        \"brief\": \"Gentle vinyasa flow for all levels.\"\n      }\n    ]\n  },\n  {\n    \"category\": \"Reformer Pilates\",\n    \"services\": [\n      {\n        \"id\": \"2\",\n        \"name\": \"Reformer Pilates - Ladies only L1\",\n        \"level\": \"Beginner\",\n        \"image\": \"https://example.com/reformer-l1.jpg\",\n        \"brief\": \"Intro Reformer Pilates class.\"\n      }\n    ]\n  }\n]"
+						}
 					]
 				}
 			],
@@ -383,10 +431,16 @@
 						"method": "GET",
 						"header": [],
 						"url": { "raw": "{{base_url}}/api/v1/service/simple", "host": ["{{base_url}}"], "path": ["api", "v1", "service", "simple"] },
-						"description": "Response: [{ id, name }, ...]. Requires Bearer."
+						"description": "Response: categories for schedule filters. Format: [{ category: \"Yoga\" | \"Reformer Pilates\", services: [{ id, name }, ...] }, ...]. Requires Bearer."
 					},
 					"response": [
-						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "[{\"id\":1,\"name\":\"Yoga\"}]" }
+						{
+							"name": "Success",
+							"status": "OK",
+							"code": 200,
+							"header": [{ "key": "Content-Type", "value": "application/json" }],
+							"body": "[\n  {\n    \"category\": \"Yoga\",\n    \"services\": [\n      { \"id\": \"1\", \"name\": \"Gentle Vinyasa- Ladies only\" }\n    ]\n  },\n  {\n    \"category\": \"Reformer Pilates\",\n    \"services\": [\n      { \"id\": \"2\", \"name\": \"Reformer Pilates - Ladies only L1\" }\n    ]\n  }\n]"
+						}
 					]
 				},
 				{
@@ -419,10 +473,10 @@
 						"header": [{ "key": "Content-Type", "value": "application/json" }],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"sessionID\": 1,\n    \"persons\": 1,\n    \"promoCode\": \"SAVE10\"\n}"
+							"raw": "{\n    \"sessionID\": 1,\n    \"persons\": 1,\n    \"promoCode\": \"SAVE10\",\n    \"isDropIn\": true\n}"
 						},
 						"url": { "raw": "{{base_url}}/api/v1/session-bookings", "host": ["{{base_url}}"], "path": ["api", "v1", "session-bookings"] },
-						"description": "Book one session. Body: sessionID (required), persons (optional, default 1), promoCode (optional). Requires Bearer."
+						"description": "Book one session. Body: sessionID (required), persons (optional, default 1), promoCode (optional), isDropIn (optional boolean; true = drop-in, false = from customer's package sessions; defaults to true if omitted). Requires Bearer."
 					},
 					"response": [
 						{ "name": "Success", "status": "Created", "code": 201, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"message\":\"Booking created successfully\",\"data\":{\"id\":1,\"sessionID\":1,\"customerId\":1}}" }
@@ -458,7 +512,7 @@
 								{ "key": "page", "value": "1", "description": "Page number" }
 							]
 						},
-						"description": "Paginated list of the authenticated customer's appointments/bookings. GET /api/v1/appointments/history?per_page=15&page=1. Response: { data: [{ id, sessionID, serviceName, instructorName, bookedAt, status, paymentStatus, partySize, totalAmount, currency }, ...], meta }. Requires Bearer."
+						"description": "Paginated list of the authenticated customer's appointments/bookings. Response: { success, data: [{ id, sessionID, serviceName, instructorName, bookedAt, sessionDate, sessionTime, sessionStart, sessionEnd, status, paymentStatus, partySize, totalAmount, currency }, ...], meta }. Requires Bearer."
 					},
 					"response": [
 						{
@@ -467,7 +521,7 @@
 							"status": "OK",
 							"code": 200,
 							"header": [{ "key": "Content-Type", "value": "application/json" }],
-							"body": "{\"data\":[{\"id\":1,\"sessionID\":1,\"serviceName\":\"Yoga\",\"instructorName\":\"John\",\"bookedAt\":\"2024-01-15T10:00:00.000000Z\",\"status\":\"confirmed\",\"paymentStatus\":\"paid\",\"partySize\":1,\"totalAmount\":50,\"currency\":\"EGP\"},{\"id\":2,\"sessionID\":2,\"serviceName\":\"Pilates\",\"instructorName\":\"Jane\",\"bookedAt\":\"2024-01-20T14:00:00.000000Z\",\"status\":\"confirmed\",\"paymentStatus\":\"paid\",\"partySize\":1,\"totalAmount\":75,\"currency\":\"EGP\"}],\"meta\":{\"current_page\":1,\"last_page\":1,\"per_page\":15,\"total\":2}}"
+							"body": "{\"success\":true,\"data\":[{\"id\":\"1\",\"sessionID\":\"1\",\"serviceName\":\"Yoga\",\"instructorName\":\"John\",\"bookedAt\":\"2024-01-15T10:00:00.000000Z\",\"sessionDate\":\"2024-01-20\",\"sessionTime\":\"10:00:00\",\"sessionStart\":\"2024-01-20T10:00:00.000000Z\",\"sessionEnd\":\"2024-01-20T11:00:00.000000Z\",\"status\":\"confirmed\",\"paymentStatus\":\"paid\",\"partySize\":1,\"totalAmount\":50,\"currency\":\"USD\"},{\"id\":\"2\",\"sessionID\":\"2\",\"serviceName\":\"Pilates\",\"instructorName\":\"Jane\",\"bookedAt\":\"2024-01-20T14:00:00.000000Z\",\"sessionDate\":\"2024-01-22\",\"sessionTime\":\"14:00:00\",\"sessionStart\":\"2024-01-22T14:00:00.000000Z\",\"sessionEnd\":\"2024-01-22T15:00:00.000000Z\",\"status\":\"confirmed\",\"paymentStatus\":\"paid\",\"partySize\":1,\"totalAmount\":75,\"currency\":\"USD\"}],\"meta\":{\"current_page\":1,\"last_page\":1,\"per_page\":15,\"total\":2}}"
 						}
 					]
 				}
@@ -491,10 +545,10 @@
 								{ "key": "page", "value": "1", "description": "Page number" }
 							]
 						},
-						"description": "Paginated. Response: { data: [{ id, name, price, sessions, description, expirationMonths }, ...], meta: { current_page, last_page, per_page, total } }. Requires Bearer."
+						"description": "Paginated. Response: { data: [{ id, name, price, sessions, description, expirationMonths, serviceType, packageDuration }, ...], meta }. serviceType derived from package services (Yoga/Reformer Pilates). packageDuration in months. Requires Bearer."
 					},
 					"response": [
-						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"data\":[{\"id\":1,\"name\":\"Monthly\",\"price\":99.99,\"sessions\":10,\"description\":\"10 sessions\",\"expirationMonths\":1}],\"meta\":{\"current_page\":1,\"last_page\":1,\"per_page\":15,\"total\":1}}" }
+						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"data\":[{\"id\":1,\"name\":\"Monthly\",\"price\":99.99,\"sessions\":10,\"description\":\"10 sessions\",\"expirationMonths\":1,\"serviceType\":\"Yoga\",\"packageDuration\":1}],\"meta\":{\"current_page\":1,\"last_page\":1,\"per_page\":15,\"total\":1}}" }
 					]
 				},
 				{
@@ -518,7 +572,9 @@
 		}
 	],
 	"variable": [
-		{ "key": "base_url", "value": "http://127.0.0.1:8000", "type": "string" },
-		{ "key": "bearer_token", "value": "", "type": "string" }
+		{ "key": "base_url", "value": "http://127.0.0.1:8000", "type": "string", "description": "Base URL - Change this to switch between localhost and stage. Default: localhost" },
+		{ "key": "base_url_localhost", "value": "http://127.0.0.1:8000", "type": "string", "description": "Localhost development URL" },
+		{ "key": "base_url_stage", "value": "https://sdhds.net/backend/backend/public", "type": "string", "description": "Stage/production URL" },
+		{ "key": "bearer_token", "value": "", "type": "string", "description": "Bearer token for authenticated requests (auto-set after login/verify)" }
 	]
 }
