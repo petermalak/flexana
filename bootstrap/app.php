@@ -14,10 +14,12 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         // TrustProxies must run FIRST, before session handling
+        // ServeStorageFiles runs early so /storage/* is served from disk (avoids 403 from server)
         $middleware->web(prepend: [
             \App\Http\Middleware\TrustProxies::class,
+            \App\Http\Middleware\ServeStorageFiles::class,
         ]);
-        
+
         $middleware->web(append: [
             \App\Http\Middleware\HandleInertiaRequests::class,
             \Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets::class,
