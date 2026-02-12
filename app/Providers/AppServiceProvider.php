@@ -56,7 +56,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        Vite::prefetch(concurrency: 3);
+        // Only enable Vite prefetch if manifest exists (avoids error in production when assets aren't built)
+        if (file_exists(public_path('build/manifest.json'))) {
+            Vite::prefetch(concurrency: 3);
+        }
 
         // Add custom CSS to make white logo visible
         \Filament\Support\Facades\FilamentView::registerRenderHook(
