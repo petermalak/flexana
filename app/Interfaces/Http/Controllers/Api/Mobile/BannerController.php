@@ -5,7 +5,6 @@ namespace App\Interfaces\Http\Controllers\Api\Mobile;
 use App\Http\Controllers\Controller;
 use App\Models\Banner;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Support\Facades\Storage;
 
 class BannerController extends Controller
 {
@@ -23,7 +22,7 @@ class BannerController extends Controller
             ->map(function (Banner $banner): array {
                 $imagePath = $banner->image_url;
                 $imageUrl = $imagePath
-                    ? Storage::disk('public')->url($imagePath)
+                    ? (str_starts_with($imagePath, 'http') ? $imagePath : url('serve-storage.php') . '?path=' . rawurlencode($imagePath))
                     : null;
 
                 return [

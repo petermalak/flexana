@@ -556,7 +556,7 @@ class MobileAuthController extends Controller
 
         $profileImageUrl = null;
         if ($customer->profile_image) {
-            $profileImageUrl = Storage::disk('public')->url($customer->profile_image);
+            $profileImageUrl = $this->publicStorageUrl($customer->profile_image);
         }
 
         return [
@@ -574,8 +574,14 @@ class MobileAuthController extends Controller
     }
 
     /**
-     * Store base64 encoded image and return the storage path.
+     * URL for a file on the public disk. Uses serve-storage.php so images work on servers
+     * where /storage/ rewrite returns 404 (e.g. symlink or AllowOverride).
      */
+    private function publicStorageUrl(string $path): string
+    {
+        return url('serve-storage.php') . '?path=' . rawurlencode($path);
+    }
+
     /**
      * Validation rules for profileImage: file upload (image|mimes|max 5MB) or base64 string (string|max length ~7MB chars).
      */
