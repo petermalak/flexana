@@ -40,9 +40,7 @@
     border-radius: 0.5rem !important;
 }
 
-/* Update login page logo */
-.fi-simple-main-ctn img,
-.fi-simple-main-ctn svg,
+/* Update login page logo - only show in header, hide duplicate in main content */
 .fi-simple-header img,
 .fi-simple-header svg {
     filter: none !important; /* Remove invert since we're using teal theme */
@@ -50,5 +48,11 @@
     background: transparent !important;
     border-radius: 0.75rem !important;
     display: inline-block !important;
+}
+
+/* Hide duplicate logo in main content area */
+.fi-simple-main-ctn img,
+.fi-simple-main-ctn svg {
+    display: none !important;
 }
 

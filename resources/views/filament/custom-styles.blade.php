@@ -10,9 +10,7 @@
         border-radius: 0.5rem !important;
     }
 
-    /* Make logo visible on login page */
-    .fi-simple-main-ctn img,
-    .fi-simple-main-ctn svg,
+    /* Make logo visible on login page - only show in header, hide duplicate in main content */
     .fi-simple-header img,
     .fi-simple-header svg {
         filter: invert(1) brightness(0.1) !important;
@@ -20,6 +18,12 @@
         background: rgba(0, 0, 0, 0.08) !important;
         border-radius: 0.75rem !important;
         display: inline-block !important;
+    }
+
+    /* Hide duplicate logo in main content area */
+    .fi-simple-main-ctn img,
+    .fi-simple-main-ctn svg {
+        display: none !important;
     }
 
     /* Add subtle background to sidebar header */
