@@ -5,8 +5,8 @@
 
     RewriteEngine On
 
-    # Serve /storage/* via standalone script (avoids Laravel routing/server quirks)
-    RewriteCond %{REQUEST_URI} /storage/(.*)
+    # Serve /storage/* via standalone script (THE_REQUEST = raw request, works before symlink resolution)
+    RewriteCond %{THE_REQUEST} \s/storage/([^\s?]+) [NC]
     RewriteRule ^ serve-storage.php?path=%1 [L,QSA]
 
     # Handle Authorization Header

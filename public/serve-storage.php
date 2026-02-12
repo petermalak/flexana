@@ -1,11 +1,15 @@
 <?php
 /**
- * Standalone script to serve files from storage/app/public.
- * Use when .htaccess rewrite to index.php loses the path on your server.
- * .htaccess can rewrite: RewriteRule ^ storage/serve-storage.php?path=%1 [L,QSA]
- * Or call directly: /serve-storage.php?path=profiles/xxx.png
+ * Serves files from storage/app/public (uses Laravel so path is always correct).
+ * .htaccess rewrites /storage/* to this script with ?path=profiles/xxx.png
  */
-$path = $_GET['path'] ?? $_GET['laravel_storage_path'] ?? $_SERVER['REDIRECT_STORAGE_PATH'] ?? $_SERVER['STORAGE_PATH'] ?? '';
+define('LARAVEL_START', microtime(true));
+require __DIR__ . '/../vendor/autoload.php';
+$app = require_once __DIR__ . '/../bootstrap/app.php';
+$app->make(\Illuminate\Contracts\Console\Kernel::class)->bootstrap();
+
+$path = $_GET['path'] ?? $_GET['laravel_storage_path'] ?? '';
+$path = trim(rawurldecode($path));
 $path = ltrim(preg_replace('#^storage/#', '', $path), '/');
 
 if ($path === '' || str_contains($path, '..')) {
@@ -13,21 +17,17 @@ if ($path === '' || str_contains($path, '..')) {
     exit('Not found');
 }
 
-$base = dirname(__DIR__) . '/storage/app/public';
-$file = $base . '/' . $path;
-
-if (!is_file($file)) {
+$disk = \Illuminate\Support\Facades\Storage::disk('public');
+if (!$disk->exists($path)) {
     http_response_code(404);
     exit('Not found');
 }
 
-$mime = mime_content_type($file);
-if (!$mime) {
-    $mime = 'application/octet-stream';
-}
+$fullPath = $disk->path($path);
+$mime = mime_content_type($fullPath) ?: 'application/octet-stream';
 
 header('Content-Type: ' . $mime);
 header('Cache-Control: public, max-age=31536000');
-header('Content-Length: ' . filesize($file));
-readfile($file);
+header('Content-Length: ' . filesize($fullPath));
+readfile($fullPath);
 exit;
