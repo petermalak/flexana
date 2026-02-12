@@ -5,9 +5,9 @@
 
     RewriteEngine On
 
-    # Force ALL /storage/* requests to Laravel; pass path so it survives the rewrite
+    # Serve /storage/* via standalone script (avoids Laravel routing/server quirks)
     RewriteCond %{REQUEST_URI} /storage/(.*)
-    RewriteRule ^ index.php?laravel_storage_path=%1 [L,QSA]
+    RewriteRule ^ serve-storage.php?path=%1 [L,QSA]
 
     # Handle Authorization Header
     RewriteCond %{HTTP:Authorization} .
