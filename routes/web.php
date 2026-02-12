@@ -5,12 +5,14 @@ use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 
-// Serve files from storage/app/public (works when symlink is missing or document root is not public/)
+// Serve files from storage/app/public (avoids 403 when symlink is blocked or missing)
 Route::get('/storage/{path}', function (string $path) {
     if (!Storage::disk('public')->exists($path)) {
         abort(404);
     }
-    return response()->file(Storage::disk('public')->path($path));
+    return response()->file(Storage::disk('public')->path($path), [
+        'Cache-Control' => 'public, max-age=31536000',
+    ]);
 })->where('path', '.*')->name('storage.serve');
 
 // Include authentication routes
