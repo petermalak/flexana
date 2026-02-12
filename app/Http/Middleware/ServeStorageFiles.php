@@ -15,17 +15,22 @@ class ServeStorageFiles
      */
     public function handle(Request $request, Closure $next): Response
     {
-        $path = $request->path();
-
-        if (! str_contains($path, '/storage/') && ! str_starts_with($path, 'storage/')) {
-            return $next($request);
-        }
-
-        // Extract path after the last "storage/" segment
-        if (preg_match('#(?:^|/)storage/(.+)$#', $path, $m)) {
-            $filePath = $m[1];
+        // Path may be in query string when .htaccess rewrote to index.php (preserves storage path)
+        $filePath = $request->query('laravel_storage_path');
+        if ($filePath !== null && $filePath !== '') {
+            $filePath = ltrim($filePath, '/');
+            if (str_contains($filePath, '..')) {
+                abort(404);
+            }
         } else {
-            return $next($request);
+            $path = $request->path();
+            if (! str_contains($path, '/storage/') && ! str_starts_with($path, 'storage/')) {
+                return $next($request);
+            }
+            if (! preg_match('#(?:^|/)storage/(.+)$#', $path, $m)) {
+                return $next($request);
+            }
+            $filePath = $m[1];
         }
 
         if (! Storage::disk('public')->exists($filePath)) {

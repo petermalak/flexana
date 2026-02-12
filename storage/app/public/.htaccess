@@ -1,6 +1,5 @@
-# When public/storage is a symlink here, Apache may try to serve files and return 403.
-# Send all requests to Laravel's front controller so the app serves the file instead.
+# When public/storage is a symlink here, send requests to Laravel and pass the file path.
 <IfModule mod_rewrite.c>
     RewriteEngine On
-    RewriteRule ^(.*)$ ../../../public/index.php [L]
+    RewriteRule ^(.*)$ ../../../public/index.php?laravel_storage_path=$1 [L,QSA]
 </IfModule>
