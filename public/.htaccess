@@ -18,7 +18,8 @@
     RewriteCond %{REQUEST_URI} (.+)/$
     RewriteRule ^ %1 [L,R=301]
 
-    # Serve /storage/* via Laravel (avoids 403 when symlink exists or FollowSymLinks is disabled)
+    # Serve /storage/* via Laravel (works with subdirs e.g. /backend/backend/public/storage/...)
+    RewriteRule ^(.*/)storage/(.*)$ index.php [L]
     RewriteRule ^storage/(.*)$ index.php [L]
 
     # Send Requests To Front Controller...
