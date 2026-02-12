@@ -22,7 +22,6 @@ use App\Infrastructure\Persistence\Repositories\PackageRepository;
 use App\Infrastructure\Persistence\Repositories\ServiceRepository;
 use App\Infrastructure\Persistence\Repositories\StaffRepository;
 use Illuminate\Http\Client\Factory as HttpFactory;
-use Illuminate\Support\Facades\Vite;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -56,11 +55,6 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        // Only enable Vite prefetch if manifest exists (avoids error in production when assets aren't built)
-        if (file_exists(public_path('build/manifest.json'))) {
-            Vite::prefetch(concurrency: 3);
-        }
-
         // Add custom CSS to make white logo visible
         \Filament\Support\Facades\FilamentView::registerRenderHook(
             'panels::head.start',
