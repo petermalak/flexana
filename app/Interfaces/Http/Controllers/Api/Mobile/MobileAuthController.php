@@ -11,6 +11,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password as PasswordRule;
 
 class MobileAuthController extends Controller
@@ -79,11 +80,14 @@ class MobileAuthController extends Controller
     public function signup(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
-            'phone' => 'required|string|max:20',
+            'phone' => 'required|string|max:20|unique:customers,phone',
             'firstName' => 'nullable|string|max:100',
             'lastName' => 'nullable|string|max:100',
-            'email' => 'nullable|email',
+            'email' => 'nullable|email|unique:customers,email',
             'profileImage' => $this->profileImageValidationRules($request),
+        ], [
+            'phone.unique' => 'This phone number is already registered. Please log in instead.',
+            'email.unique' => 'This email is already registered.',
         ]);
 
         if ($validator->fails()) {
@@ -327,13 +331,16 @@ class MobileAuthController extends Controller
      */
     public function updateMe(Request $request): JsonResponse
     {
+        $customer = $request->user();
         $validator = Validator::make($request->all(), [
             'firstName' => 'nullable|string|max:100',
             'lastName' => 'nullable|string|max:100',
-            'email' => 'nullable|email',
+            'email' => ['nullable', 'email', Rule::unique('customers', 'email')->ignore($customer->id)],
             'phone' => 'nullable|string|max:20',
             'phoneChangeCode' => 'nullable|string|size:6',
             'profileImage' => $this->profileImageValidationRules($request),
+        ], [
+            'email.unique' => 'This email is already used by another account.',
         ]);
 
         if ($validator->fails()) {
@@ -344,7 +351,6 @@ class MobileAuthController extends Controller
             ], 422);
         }
 
-        $customer = $request->user();
         $data = $validator->validated();
 
         if (isset($data['phone'])) {
@@ -550,9 +556,30 @@ class MobileAuthController extends Controller
 
     private function customerToArray($customer): array
     {
-        $remainingSessions = (int) $customer->packagePurchases()
+        $activePurchases = $customer->packagePurchases()
+            ->with('package')
             ->where('status', 'active')
-            ->sum('remaining_sessions');
+            ->get();
+
+        $remainingSessions = (int) $activePurchases->sum('remaining_sessions');
+
+        $packagesBreakdown = $activePurchases->map(function ($purchase) {
+            $package = $purchase->package;
+            $expiresAt = null;
+            if ($package && $purchase->purchase_date && $package->package_duration) {
+                $expiresAt = $purchase->purchase_date->copy()->addMonths((int) $package->package_duration);
+            } elseif ($package && $package->expiry) {
+                $expiresAt = $package->expiry;
+            }
+            return [
+                'packageId' => (string) $purchase->package_id,
+                'packageName' => $package ? ($package->title ?? '') : '',
+                'remainingSessions' => (int) $purchase->remaining_sessions,
+                'totalSessions' => (int) $purchase->total_sessions,
+                'purchaseDate' => $purchase->purchase_date?->toDateString(),
+                'expiresAt' => $expiresAt?->toDateString(),
+            ];
+        })->values()->toArray();
 
         $profileImageUrl = null;
         if ($customer->profile_image) {
@@ -570,6 +597,9 @@ class MobileAuthController extends Controller
             'phoneVerifiedAt' => $customer->phone_verified_at?->toIso8601String(),
             'emailVerifiedAt' => $customer->email_verified_at?->toIso8601String(),
             'remainingSessions' => $remainingSessions,
+            'remainingSessionsDetail' => [
+                'packages' => $packagesBreakdown,
+            ],
         ];
     }
 

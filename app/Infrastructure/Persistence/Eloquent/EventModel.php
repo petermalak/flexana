@@ -55,6 +55,16 @@ class EventModel extends Model
         return $this->hasMany(EventInstanceModel::class, 'event_id');
     }
 
+    public function periods(): HasMany
+    {
+        return $this->hasMany(EventPeriodModel::class, 'event_id');
+    }
+
+    public function tickets(): HasMany
+    {
+        return $this->hasMany(EventTicketModel::class, 'event_id');
+    }
+
     public function instructor(): BelongsTo
     {
         return $this->belongsTo(StaffModel::class, 'instructor_id');

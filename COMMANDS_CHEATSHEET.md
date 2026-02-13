@@ -138,6 +138,26 @@ php artisan db:show
 php artisan db:table users
 ```
 
+### Amelia / WordPress data fetch (staging & production)
+
+Fetch all Amelia (WordPress) data into the Laravel MySQL database. Requires `wordpress` DB connection in `.env` (see MIGRATION_STEPS_ON_SERVER.md).
+
+```bash
+# Full fetch (run on staging or production after .env is set)
+php artisan amelia:fetch
+
+# Dry run (no writes)
+php artisan amelia:fetch --dry-run
+
+# Skip records that already exist
+php artisan amelia:fetch --skip-duplicates
+
+# Only specific entities
+php artisan amelia:fetch --only=locations --only=customers --only=appointments
+```
+
+Required `.env` vars: `WP_DB_HOST`, `WP_DB_DATABASE`, `WP_DB_USERNAME`, `WP_DB_PASSWORD`. Set `WP_DB_PREFIX` to match Amelia tables (e.g. `rueyn_amelia_` if tables are `rueyn_amelia_users`, `rueyn_amelia_services`, etc.).
+
 ---
 
 ## 🔐 Permissions

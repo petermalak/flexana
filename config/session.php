@@ -143,6 +143,7 @@ return [
     |
     */
 
+    // For subdirectory deployments (e.g. https://sdhds.net/backend/backend/public) set SESSION_PATH to that path so the login session cookie is sent. E.g. SESSION_PATH=/backend/backend/public
     'path' => env('SESSION_PATH', '/'),
 
     /*
@@ -172,7 +173,7 @@ return [
     |
     */
 
-    'secure' => env('SESSION_SECURE_COOKIE') !== null 
+    'secure' => env('SESSION_SECURE_COOKIE') !== null
         ? (bool) env('SESSION_SECURE_COOKIE')
         : (str_starts_with(env('APP_URL', 'http://localhost'), 'https://')),
 

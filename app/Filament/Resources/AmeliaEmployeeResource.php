@@ -23,6 +23,8 @@ class AmeliaEmployeeResource extends Resource
 
     protected static ?string $navigationLabel = 'Amelia Employees';
 
+    protected static bool $shouldRegisterNavigation = false;
+
     public static function form(Schema $schema): Schema
     {
         return $schema->components([

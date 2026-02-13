@@ -22,6 +22,8 @@ class AmeliaBookingResource extends Resource
 
     protected static ?string $navigationLabel = 'Amelia Bookings';
 
+    protected static bool $shouldRegisterNavigation = false;
+
     public static function form(Schema $schema): Schema
     {
         return $schema

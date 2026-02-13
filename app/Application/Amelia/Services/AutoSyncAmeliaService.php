@@ -221,6 +221,10 @@ final class AutoSyncAmeliaService
             }
         }
 
+        $locationId = $ameliaAppointment->locationId
+            ? \App\Models\Location::query()->where('amelia_location_id', $ameliaAppointment->locationId)->value('id')
+            : null;
+
         $existing = AppointmentModel::query()
             ->where('amelia_appointment_id', $ameliaAppointment->id)
             ->first();
@@ -230,7 +234,7 @@ final class AutoSyncAmeliaService
                 'service_id' => $service->id,
                 'provider_id' => $provider->id,
                 'package_id' => $package?->id,
-                'location_id' => $ameliaAppointment->locationId,
+                'location_id' => $locationId,
                 'booking_start' => $ameliaAppointment->bookingStart,
                 'booking_end' => $ameliaAppointment->bookingEnd,
                 'status' => $this->mapAppointmentStatus($ameliaAppointment->status),
@@ -245,7 +249,7 @@ final class AutoSyncAmeliaService
             'service_id' => $service->id,
             'provider_id' => $provider->id,
             'package_id' => $package?->id,
-            'location_id' => $ameliaAppointment->locationId,
+            'location_id' => $locationId,
             'booking_start' => $ameliaAppointment->bookingStart,
             'booking_end' => $ameliaAppointment->bookingEnd,
             'status' => $this->mapAppointmentStatus($ameliaAppointment->status),

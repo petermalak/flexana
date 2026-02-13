@@ -19,12 +19,14 @@ class AmeliaProviderServiceResource extends Resource
     protected static ?string $model = AmeliaProviderService::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedUserGroup;
-    
+
     protected static string|\UnitEnum|null $navigationGroup = 'Amelia Data';
-    
+
     protected static ?int $navigationSort = 7;
-    
+
     protected static ?string $navigationLabel = 'Employee Services';
+
+    protected static bool $shouldRegisterNavigation = false;
 
     public static function form(Schema $schema): Schema
     {

@@ -113,8 +113,26 @@ return [
             // 'trust_server_certificate' => env('DB_TRUST_SERVER_CERTIFICATE', 'false'),
         ],
 
-        // WordPress connection disabled - all data is now in MySQL (default connection)
-        // 'wordpress' => [ ... ],
+        // WordPress/Amelia: source DB for amelia:fetch. Use a separate DB from Laravel.
+        // Required in .env: WP_DB_DATABASE (WordPress DB name). Optional: WP_DB_PREFIX (e.g. wp_amelia_).
+        'wordpress' => [
+            'driver' => 'mysql',
+            'host' => env('WP_DB_HOST', env('DB_HOST', '127.0.0.1')),
+            'port' => env('WP_DB_PORT', env('DB_PORT', '3306')),
+            'database' => env('WP_DB_DATABASE'), // do not fall back to DB_DATABASE – must be the WordPress DB
+            'username' => env('WP_DB_USERNAME', env('DB_USERNAME', 'root')),
+            'password' => env('WP_DB_PASSWORD', env('DB_PASSWORD', '')),
+            'unix_socket' => env('WP_DB_SOCKET', env('DB_SOCKET', '')),
+            'charset' => env('WP_DB_CHARSET', 'utf8mb4'),
+            'collation' => env('WP_DB_COLLATION', 'utf8mb4_unicode_ci'),
+            'prefix' => env('WP_DB_PREFIX', ''),
+            'prefix_indexes' => true,
+            'strict' => true,
+            'engine' => null,
+            'options' => extension_loaded('pdo_mysql') ? array_filter([
+                PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
+            ]) : [],
+        ],
 
     ],
 

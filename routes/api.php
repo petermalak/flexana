@@ -10,6 +10,7 @@ use App\Interfaces\Http\Controllers\Api\Mobile\MobileAuthController;
 use App\Interfaces\Http\Controllers\Api\Mobile\MobileBookingController;
 use App\Interfaces\Http\Controllers\Api\Mobile\MobileInstructorController;
 use App\Interfaces\Http\Controllers\Api\Mobile\MobilePackageController;
+use App\Interfaces\Http\Controllers\Api\Mobile\MobilePromoCodeController;
 use App\Interfaces\Http\Controllers\Api\Mobile\MobileServiceController;
 use App\Interfaces\Http\Controllers\Api\Mobile\MobileSessionController;
 use App\Interfaces\Http\Controllers\Api\PackageController;
@@ -95,6 +96,8 @@ Route::prefix('v1')
             // Packages screen (path 'package-offers' to avoid conflict with admin GET /v1/packages)
             Route::get('package-offers', [MobilePackageController::class, 'index']);
             Route::post('purchase-package', [MobilePackageController::class, 'purchase']);
+            // Promo code verification
+            Route::post('promo-codes/verify', [MobilePromoCodeController::class, 'verify']);
             // Profile & logout
             Route::post('auth/logout', [MobileAuthController::class, 'logout']);
             Route::get('auth/me', [MobileAuthController::class, 'me']);

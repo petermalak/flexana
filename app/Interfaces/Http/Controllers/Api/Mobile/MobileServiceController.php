@@ -127,6 +127,18 @@ class MobileServiceController extends Controller
             ];
         }
 
-        return response()->json($categories);
+        // Main service categories for filter UI (id = slug for filtering)
+        $mainCategories = [];
+        if (!empty($yogaServices)) {
+            $mainCategories[] = ['id' => 'yoga', 'name' => 'Yoga'];
+        }
+        if (!empty($reformerPilatesServices)) {
+            $mainCategories[] = ['id' => 'reformer-pilates', 'name' => 'Reformer Pilates'];
+        }
+
+        return response()->json([
+            'categories' => $mainCategories,
+            'data' => $categories,
+        ]);
     }
 }

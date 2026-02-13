@@ -19,12 +19,14 @@ class AmeliaEventResource extends Resource
     protected static ?string $model = AmeliaEvent::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedCalendar;
-    
+
     protected static string|\UnitEnum|null $navigationGroup = 'Amelia Data';
-    
+
     protected static ?int $navigationSort = 4;
-    
+
     protected static ?string $navigationLabel = 'Amelia Events';
+
+    protected static bool $shouldRegisterNavigation = false;
 
     public static function form(Schema $schema): Schema
     {

@@ -55,6 +55,14 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // Subdirectory deployment: set session cookie path from APP_URL so admin login persists (e.g. https://sdhds.net/backend/backend/public)
+        if (config('session.path') === '/' && config('app.url')) {
+            $path = parse_url(config('app.url'), PHP_URL_PATH);
+            if ($path && $path !== '/') {
+                config(['session.path' => rtrim($path, '/')]);
+            }
+        }
+
         // Add custom CSS to make white logo visible
         \Filament\Support\Facades\FilamentView::registerRenderHook(
             'panels::head.start',

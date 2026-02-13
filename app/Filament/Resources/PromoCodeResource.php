@@ -108,8 +108,7 @@ class PromoCodeResource extends Resource
                 Actions\EditAction::make(),
             ])
             ->bulkActions([
-                // Use simple bulk delete action for compatibility with Filament version in production.
-                Tables\Actions\DeleteBulkAction::make(),
+                Actions\DeleteBulkAction::make(),
             ]);
     }
 

@@ -5,7 +5,6 @@ namespace App\Interfaces\Http\Controllers\Api\Mobile;
 use App\Http\Controllers\Controller;
 use App\Infrastructure\Persistence\Eloquent\AppointmentModel;
 use App\Infrastructure\Persistence\Eloquent\BookingModel;
-use App\Infrastructure\Persistence\Eloquent\ServiceModel;
 use App\Infrastructure\Persistence\Eloquent\StaffModel;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -16,12 +15,12 @@ class MobileSessionController extends Controller
 {
     /**
      * Get sessions (appointments) with optional pagination.
-     * Query params: date, serviceID, instructorID, per_page (default 15), page
+     * Query params: date, category (Yoga | Reformer Pilates), instructorID, per_page (default 15), page
      */
     public function index(Request $request): JsonResponse
     {
         $date = $request->query('date');
-        $serviceID = $request->query('serviceID');
+        $category = $request->query('category');
         $instructorID = $request->query('instructorID');
         $perPage = max(1, min(50, (int) $request->query('per_page', 15)));
 
@@ -41,8 +40,21 @@ class MobileSessionController extends Controller
                 Log::warning('Invalid date filter in sessions API: ' . $date);
             }
         }
-        if ($serviceID) {
-            $query->where('service_id', $serviceID);
+        if ($category !== null && $category !== '') {
+            // Category is determined by service name only (no category_id in DB)
+            $query->whereHas('service', function ($q) use ($category) {
+                $name = strtolower(trim($category));
+                if ($name === 'yoga') {
+                    $q->where('name', 'LIKE', '%Yoga%');
+                } elseif ($name === 'reformer pilates') {
+                    $q->where(function ($sub) {
+                        $sub->where('name', 'LIKE', '%Reformer Pilates%')
+                            ->orWhere('name', 'LIKE', '%Reform Pilates%');
+                    });
+                } else {
+                    $q->where('name', 'LIKE', '%' . addcslashes($category, '%_\\') . '%');
+                }
+            });
         }
         if ($instructorID) {
             $query->where('provider_id', $instructorID);

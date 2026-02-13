@@ -2,7 +2,7 @@
 	"info": {
 		"_postman_id": "flexana-mobile-api-v1",
 		"name": "Flexana Mobile API (v1)",
-		"description": "Flexana mobile app API. Auth: Login (phone+password). Signup: POST /auth/signup (phone [+ optional profile]) -> backend sends OTP via SMS -> user enters code (+ optional password) -> POST /auth/verify -> token. Profile: me, update, phone change, change password, delete account, logout. Schedule: sessions, book, cancel, appointments history. Packages: offers, purchase. Base: /api/v1.\n\nVariables:\n- base_url: Main URL (default: localhost). Change this value to switch environments.\n- base_url_localhost: http://127.0.0.1:8000\n- base_url_stage: https://sdhds.net/backend/backend/public\n- bearer_token: Auto-set after login/verify\n\nTo switch to stage: Edit collection variables and set base_url to {{base_url_stage}} or directly to https://sdhds.net/backend/backend/public",
+		"description": "Flexana mobile app API. Auth: Login (phone+password). Signup: POST /auth/signup (phone [+ optional profile]) -> backend sends OTP via SMS -> user enters code (+ optional password) -> POST /auth/verify -> token. Profile: me, update, phone change, change password, delete account, logout. Schedule: sessions (filter by date, category by service name, instructorID), book (optional promoCode, isDropIn), cancel, appointments history. Packages: offers, purchase (optional promoCode). Promo code flow: pass promoCode when booking a session or purchasing a package — see Promo Code Flow folder. Base: /api/v1.\n\nVariables:\n- base_url: Main URL (default: localhost). Change this value to switch environments.\n- base_url_localhost: http://127.0.0.1:8000\n- base_url_stage: https://sdhds.net/backend/backend/public\n- bearer_token: Auto-set after login/verify\n\nTo switch to stage: Edit collection variables and set base_url to {{base_url_stage}} or directly to https://sdhds.net/backend/backend/public",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"auth": {
@@ -449,18 +449,18 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/api/v1/sessions?date=2024-01-20&serviceID=1&instructorID=1&per_page=15&page=1",
+							"raw": "{{base_url}}/api/v1/sessions?date=2024-01-20&category=Yoga&instructorID=1&per_page=15&page=1",
 							"host": ["{{base_url}}"],
 							"path": ["api", "v1", "sessions"],
 							"query": [
 								{ "key": "date", "value": "2024-01-20", "description": "YYYY-MM-DD" },
-								{ "key": "serviceID", "value": "1", "description": "Optional" },
+								{ "key": "category", "value": "Yoga", "description": "Optional: Yoga | Reformer Pilates" },
 								{ "key": "instructorID", "value": "1", "description": "Optional" },
 								{ "key": "per_page", "value": "15", "description": "Default 15, max 50" },
 								{ "key": "page", "value": "1", "description": "Page number" }
 							]
 						},
-						"description": "Paginated. Response: { data: [{ id, instructor, service, date, isBooked, isFull, canCancel, canBook, minutesBeforeCancellation }, ...], meta: { current_page, last_page, per_page, total } }. Requires Bearer."
+						"description": "Paginated. Filter by date (YYYY-MM-DD), category (Yoga | Reformer Pilates — matched by service name), instructorID. Response: { data: [{ id, instructor, service, date, isBooked, isFull, canCancel, canBook, minutesBeforeCancellation }, ...], meta }. Requires Bearer."
 					},
 					"response": [
 						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"data\":[{\"id\":1,\"instructor\":\"John\",\"service\":\"Yoga\",\"date\":\"2024-01-20T10:00:00.000000Z\",\"isBooked\":false,\"isFull\":false,\"canCancel\":false,\"canBook\":true,\"minutesBeforeCancellation\":60}],\"meta\":{\"current_page\":1,\"last_page\":1,\"per_page\":15,\"total\":1}}" }
@@ -569,6 +569,44 @@
 				}
 			],
 			"description": "Packages screen. All require Bearer token."
+		},
+		{
+			"name": "Promo Code Flow",
+			"description": "Promo codes apply a percentage discount. Pass promoCode in the request body when: (1) Booking a session — POST /api/v1/session-bookings with sessionID, optional persons, promoCode, isDropIn. (2) Purchasing a package — POST /api/v1/purchase-package with packageId, promoCode. Codes are case-sensitive; valid codes reduce the amount; invalid/expired codes are ignored (full price charged). Managed in Filament Admin → Promo Codes.",
+			"item": [
+				{
+					"name": "Book Session (with promo code)",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"sessionID\": 1,\n    \"persons\": 1,\n    \"promoCode\": \"SAVE10\",\n    \"isDropIn\": true\n}"
+						},
+						"url": { "raw": "{{base_url}}/api/v1/session-bookings", "host": ["{{base_url}}"], "path": ["api", "v1", "session-bookings"] },
+						"description": "Apply a promo code when booking a session. Replace SAVE10 with a valid code from Admin. Valid code applies percent discount; invalid/expired code is ignored (booking succeeds at full price). Requires Bearer."
+					},
+					"response": [
+						{ "name": "Success", "status": "Created", "code": 201, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"message\":\"Booking created successfully\",\"data\":{\"id\":1,\"sessionID\":1,\"customerId\":1}}" }
+					]
+				},
+				{
+					"name": "Purchase Package (with promo code)",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"packageId\": 1,\n    \"promoCode\": \"SAVE10\"\n}"
+						},
+						"url": { "raw": "{{base_url}}/api/v1/purchase-package", "host": ["{{base_url}}"], "path": ["api", "v1", "purchase-package"] },
+						"description": "Apply a promo code when purchasing a package. Replace SAVE10 with a valid code. Valid code applies percent discount; invalid code is ignored (purchase at full price). Requires Bearer."
+					},
+					"response": [
+						{ "name": "Success", "status": "Created", "code": 201, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"message\":\"Package purchased successfully\",\"data\":{\"id\":1,\"packageId\":1,\"customerId\":1}}" }
+					]
+				}
+			]
 		}
 	],
 	"variable": [

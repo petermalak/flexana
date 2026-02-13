@@ -22,6 +22,8 @@ class AmeliaPackageResource extends Resource
 
     protected static ?string $navigationLabel = 'Amelia Packages';
 
+    protected static bool $shouldRegisterNavigation = false;
+
     public static function form(Schema $schema): Schema
     {
         return $schema->components([

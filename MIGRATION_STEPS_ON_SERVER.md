@@ -47,31 +47,41 @@ php artisan firestore:migrate \
 
 ---
 
-## 3. Amelia import (optional)
+## 3. Amelia / WordPress data fetch (optional)
 
-Only if the server can reach the WordPress/Amelia database and you want to copy Amelia data into Laravel.
+Only if the server can reach the WordPress/Amelia database and you want to copy **all** Amelia data into Laravel (locations, customers, staff, services, packages, appointments, bookings, payments, events, categories, tags, resources, settings).
 
-**3a. Configure WordPress DB** in `.env`:
+**3a. Configure WordPress DB** in `.env` (use the **WordPress database**, not the Laravel one):
 
 ```env
 WP_DB_HOST=127.0.0.1
 WP_DB_PORT=3306
-WP_DB_DATABASE=your_wordpress_db
+WP_DB_DATABASE=your_wordpress_database_name
 WP_DB_USERNAME=your_user
 WP_DB_PASSWORD=your_password
 ```
 
-**3b. Run the import:**
+- **WP_DB_DATABASE** must be the WordPress/Amelia database name. Do not use the same value as Laravel’s `DB_DATABASE` unless Amelia really lives in that DB.
+- **WP_DB_PREFIX** must match your WordPress table prefix + `amelia_`. For example, if Amelia tables are `rueyn_amelia_users`, `rueyn_amelia_services`, etc., set:
+
+```env
+WP_DB_PREFIX=rueyn_amelia_
+```
+
+**3b. Run the fetch:**
 
 ```bash
 cd /var/www/flexana/backend
-php artisan amelia:import
+php artisan amelia:fetch
 ```
 
+- **Staging / production:** Same command; ensure both Laravel and WordPress DB credentials are set in `.env` for that environment.
 - First run: no extra options.
 - Re-runs: use `--skip-duplicates` to skip existing records.
-- Test first: use `--dry-run`.
-- Limit scope: e.g. `--only=staff --only=services --only=packages`.
+- Test first: use `--dry-run` to see what would be imported without writing.
+- Limit scope: e.g. `php artisan amelia:fetch --only=locations --only=customers --only=appointments`.
+
+**Alternative (legacy):** `php artisan amelia:import` for a subset of entities; prefer `amelia:fetch` for a full sync from the WordPress DB.
 
 ---
 
@@ -96,7 +106,7 @@ php artisan users:sync-amelia
 |------|---------|------|
 | 1 | `php artisan migrate --force` | Every deploy |
 | 2 | `php artisan firestore:migrate ...` | Once (or when you have new Firestore exports) |
-| 3 | `php artisan amelia:import` | Once, or when you want to refresh from Amelia |
+| 3 | `php artisan amelia:fetch` | Once, or when you want to refresh from Amelia (WordPress DB) |
 | 4 | `php artisan users:sync-amelia` | Optional, when using Amelia + Laravel customers |
 
 After step 1, run only the steps that apply to your setup (Firestore and/or Amelia).
