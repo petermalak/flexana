@@ -2,7 +2,7 @@
 	"info": {
 		"_postman_id": "flexana-mobile-api-v1",
 		"name": "Flexana Mobile API (v1)",
-		"description": "Flexana mobile app API. Auth: Login (phone+password). Signup: POST /auth/signup (phone [+ optional profile]) -> backend sends OTP via SMS -> user enters code (+ optional password) -> POST /auth/verify -> token. Profile: me, update, phone change, change password, delete account, logout. Schedule: sessions (filter by date, category by service name, instructorID), book (optional promoCode, isDropIn), cancel, appointments history. Packages: offers, purchase (optional promoCode). Promo code flow: pass promoCode when booking a session or purchasing a package — see Promo Code Flow folder. Base: /api/v1.\n\nVariables:\n- base_url: Main URL (default: localhost). Change this value to switch environments.\n- base_url_localhost: http://127.0.0.1:8000\n- base_url_stage: https://sdhds.net/backend/backend/public\n- bearer_token: Auto-set after login/verify\n\nTo switch to stage: Edit collection variables and set base_url to {{base_url_stage}} or directly to https://sdhds.net/backend/backend/public",
+		"description": "Flexana mobile app API. Auth: Login (phone+password). Signup: POST /auth/signup (phone [+ optional profile]) -> backend sends OTP via SMS -> user enters code (+ optional password) -> POST /auth/verify -> token. Profile: me, update, phone change, change password, delete account, logout. Schedule: sessions (filter by date, category by service name, instructorID), book (optional promoCode, isDropIn), cancel, appointments history. Packages: offers, purchase (optional promoCode). Promo code flow: verify with POST /promo-codes/verify, then pass promoCode when booking or purchasing — see Promo Code Flow folder. Base: /api/v1.\n\nVariables:\n- base_url: Main URL (default: localhost). Change this value to switch environments.\n- base_url_localhost: http://127.0.0.1:8000\n- base_url_stage: https://sdhds.net/backend/backend/public\n- bearer_token: Auto-set after login/verify\n\nTo switch to stage: Edit collection variables and set base_url to {{base_url_stage}} or directly to https://sdhds.net/backend/backend/public",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"auth": {
@@ -431,7 +431,7 @@
 						"method": "GET",
 						"header": [],
 						"url": { "raw": "{{base_url}}/api/v1/service/simple", "host": ["{{base_url}}"], "path": ["api", "v1", "service", "simple"] },
-						"description": "Response: categories for schedule filters. Format: [{ category: \"Yoga\" | \"Reformer Pilates\", services: [{ id, name }, ...] }, ...]. Requires Bearer."
+						"description": "Response: categories for schedule filters. Top-level: categories (array of { id, name } for filter UI), data (array of { category, services: [{ id, name }, ...] }). Requires Bearer."
 					},
 					"response": [
 						{
@@ -439,7 +439,7 @@
 							"status": "OK",
 							"code": 200,
 							"header": [{ "key": "Content-Type", "value": "application/json" }],
-							"body": "[\n  {\n    \"category\": \"Yoga\",\n    \"services\": [\n      { \"id\": \"1\", \"name\": \"Gentle Vinyasa- Ladies only\" }\n    ]\n  },\n  {\n    \"category\": \"Reformer Pilates\",\n    \"services\": [\n      { \"id\": \"2\", \"name\": \"Reformer Pilates - Ladies only L1\" }\n    ]\n  }\n]"
+							"body": "{\"categories\":[{\"id\":\"yoga\",\"name\":\"Yoga\"},{\"id\":\"reformer-pilates\",\"name\":\"Reformer Pilates\"}],\"data\":[{\"category\":\"Yoga\",\"services\":[{\"id\":\"1\",\"name\":\"Gentle Vinyasa- Ladies only\"}]},{\"category\":\"Reformer Pilates\",\"services\":[{\"id\":\"2\",\"name\":\"Reformer Pilates - Ladies only L1\"}]}]}"
 						}
 					]
 				},
@@ -572,8 +572,25 @@
 		},
 		{
 			"name": "Promo Code Flow",
-			"description": "Promo codes apply a percentage discount. Pass promoCode in the request body when: (1) Booking a session — POST /api/v1/session-bookings with sessionID, optional persons, promoCode, isDropIn. (2) Purchasing a package — POST /api/v1/purchase-package with packageId, promoCode. Codes are case-sensitive; valid codes reduce the amount; invalid/expired codes are ignored (full price charged). Managed in Filament Admin → Promo Codes.",
+			"description": "Promo codes apply a percentage discount. Verify a code first: POST /api/v1/promo-codes/verify (body: code). Then pass promoCode when booking a session or purchasing a package. Codes are case-sensitive; invalid/expired codes are ignored (full price charged). Managed in Filament Admin → Promo Codes.",
 			"item": [
+				{
+					"name": "Verify Promo Code",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"code\": \"SAVE20\"\n}"
+						},
+						"url": { "raw": "{{base_url}}/api/v1/promo-codes/verify", "host": ["{{base_url}}"], "path": ["api", "v1", "promo-codes", "verify"] },
+						"description": "Check if a promo code exists and is valid. Body: code (required). Returns valid (boolean), reason (not_found | inactive | not_yet_valid | expired | usage_limit_reached), message, and when valid or when code exists: promo_code (id, code, name, percent_discount, valid_from, valid_until, usage_limit, used_count, is_active). Requires Bearer."
+					},
+					"response": [
+						{ "name": "Valid", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"valid\":true,\"message\":\"Promo code is valid.\",\"promo_code\":{\"id\":1,\"code\":\"SAVE20\",\"name\":\"Summer Sale\",\"percent_discount\":20,\"valid_from\":null,\"valid_until\":\"2025-12-31T23:59:59+00:00\",\"usage_limit\":100,\"used_count\":42,\"is_active\":true}}" },
+						{ "name": "Not found", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"valid\":false,\"reason\":\"not_found\",\"message\":\"Promo code does not exist.\"}" }
+					]
+				},
 				{
 					"name": "Book Session (with promo code)",
 					"request": {

@@ -129,6 +129,8 @@ return [
             'prefix_indexes' => true,
             'strict' => true,
             'engine' => null,
+            // Amelia users table: set WP_AMELIA_USERS_TABLE=amelia_users if Amelia uses a separate table (with type column)
+            'amelia_users_table' => env('WP_AMELIA_USERS_TABLE', 'users'),
             'options' => extension_loaded('pdo_mysql') ? array_filter([
                 PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
             ]) : [],

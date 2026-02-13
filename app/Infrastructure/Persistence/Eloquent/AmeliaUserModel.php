@@ -10,6 +10,15 @@ class AmeliaUserModel extends Model
     protected $table = 'users';
     public $timestamps = false;
 
+    public function getTable(): string
+    {
+        if ($this->connection === 'wordpress') {
+            return config('database.connections.wordpress.amelia_users_table', 'users');
+        }
+
+        return parent::getTable();
+    }
+
     protected $fillable = [
         'id',
         'firstName',

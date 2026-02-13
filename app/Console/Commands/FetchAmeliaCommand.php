@@ -25,6 +25,7 @@ use App\Models\BookableResource;
 use App\Models\Event;
 use App\Infrastructure\Persistence\Eloquent\AppointmentModel;
 use App\Infrastructure\Persistence\Eloquent\BookingModel;
+use App\Infrastructure\Persistence\Eloquent\PaymentModel;
 use App\Infrastructure\Persistence\Eloquent\PackageModel;
 use App\Infrastructure\Persistence\Eloquent\ServiceModel;
 use App\Infrastructure\Persistence\Eloquent\StaffModel;
@@ -43,7 +44,7 @@ class FetchAmeliaCommand extends Command
                             {--skip-duplicates : Skip records that already exist (by amelia_* id)}
                             {--only=* : Limit to entities: locations,customers,staff,services,packages,service-staff,package-service,appointments,bookings,payments,events,event-periods,event-tickets,categories,tags,resources,settings}';
 
-    protected $description = 'Fetch all Amelia (WordPress) DB data into Laravel MySQL. Idempotent: no duplicates (upsert by Amelia id). Set WP_DB_* in .env.';
+    protected $description = 'Fetch all Amelia (WordPress) DB data into Laravel MySQL. Idempotent: checks for existing rows by amelia_*_id (or equivalent) to prevent duplicates; use --skip-duplicates to skip existing. Set WP_DB_* and optionally WP_AMELIA_USERS_TABLE in .env.';
 
     private bool $dryRun = false;
     private bool $skipDuplicates = false;
@@ -219,8 +220,13 @@ class FetchAmeliaCommand extends Command
     private function fetchCustomers(): void
     {
         $this->info('Fetching customers...');
-        if (! $this->tableExists('wordpress', 'users')) {
-            $this->line('  Table users not found in WordPress DB. Set WP_DB_DATABASE to the WordPress DB and WP_DB_PREFIX if Amelia uses a prefix (e.g. wp_amelia_). Skipping.');
+        $usersTable = config('database.connections.wordpress.amelia_users_table', 'users');
+        if (! $this->tableExists('wordpress', $usersTable)) {
+            $this->line("  Table {$usersTable} not found in WordPress DB. Set WP_DB_DATABASE and WP_DB_PREFIX; if Amelia uses a separate users table set WP_AMELIA_USERS_TABLE=amelia_users. Skipping.");
+            return;
+        }
+        if (! $this->columnExists('wordpress', $usersTable, 'type')) {
+            $this->warn("  Table {$usersTable} has no 'type' column. Set WP_AMELIA_USERS_TABLE=amelia_users in .env if Amelia uses a separate table (e.g. amelia_users) with type (customer/provider). Skipping customers.");
             return;
         }
         $rows = AmeliaUserModel::on('wordpress')->where('type', 'customer')->get();
@@ -250,8 +256,13 @@ class FetchAmeliaCommand extends Command
     private function fetchStaff(): void
     {
         $this->info('Fetching staff...');
-        if (! $this->tableExists('wordpress', 'users')) {
-            $this->line('  Table users not found in WordPress DB. Set WP_DB_DATABASE and WP_DB_PREFIX if needed. Skipping.');
+        $usersTable = config('database.connections.wordpress.amelia_users_table', 'users');
+        if (! $this->tableExists('wordpress', $usersTable)) {
+            $this->line("  Table {$usersTable} not found. Set WP_DB_DATABASE, WP_DB_PREFIX, and WP_AMELIA_USERS_TABLE if needed. Skipping.");
+            return;
+        }
+        if (! $this->columnExists('wordpress', $usersTable, 'type')) {
+            $this->warn("  Table {$usersTable} has no 'type' column. Set WP_AMELIA_USERS_TABLE=amelia_users in .env if Amelia uses a separate table. Skipping staff.");
             return;
         }
         $rows = AmeliaUserModel::on('wordpress')->whereIn('type', ['provider', 'manager', 'admin'])->get();
@@ -388,6 +399,11 @@ class FetchAmeliaCommand extends Command
         }
         $rows = AmeliaAppointmentModel::on('wordpress')->get();
         foreach ($rows as $a) {
+            if ($a->bookingStart === null || $a->bookingEnd === null) {
+                $this->warn("  Skipping appointment id={$a->id}: missing booking_start or booking_end.");
+                $this->counts['skipped']++;
+                continue;
+            }
             $existing = AppointmentModel::query()->where('amelia_appointment_id', $a->id)->first();
             if ($existing) {
                 if ($this->skipDuplicates) {
@@ -404,8 +420,12 @@ class FetchAmeliaCommand extends Command
                 $this->counts['appointments']++;
                 continue;
             }
-            $this->autoSync->syncAppointment($a);
-            $this->counts['appointments']++;
+            $synced = $this->autoSync->syncAppointment($a);
+            if ($synced !== null) {
+                $this->counts['appointments']++;
+            } else {
+                $this->counts['skipped']++;
+            }
         }
         $this->line("  → {$this->counts['appointments']} appointments");
     }
@@ -450,6 +470,12 @@ class FetchAmeliaCommand extends Command
         }
         $rows = AmeliaPaymentModel::on('wordpress')->get();
         foreach ($rows as $a) {
+            $existing = PaymentModel::query()
+                ->where('provider_reference', (string) $a->id)->first();
+            if ($existing && $this->skipDuplicates) {
+                $this->counts['skipped']++;
+                continue;
+            }
             if ($this->dryRun) {
                 $this->counts['payments']++;
                 continue;
@@ -735,6 +761,15 @@ class FetchAmeliaCommand extends Command
     {
         try {
             return DB::connection($connection)->getSchemaBuilder()->hasTable($table);
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
+    private function columnExists(string $connection, string $table, string $column): bool
+    {
+        try {
+            return DB::connection($connection)->getSchemaBuilder()->hasColumn($table, $column);
         } catch (\Throwable) {
             return false;
         }

@@ -189,6 +189,10 @@ final class AutoSyncAmeliaService
      */
     public function syncAppointment(AmeliaAppointmentModel $ameliaAppointment): ?AppointmentModel
     {
+        if ($ameliaAppointment->bookingStart === null || $ameliaAppointment->bookingEnd === null) {
+            return null;
+        }
+
         // First sync dependencies
         $service = ServiceModel::query()->where('amelia_service_id', $ameliaAppointment->serviceId)->first();
         if (! $service) {
