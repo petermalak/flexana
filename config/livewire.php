@@ -17,6 +17,19 @@ return [
 
     /*
     |---------------------------------------------------------------------------
+    | Asset URL
+    |---------------------------------------------------------------------------
+    |
+    | When the app is in a subdirectory (e.g. https://sdhds.net/backend/public/),
+    | set LIVEWIRE_BASE_PATH in .env so the script URL includes the base path.
+    | Otherwise the browser requests /livewire/livewire.js at domain root (404).
+    |
+    */
+
+    'asset_url' => env('LIVEWIRE_ASSET_URL'),
+
+    /*
+    |---------------------------------------------------------------------------
     | View Path
     |---------------------------------------------------------------------------
     |

@@ -78,6 +78,9 @@ class AppServiceProvider extends ServiceProvider
             $basePath = trim($basePath, '/');
             $fullBasePath = '/' . $basePath;
 
+            // Force Livewire script to load from the base path (fixes 404 when app is in subdirectory)
+            config(['livewire.asset_url' => $fullBasePath . '/livewire/livewire.js']);
+
             // Set the update route with base path and also register at root level
             \Livewire\Livewire::setUpdateRoute(function ($handle) use ($fullBasePath) {
                 // Register the route with base path
