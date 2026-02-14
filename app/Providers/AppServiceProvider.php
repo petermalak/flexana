@@ -22,6 +22,7 @@ use App\Infrastructure\Persistence\Repositories\PackageRepository;
 use App\Infrastructure\Persistence\Repositories\ServiceRepository;
 use App\Infrastructure\Persistence\Repositories\StaffRepository;
 use Illuminate\Http\Client\Factory as HttpFactory;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -55,12 +56,47 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        // Subdirectory deployment: set session cookie path from APP_URL so admin login persists (e.g. https://sdhds.net/backend/backend/public)
-        if (config('session.path') === '/' && config('app.url')) {
-            $path = parse_url(config('app.url'), PHP_URL_PATH);
-            if ($path && $path !== '/') {
-                config(['session.path' => rtrim($path, '/')]);
+        $appUrl = config('app.url');
+        $pathFromUrl = $appUrl ? parse_url($appUrl, PHP_URL_PATH) : null;
+        $pathFromUrl = ($pathFromUrl && $pathFromUrl !== '/') ? trim($pathFromUrl, '/') : '';
+
+        // Subdirectory: prefer LIVEWIRE_BASE_PATH, else derive from APP_URL (e.g. https://sdhds.net/backend/public → backend/public)
+        $basePath = trim((string) env('LIVEWIRE_BASE_PATH', $pathFromUrl), '/');
+        $fullBasePath = $basePath !== '' ? '/' . $basePath : '';
+
+        if ($fullBasePath !== '') {
+            // Force Laravel to generate all URLs with this root (fixes redirects and form actions after login)
+            URL::forceRootUrl(rtrim($appUrl, '/'));
+            $scheme = parse_url($appUrl, PHP_URL_SCHEME);
+            if ($scheme) {
+                URL::forceScheme($scheme);
             }
+
+            // Session cookie path must match the app path or the browser won't send the cookie after login
+            config(['session.path' => $fullBasePath]);
+
+            // Livewire: script and update routes must live under the same base path
+            config(['livewire.asset_url' => $fullBasePath . '/livewire/livewire.js']);
+            config(['livewire.base_path' => $fullBasePath]);
+
+            \Livewire\Livewire::setUpdateRoute(function ($handle) use ($fullBasePath) {
+                $routeWithBase = \Illuminate\Support\Facades\Route::post($fullBasePath . '/livewire/update', $handle)
+                    ->middleware(['web']);
+                \Illuminate\Support\Facades\Route::post('/livewire/update', $handle)
+                    ->middleware(['web']);
+                return $routeWithBase;
+            });
+
+            \Livewire\Livewire::setScriptRoute(function ($handle) use ($fullBasePath) {
+                $routeWithBase = \Illuminate\Support\Facades\Route::get($fullBasePath . '/livewire/livewire.js', $handle);
+                \Illuminate\Support\Facades\Route::get('/livewire/livewire.js', $handle);
+                return $routeWithBase;
+            });
+        } else {
+            \Livewire\Livewire::setUpdateRoute(function ($handle) {
+                return \Illuminate\Support\Facades\Route::post('/livewire/update', $handle)
+                    ->middleware(['web']);
+            });
         }
 
         // Add custom CSS to make white logo visible
@@ -68,45 +104,5 @@ class AppServiceProvider extends ServiceProvider
             'panels::head.start',
             fn (): string => '<link rel="stylesheet" href="' . asset('css/logo-styles.css') . '">'
         );
-
-        // Ensure Livewire routes are registered (required for Filament)
-        // Configure Livewire to use the correct base path for subdirectory deployments
-        $basePath = env('LIVEWIRE_BASE_PATH', '');
-
-        if ($basePath) {
-            // Remove leading/trailing slashes
-            $basePath = trim($basePath, '/');
-            $fullBasePath = '/' . $basePath;
-
-            // Force Livewire script to load from the base path (fixes 404 when app is in subdirectory)
-            config(['livewire.asset_url' => $fullBasePath . '/livewire/livewire.js']);
-
-            // Set the update route with base path and also register at root level
-            \Livewire\Livewire::setUpdateRoute(function ($handle) use ($fullBasePath) {
-                // Register the route with base path
-                $routeWithBase = \Illuminate\Support\Facades\Route::post($fullBasePath . '/livewire/update', $handle)
-                    ->middleware(['web']);
-
-                // Also register at root level to catch /livewire/update requests
-                \Illuminate\Support\Facades\Route::post('/livewire/update', $handle)
-                    ->middleware(['web']);
-
-                return $routeWithBase;
-            });
-
-            // Set the script route with base path (for Livewire assets)
-            \Livewire\Livewire::setScriptRoute(function ($handle) use ($fullBasePath) {
-                // Register both routes
-                $routeWithBase = \Illuminate\Support\Facades\Route::get($fullBasePath . '/livewire/livewire.js', $handle);
-                \Illuminate\Support\Facades\Route::get('/livewire/livewire.js', $handle);
-                return $routeWithBase;
-            });
-        } else {
-            // Default configuration for local development
-            \Livewire\Livewire::setUpdateRoute(function ($handle) {
-                return \Illuminate\Support\Facades\Route::post('/livewire/update', $handle)
-                    ->middleware(['web']);
-            });
-        }
     }
 }

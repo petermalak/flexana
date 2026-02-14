@@ -36,28 +36,34 @@ php artisan tinker
 
 ---
 
-## 3. Session cookie path (subdirectory deployments)
+## 3. Subdirectory deployment (session + Livewire 404 + redirect after login)
 
-When the app is in a subdirectory (e.g. `https://sdhds.net/backend/backend/public`), the session cookie must be set for that path or the browser will not send it after login, so you appear logged out.
+When the app is in a subdirectory (e.g. `https://sdhds.net/backend/public`), you **must** set `APP_URL` to the **full URL including the path**. The app uses this for:
 
-**Option A – Set APP_URL (recommended)**  
-If `APP_URL` is set correctly, the app will set the session path automatically:
+- **Session cookie path** – so the browser sends the cookie after login (no redirect back to login).
+- **Livewire script URL** – so `/livewire/livewire.js` is loaded from the correct path (no 404).
+- **Redirects and form actions** – so login and other URLs point to the app.
 
-```env
-APP_URL=https://sdhds.net/backend/backend/public
-```
-
-**Option B – Set SESSION_PATH explicitly**
+Set in `.env`:
 
 ```env
-SESSION_PATH=/backend/backend/public
+APP_URL=https://sdhds.net/backend/public
 ```
 
-Restart PHP / clear config cache after changing `.env`:
+Use your real path (e.g. `backend/public`, `backend/backend/public`, or whatever the document root of the app is). No trailing slash.
+
+Optional: if you need a different base path for Livewire only, set:
+
+```env
+LIVEWIRE_BASE_PATH=backend/public
+```
+
+After changing `.env`:
 
 ```bash
 php artisan config:clear
-# If you use opcache or run behind a web server, restart PHP or the server if needed.
+# If you use config:cache in production, run: php artisan config:cache
+# Restart PHP or the web server if needed (e.g. opcache).
 ```
 
 ---
@@ -76,5 +82,5 @@ php artisan config:clear
 |-------|--------|
 | Logging in with **email** (not phone) | Admin uses email from `users` table |
 | Admin user exists | Run `php artisan db:seed --class=AdminUserSeeder` |
-| Subdirectory URL | Set `APP_URL=https://sdhds.net/backend/backend/public` or `SESSION_PATH=/backend/backend/public` |
+| Subdirectory URL | Set `APP_URL=https://sdhds.net/backend/public` (full URL including path) |
 | After .env change | Run `php artisan config:clear` |

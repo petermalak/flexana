@@ -82,16 +82,12 @@ class AdminPanelProvider extends PanelProvider
             ->renderHook(
                 'panels::head.end',
                 function (): string {
-                    $basePath = env('LIVEWIRE_BASE_PATH', '');
-                    if ($basePath) {
-                        $fullBasePath = '/' . trim($basePath, '/');
+                    $fullBasePath = config('livewire.base_path', '');
+                    if ($fullBasePath !== '') {
                         $updateUrl = $fullBasePath . '/livewire/update';
-                        // Inject script to override Livewire's endpoint URL
-                        // This must run before Livewire initializes
                         return '<script>
                             window.livewireConfig = window.livewireConfig || {};
                             window.livewireConfig.updateEndpoint = "' . $updateUrl . '";
-                            // Override Livewire\'s default endpoint
                             document.addEventListener("DOMContentLoaded", function() {
                                 if (window.Livewire) {
                                     window.Livewire.config.updateEndpoint = "' . $updateUrl . '";
