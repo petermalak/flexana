@@ -83,10 +83,23 @@ class MobileSessionController extends Controller
             $canCancel = $isBooked && $canCancelUntil && Carbon::now()->lte($canCancelUntil);
             $canBook = ! $isFull && Carbon::parse($appointment->booking_start)->gt(Carbon::now());
 
+            $serviceType = null;
+            if ($service && $service->name) {
+                $name = strtolower($service->name);
+                if (str_contains($name, 'reformer') || str_contains($name, 'reform pilates')) {
+                    $serviceType = 'Reformer Pilates';
+                } elseif (str_contains($name, 'yoga')) {
+                    $serviceType = 'Yoga';
+                }else {
+                    $serviceType = 'Yoga';
+                }
+            }
+
             return [
                 'id' => (string) $appointment->id,
                 'instructor' => $provider ? $provider->name : '',
                 'service' => $service ? $service->name : '',
+                'serviceType' => $serviceType,
                 'date' => Carbon::parse($appointment->booking_start)->toIso8601String(),
                 'isBooked' => $isBooked,
                 'isFull' => $isFull,

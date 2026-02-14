@@ -8,6 +8,7 @@ use App\Infrastructure\Persistence\Eloquent\CustomerDeviceTokenModel;
 use App\Models\Customer;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
@@ -554,16 +555,92 @@ class MobileAuthController extends Controller
         ]);
     }
 
+    /**
+     * Determine package category from its services (or classType / service_type fallback).
+     * Returns 'Yoga', 'Reformer Pilates', or null.
+     */
+    private function packageServiceType($package): ?string
+    {
+        if (! $package) {
+            return null;
+        }
+        if ($package->relationLoaded('services') && $package->services->isNotEmpty()) {
+            $yogaCount = 0;
+            $reformerCount = 0;
+            foreach ($package->services as $service) {
+                $name = strtolower($service->name ?? '');
+                if (str_contains($name, 'reformer') || str_contains($name, 'reform pilates')) {
+                    $reformerCount++;
+                } elseif (str_contains($name, 'yoga')) {
+                    $yogaCount++;
+                }
+            }
+            if ($reformerCount > 0 && $reformerCount >= $yogaCount) {
+                return 'Reformer Pilates';
+            }
+            if ($yogaCount > 0) {
+                return 'Yoga';
+            }
+        }
+        $fallback = $package->classType?->name ?? $package->service_type ?? null;
+        if ($fallback === null) {
+            return null;
+        }
+        $lower = strtolower((string) $fallback);
+        if (str_contains($lower, 'reformer') || str_contains($lower, 'reform')) {
+            return 'Reformer Pilates';
+        }
+        if (str_contains($lower, 'yoga')) {
+            return 'Yoga';
+        }
+        return null;
+    }
+
+    /**
+     * From valid package candidates (same category), return the last purchased one (by purchase date).
+     * Drops the internal _purchase_date key from the returned detail.
+     */
+    private function lastValidPackageFromCandidates(array $candidates): ?array
+    {
+        if ($candidates === []) {
+            return null;
+        }
+        $last = collect($candidates)->sortByDesc(function ($detail) {
+            $d = $detail['_purchase_date'] ?? null;
+            return $d ? $d->format('Y-m-d H:i:s') : '';
+        })->first();
+        unset($last['_purchase_date']);
+        return $last;
+    }
+
     private function customerToArray($customer): array
     {
         $activePurchases = $customer->packagePurchases()
-            ->with('package')
+            ->with(['package.services', 'package.classType'])
             ->where('status', 'active')
             ->get();
 
         $remainingSessions = (int) $activePurchases->sum('remaining_sessions');
+        $remainingYogaSessions = 0;
+        $remainingReformerSessions = 0;
+        foreach ($activePurchases as $purchase) {
+            $serviceType = $this->packageServiceType($purchase->package);
+            $remaining = (int) $purchase->remaining_sessions;
+            if ($serviceType === 'Yoga') {
+                $remainingYogaSessions += $remaining;
+            } elseif ($serviceType === 'Reformer Pilates') {
+                $remainingReformerSessions += $remaining;
+            }
+        }
 
-        $packagesBreakdown = $activePurchases->map(function ($purchase) {
+        $today = Carbon::today()->startOfDay();
+        $yogaCandidates = [];
+        $reformerCandidates = [];
+        foreach ($activePurchases as $purchase) {
+            $remaining = (int) $purchase->remaining_sessions;
+            if ($remaining <= 0) {
+                continue;
+            }
             $package = $purchase->package;
             $expiresAt = null;
             if ($package && $purchase->purchase_date && $package->package_duration) {
@@ -571,15 +648,29 @@ class MobileAuthController extends Controller
             } elseif ($package && $package->expiry) {
                 $expiresAt = $package->expiry;
             }
-            return [
+            if ($expiresAt !== null && $expiresAt->copy()->startOfDay()->lt($today)) {
+                continue;
+            }
+            $detail = [
                 'packageId' => (string) $purchase->package_id,
                 'packageName' => $package ? ($package->title ?? '') : '',
-                'remainingSessions' => (int) $purchase->remaining_sessions,
+                'remainingSessions' => $remaining,
                 'totalSessions' => (int) $purchase->total_sessions,
                 'purchaseDate' => $purchase->purchase_date?->toDateString(),
                 'expiresAt' => $expiresAt?->toDateString(),
+                '_purchase_date' => $purchase->purchase_date,
             ];
-        })->values()->toArray();
+            $serviceType = $this->packageServiceType($package);
+            if ($serviceType === 'Yoga') {
+                $yogaCandidates[] = $detail;
+            } elseif ($serviceType === 'Reformer Pilates') {
+                $reformerCandidates[] = $detail;
+            }
+        }
+        unset($today);
+
+        $yogaPackage = $this->lastValidPackageFromCandidates($yogaCandidates);
+        $reformerPackage = $this->lastValidPackageFromCandidates($reformerCandidates);
 
         $profileImageUrl = null;
         if ($customer->profile_image) {
@@ -598,7 +689,10 @@ class MobileAuthController extends Controller
             'emailVerifiedAt' => $customer->email_verified_at?->toIso8601String(),
             'remainingSessions' => $remainingSessions,
             'remainingSessionsDetail' => [
-                'packages' => $packagesBreakdown,
+                'remainingYogaSessions' => $remainingYogaSessions,
+                'remainingReformerSessions' => $remainingReformerSessions,
+                'yogaPackage' => $yogaPackage,
+                'reformerPackage' => $reformerPackage,
             ],
         ];
     }

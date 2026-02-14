@@ -224,18 +224,30 @@ final class PhoneVerificationService
             ->orderByDesc('created_at')
             ->first();
 
-        if (! $row) {
-            return ['success' => false, 'message' => 'Invalid or expired code.'];
+        if ($row) {
+            DB::table('phone_verification_codes')
+                ->where('phone', $phone)
+                ->where('code', $code)
+                ->where('purpose', 'phone_change')
+                ->where('customer_id', $customerId)
+                ->delete();
+
+            return ['success' => true, 'message' => 'Verified.', 'phone' => $phone];
         }
 
-        DB::table('phone_verification_codes')
-            ->where('phone', $phone)
-            ->where('code', $code)
-            ->where('purpose', 'phone_change')
-            ->where('customer_id', $customerId)
-            ->delete();
+        // Fallback: provider may have sent the code (e.g. Twilio Verify) instead of our DB code
+        $providerResult = $this->sms->checkVerification($phone, $code);
+        if ($providerResult === true) {
+            DB::table('phone_verification_codes')
+                ->where('phone', $phone)
+                ->where('purpose', 'phone_change')
+                ->where('customer_id', $customerId)
+                ->delete();
 
-        return ['success' => true, 'message' => 'Verified.', 'phone' => $phone];
+            return ['success' => true, 'message' => 'Verified.', 'phone' => $phone];
+        }
+
+        return ['success' => false, 'message' => 'Invalid or expired code.'];
     }
 
     /**
@@ -368,9 +380,23 @@ final class PhoneVerificationService
         return ['success' => true, 'message' => 'Code verified.', 'customer' => $customer];
     }
 
+    /**
+     * Canonical format so "01234567890" and "+201234567890" match when storing vs verifying.
+     * Must match SmsVerificationService normalization so send and verify use the same key.
+     */
     private function normalizePhone(string $phone): string
     {
-        return preg_replace('/\s+/', '', $phone);
+        $phone = preg_replace('/\s+/', '', $phone);
+        if ($phone === '') {
+            return '';
+        }
+        if (str_starts_with($phone, '0')) {
+            $phone = '+20' . substr($phone, 1);
+        }
+        if (! str_starts_with($phone, '+')) {
+            $phone = '+' . $phone;
+        }
+        return $phone;
     }
 
     private function generateCode(): string

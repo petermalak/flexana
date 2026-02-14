@@ -12,6 +12,12 @@ final class SmsVerificationService implements SmsVerificationServiceInterface
         $phone = $this->normalizeE164($phone);
         $driver = config('sms.driver', 'log');
 
+        // When we have a code to send (e.g. phone change), send it via SMS so the user receives that exact code.
+        // Twilio Verify sends its own OTP and ignores our code, which would break flows that store our code in the DB.
+        if ($driver === 'twilio' && $code !== '' && $this->twilioConfigured()) {
+            return $this->sendViaTwilio($phone, $code);
+        }
+
         if ($driver === 'twilio' && $this->twilioVerifyConfigured()) {
             return $this->sendViaTwilioVerify($phone);
         }
