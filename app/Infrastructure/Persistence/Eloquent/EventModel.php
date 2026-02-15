@@ -27,6 +27,7 @@ class EventModel extends Model
         'price',
         'deposit_amount',
         'allow_waitlist',
+        'minutes_before_cancellation',
         'recurrence',
         'meta',
         'published_at',

@@ -78,6 +78,11 @@ class EventResource extends Resource
                                             ->required(),
                                         Forms\Components\Toggle::make('allow_waitlist')
                                             ->label('Allow Waitlist'),
+                                        Forms\Components\TextInput::make('minutes_before_cancellation')
+                                            ->label('Minutes before cancellation')
+                                            ->numeric()
+                                            ->minValue(0)
+                                            ->helperText('Cut-off minutes before session start when cancellation is no longer allowed'),
                                     ])->columns(2),
                             ]),
                         Tab::make('Pricing & schedule')
@@ -178,6 +183,10 @@ class EventResource extends Resource
                 Tables\Columns\IconColumn::make('allow_waitlist')
                     ->boolean()
                     ->label('Waitlist'),
+                Tables\Columns\TextColumn::make('minutes_before_cancellation')
+                    ->label('Mins before cancel')
+                    ->sortable()
+                    ->toggleable(),
                 Tables\Columns\TextColumn::make('updated_at')
                     ->dateTime()
                     ->since()
