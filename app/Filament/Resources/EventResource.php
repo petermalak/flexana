@@ -67,13 +67,13 @@ class EventResource extends Resource
                                             ->default('draft')
                                             ->required(),
                                         Forms\Components\Select::make('category')
-                                            ->label('Service Type (Category)')
+                                            ->label('Category')
                                             ->options([
                                                 'Yoga' => 'Yoga',
                                                 'Reformer Pilates' => 'Reformer Pilates',
                                             ])
                                             ->searchable()
-                                            ->helperText('Select the category for this session'),
+                                            ->helperText('Product category for app (Yoga or Reformer Pilates)'),
                                         Forms\Components\TextInput::make('timezone')
                                             ->default('UTC')
                                             ->maxLength(60)
@@ -127,7 +127,7 @@ class EventResource extends Resource
                             ->icon(Heroicon::OutlinedUserGroup)
                             ->schema([
                                 Components\Section::make('Instructor & services')
-                                    ->description('Assign instructor, class type, and which services this event uses.')
+                                    ->description('Assign instructor, class format (Private/Group), and which services this event uses.')
                                     ->icon(Heroicon::OutlinedUserPlus)
                                     ->schema([
                                         Forms\Components\Select::make('instructor_id')
@@ -137,11 +137,12 @@ class EventResource extends Resource
                                             ->preload()
                                             ->required(),
                                         Forms\Components\Select::make('class_type_id')
-                                            ->label('Class Type')
+                                            ->label('Class format')
                                             ->relationship('classType', 'name')
                                             ->searchable()
                                             ->preload()
-                                            ->required(),
+                                            ->required()
+                                            ->helperText('Session format: e.g. Private, Group (from Settings → Class Types)'),
                                         Forms\Components\CheckboxList::make('services')
                                             ->label('Services')
                                             ->relationship('services', 'name')
@@ -170,13 +171,14 @@ class EventResource extends Resource
                     ])
                     ->sortable(),
                 Tables\Columns\TextColumn::make('category')
+                    ->label('Category')
                     ->toggleable(),
                 Tables\Columns\TextColumn::make('instructor.name')
                     ->label('Instructor')
                     ->sortable()
                     ->toggleable(),
                 Tables\Columns\TextColumn::make('classType.name')
-                    ->label('Class Type')
+                    ->label('Class format')
                     ->sortable()
                     ->toggleable(),
                 Tables\Columns\TextColumn::make('price')
@@ -203,7 +205,7 @@ class EventResource extends Resource
                         'archived' => 'Archived',
                     ]),
                 Tables\Filters\SelectFilter::make('category')
-                    ->label('Service Type')
+                    ->label('Category')
                     ->options([
                         'Yoga' => 'Yoga',
                         'Reformer Pilates' => 'Reformer Pilates',

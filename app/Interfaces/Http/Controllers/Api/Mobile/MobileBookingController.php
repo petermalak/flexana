@@ -5,6 +5,7 @@ namespace App\Interfaces\Http\Controllers\Api\Mobile;
 use App\Http\Controllers\Controller;
 use App\Infrastructure\Persistence\Eloquent\AppointmentModel;
 use App\Infrastructure\Persistence\Eloquent\BookingModel;
+use App\Infrastructure\Persistence\Eloquent\CustomerPackagePurchaseModel;
 use App\Infrastructure\Persistence\Eloquent\ServiceModel;
 use App\Models\Customer;
 use Illuminate\Http\JsonResponse;
@@ -144,25 +145,48 @@ class MobileBookingController extends Controller
             ], 400);
         }
 
-        $servicePrice = $service ? (float) ($service->price ?? 0) : 0;
-        $totalPrice = $servicePrice * $persons;
-
+        $sessionCategory = $this->sessionCategoryFromService($service);
+        $purchaseToUse = null;
+        $packageId = null;
+        $customerPackagePurchaseId = null;
+        $totalPrice = 0;
         $promoRecord = null;
-        if ($promoCode) {
-            $promoRecord = \App\Infrastructure\Persistence\Eloquent\PromoCodeModel::query()
-                ->where('code', $promoCode)
-                ->first();
-            if ($promoRecord && $promoRecord->isValid()) {
-                $totalPrice = $totalPrice * (1 - (float) $promoRecord->percent_discount / 100);
-            } else {
-                $promoRecord = null;
+
+        if (! $isDropIn) {
+            $purchaseToUse = $this->findValidPurchaseForCategory($customer->id, $sessionCategory, $persons);
+            if (! $purchaseToUse) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No package with remaining sessions for this category (Yoga/Reformer Pilates). Book as drop-in or purchase a package.',
+                ], 400);
+            }
+            $packageId = $purchaseToUse->package_id;
+            $customerPackagePurchaseId = $purchaseToUse->id;
+        } else {
+            $servicePrice = $service ? (float) ($service->price ?? 0) : 0;
+            $totalPrice = $servicePrice * $persons;
+            $promoRecord = null;
+            if ($promoCode) {
+                $promoRecord = \App\Infrastructure\Persistence\Eloquent\PromoCodeModel::query()
+                    ->where('code', $promoCode)
+                    ->first();
+                if ($promoRecord && $promoRecord->isValid()) {
+                    $totalPrice = $totalPrice * (1 - (float) $promoRecord->percent_discount / 100);
+                } else {
+                    $promoRecord = null;
+                }
             }
         }
 
         DB::beginTransaction();
         try {
-            if ($promoRecord) {
-                $promoRecord->increment('used_count');
+            if ($isDropIn && $totalPrice > 0 && $promoCode) {
+                $promoRecord = \App\Infrastructure\Persistence\Eloquent\PromoCodeModel::query()
+                    ->where('code', $promoCode)
+                    ->first();
+                if ($promoRecord && $promoRecord->isValid()) {
+                    $promoRecord->increment('used_count');
+                }
             }
 
             $booking = BookingModel::query()->create([
@@ -170,25 +194,28 @@ class MobileBookingController extends Controller
                 'appointment_id' => $appointment->id,
                 'event_id' => null,
                 'event_instance_id' => null,
-                'package_id' => null,
+                'package_id' => $packageId,
+                'customer_package_purchase_id' => $customerPackagePurchaseId,
                 'service_id' => $appointment->service_id,
                 'provider_id' => $appointment->provider_id,
                 'location_id' => $appointment->location_id,
                 'status' => 'confirmed',
-                'payment_status' => 'pending',
+                'payment_status' => $isDropIn ? 'pending' : 'paid',
                 'party_size' => $persons,
                 'total_amount' => $totalPrice,
                 'deposit_amount' => 0,
                 'balance_amount' => $totalPrice,
                 'currency' => 'USD',
                 'channel' => 'mobile',
-                // Store source flag in answers JSON so we know if this booking
-                // was a drop-in or taken from a package.
                 'answers' => [
                     'isDropIn' => $isDropIn,
                 ],
                 'booked_at' => $appointment->booking_start,
             ]);
+
+            if ($purchaseToUse) {
+                $purchaseToUse->decrement('remaining_sessions', $persons);
+            }
 
             \App\Infrastructure\Persistence\Eloquent\PaymentModel::query()->create([
                 'booking_id' => $booking->id,
@@ -287,6 +314,12 @@ class MobileBookingController extends Controller
 
         DB::beginTransaction();
         try {
+            if ($booking->customer_package_purchase_id) {
+                $purchase = CustomerPackagePurchaseModel::query()->find($booking->customer_package_purchase_id);
+                if ($purchase) {
+                    $purchase->increment('remaining_sessions', (int) $booking->party_size);
+                }
+            }
             $booking->update(['status' => 'cancelled', 'cancelled_at' => now()]);
             DB::commit();
             return response()->json([
@@ -301,5 +334,102 @@ class MobileBookingController extends Controller
                 'error' => $e->getMessage(),
             ], 500);
         }
+    }
+
+    /**
+     * Session category (Yoga / Reformer Pilates) from service name. Used to match package category.
+     */
+    private function sessionCategoryFromService(?ServiceModel $service): ?string
+    {
+        if (! $service || ! $service->name) {
+            return null;
+        }
+        $name = strtolower($service->name);
+        if (str_contains($name, 'reformer') || str_contains($name, 'reform pilates')) {
+            return 'Reformer Pilates';
+        }
+        if (str_contains($name, 'yoga')) {
+            return 'Yoga';
+        }
+        return 'Yoga';
+    }
+
+    /**
+     * Find an active customer package purchase with matching category and enough remaining sessions.
+     * Prefers most recently purchased. Excludes expired (by package_duration + purchase_date).
+     */
+    private function findValidPurchaseForCategory(int $customerId, ?string $sessionCategory, int $persons): ?CustomerPackagePurchaseModel
+    {
+        if ($sessionCategory === null) {
+            return null;
+        }
+        $today = Carbon::today()->startOfDay();
+        $purchases = CustomerPackagePurchaseModel::query()
+            ->with(['package.services'])
+            ->where('customer_id', $customerId)
+            ->where('status', 'active')
+            ->where('remaining_sessions', '>=', $persons)
+            ->whereNotNull('package_id')
+            ->orderByDesc('purchase_date')
+            ->get();
+
+        foreach ($purchases as $purchase) {
+            $package = $purchase->package;
+            if (! $package) {
+                continue;
+            }
+            $packageCategory = $this->packageCategory($package);
+            if ($packageCategory !== $sessionCategory) {
+                continue;
+            }
+            if ($purchase->purchase_date && $package->package_duration) {
+                $expiresAt = $purchase->purchase_date->copy()->addMonths((int) $package->package_duration);
+                if ($expiresAt->copy()->startOfDay()->lt($today)) {
+                    continue;
+                }
+            } elseif ($package->expiry && $package->expiry->startOfDay()->lt($today)) {
+                continue;
+            }
+            return $purchase;
+        }
+
+        return null;
+    }
+
+    private function packageCategory($package): ?string
+    {
+        if (! $package) {
+            return null;
+        }
+        if ($package->relationLoaded('services') && $package->services->isNotEmpty()) {
+            $yogaCount = 0;
+            $reformerCount = 0;
+            foreach ($package->services as $service) {
+                $name = strtolower($service->name ?? '');
+                if (str_contains($name, 'reformer') || str_contains($name, 'reform pilates')) {
+                    $reformerCount++;
+                } elseif (str_contains($name, 'yoga')) {
+                    $yogaCount++;
+                }
+            }
+            if ($reformerCount > 0 && $reformerCount >= $yogaCount) {
+                return 'Reformer Pilates';
+            }
+            if ($yogaCount > 0) {
+                return 'Yoga';
+            }
+        }
+        $fallback = $package->service_type ?? null;
+        if ($fallback === null) {
+            return null;
+        }
+        $lower = strtolower((string) $fallback);
+        if (str_contains($lower, 'reformer') || str_contains($lower, 'reform')) {
+            return 'Reformer Pilates';
+        }
+        if (str_contains($lower, 'yoga')) {
+            return 'Yoga';
+        }
+        return null;
     }
 }

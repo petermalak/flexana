@@ -83,6 +83,7 @@ class MobileSessionController extends Controller
             $canCancel = $isBooked && $canCancelUntil && Carbon::now()->lte($canCancelUntil);
             $canBook = ! $isFull && Carbon::parse($appointment->booking_start)->gt(Carbon::now());
 
+            // Category (Yoga / Reformer Pilates) — not class format (Private/Group)
             $serviceType = null;
             if ($service && $service->name) {
                 $name = strtolower($service->name);
@@ -90,7 +91,7 @@ class MobileSessionController extends Controller
                     $serviceType = 'Reformer Pilates';
                 } elseif (str_contains($name, 'yoga')) {
                     $serviceType = 'Yoga';
-                }else {
+                } else {
                     $serviceType = 'Yoga';
                 }
             }

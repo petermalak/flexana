@@ -40,20 +40,21 @@ class PackageResource extends Resource
                             ->rows(4)
                             ->placeholder('Describe what’s included and who it’s for.'),
                         Forms\Components\Select::make('class_type_id')
-                            ->label('Class Type')
+                            ->label('Class format')
                             ->relationship('classType', 'name')
                             ->searchable()
                             ->preload()
-                            ->required(),
+                            ->required()
+                            ->helperText('Session format: e.g. Private, Group, Workshop (from Settings → Class Types)'),
                         Forms\Components\Select::make('service_type')
-                            ->label('Service Type (Category)')
+                            ->label('Category')
                             ->options([
                                 'Yoga' => 'Yoga',
                                 'Reformer Pilates' => 'Reformer Pilates',
                             ])
                             ->searchable()
                             ->required()
-                            ->helperText('Select the category for this package'),
+                            ->helperText('Product category for app filtering (Yoga or Reformer Pilates)'),
                     ])->columns(2),
                 Components\Section::make('Sessions & Pricing')
                     ->description('Number of sessions, price, and discount. Used sessions are tracked automatically.')
@@ -112,11 +113,11 @@ class PackageResource extends Resource
                     ->searchable()
                     ->sortable(),
                 Tables\Columns\TextColumn::make('classType.name')
-                    ->label('Class Type')
+                    ->label('Class format')
                     ->sortable()
                     ->toggleable(),
                 Tables\Columns\TextColumn::make('service_type')
-                    ->label('Service Type')
+                    ->label('Category')
                     ->badge()
                     ->color(fn (?string $state): string => match ($state) {
                         'Yoga' => 'success',
@@ -167,7 +168,7 @@ class PackageResource extends Resource
                         'inactive' => 'Inactive',
                     ]),
                 Tables\Filters\SelectFilter::make('class_type_id')
-                    ->label('Class Type')
+                    ->label('Class format')
                     ->relationship('classType', 'name'),
             ])
             ->actions([

@@ -556,7 +556,8 @@ class MobileAuthController extends Controller
     }
 
     /**
-     * Determine package category from its services (or classType / service_type fallback).
+     * Determine package category (Yoga / Reformer Pilates) from its services or package.service_type only.
+     * Does not use class format (Private/Group) — that is separate.
      * Returns 'Yoga', 'Reformer Pilates', or null.
      */
     private function packageServiceType($package): ?string
@@ -582,7 +583,7 @@ class MobileAuthController extends Controller
                 return 'Yoga';
             }
         }
-        $fallback = $package->classType?->name ?? $package->service_type ?? null;
+        $fallback = $package->service_type ?? null;
         if ($fallback === null) {
             return null;
         }
@@ -619,19 +620,6 @@ class MobileAuthController extends Controller
             ->with(['package.services', 'package.classType'])
             ->where('status', 'active')
             ->get();
-
-        $remainingSessions = (int) $activePurchases->sum('remaining_sessions');
-        $remainingYogaSessions = 0;
-        $remainingReformerSessions = 0;
-        foreach ($activePurchases as $purchase) {
-            $serviceType = $this->packageServiceType($purchase->package);
-            $remaining = (int) $purchase->remaining_sessions;
-            if ($serviceType === 'Yoga') {
-                $remainingYogaSessions += $remaining;
-            } elseif ($serviceType === 'Reformer Pilates') {
-                $remainingReformerSessions += $remaining;
-            }
-        }
 
         $today = Carbon::today()->startOfDay();
         $yogaCandidates = [];
@@ -671,6 +659,11 @@ class MobileAuthController extends Controller
 
         $yogaPackage = $this->lastValidPackageFromCandidates($yogaCandidates);
         $reformerPackage = $this->lastValidPackageFromCandidates($reformerCandidates);
+
+        // Counts must match the chosen package per category (yogaPackage / reformerPackage)
+        $remainingYogaSessions = $yogaPackage ? (int) ($yogaPackage['remainingSessions'] ?? 0) : 0;
+        $remainingReformerSessions = $reformerPackage ? (int) ($reformerPackage['remainingSessions'] ?? 0) : 0;
+        $remainingSessions = $remainingYogaSessions + $remainingReformerSessions;
 
         $profileImageUrl = null;
         if ($customer->profile_image) {

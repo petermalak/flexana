@@ -49,13 +49,13 @@ class AmeliaServiceResource extends Resource
                     ->numeric()
                     ->default(1),
                 Forms\Components\Select::make('category_id')
-                    ->label('Service Type (Category)')
+                    ->label('Category')
                     ->options([
                         'Yoga' => 'Yoga',
                         'Reformer Pilates' => 'Reformer Pilates',
                     ])
                     ->searchable()
-                    ->helperText('Select the category for this service'),
+                    ->helperText('Product category for app (Yoga or Reformer Pilates)'),
                 Forms\Components\Select::make('status')
                     ->options([
                         'visible' => 'Visible',
@@ -111,7 +111,7 @@ class AmeliaServiceResource extends Resource
                         'hidden' => 'Hidden',
                     ]),
                 Tables\Filters\SelectFilter::make('category_id')
-                    ->label('Service Type')
+                    ->label('Category')
                     ->options([
                         'Yoga' => 'Yoga',
                         'Reformer Pilates' => 'Reformer Pilates',

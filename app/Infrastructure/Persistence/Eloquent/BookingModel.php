@@ -22,6 +22,7 @@ class BookingModel extends Model
         'amelia_customer_booking_id',
         'customer_id',
         'package_id',
+        'customer_package_purchase_id',
         'service_id',
         'provider_id',
         'location_id',
@@ -100,6 +101,11 @@ class BookingModel extends Model
     public function package(): BelongsTo
     {
         return $this->belongsTo(PackageModel::class, 'package_id');
+    }
+
+    public function customerPackagePurchase(): BelongsTo
+    {
+        return $this->belongsTo(CustomerPackagePurchaseModel::class, 'customer_package_purchase_id');
     }
 
     public function service(): BelongsTo
