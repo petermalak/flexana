@@ -20,13 +20,13 @@ class AmeliaAppointmentResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedCalendarDays;
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Amelia Data';
+    protected static string|\UnitEnum|null $navigationGroup = 'Scheduling';
 
-    protected static ?int $navigationSort = 9;
+    protected static ?int $navigationSort = 2;
 
-    protected static ?string $navigationLabel = 'Amelia Appointments';
+    protected static ?string $navigationLabel = 'Appointments';
 
-    protected static bool $shouldRegisterNavigation = false;
+    protected static bool $shouldRegisterNavigation = true;
 
     public static function form(Schema $schema): Schema
     {

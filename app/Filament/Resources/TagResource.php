@@ -24,6 +24,8 @@ class TagResource extends Resource
 
     protected static ?string $navigationLabel = 'Tags';
 
+    protected static bool $shouldRegisterNavigation = false;
+
     public static function form(Schema $schema): Schema
     {
         return $schema

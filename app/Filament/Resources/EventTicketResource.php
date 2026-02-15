@@ -24,6 +24,8 @@ class EventTicketResource extends Resource
 
     protected static ?string $navigationLabel = 'Event Tickets';
 
+    protected static bool $shouldRegisterNavigation = false;
+
     public static function form(Schema $schema): Schema
     {
         return $schema

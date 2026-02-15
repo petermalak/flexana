@@ -32,7 +32,8 @@ class MobilePackageController extends Controller
             ->paginate($perPage);
 
         $items = $packages->getCollection()->map(function ($package) {
-            $sessions = (int) $package->services->sum(fn ($s) => (int) ($s->pivot->quantity ?? 1));
+            // Use package total_sessions (admin-defined) for display and purchase consistency
+            $sessions = (int) ($package->total_sessions ?? 0);
             $expiry = $package->expiry;
             $expirationMonths = 0;
             if ($expiry) {
@@ -71,7 +72,7 @@ class MobilePackageController extends Controller
                 'id' => (int) $package->id,
                 'name' => $package->title ?? '',
                 'price' => (float) ($package->price ?? 0),
-                'sessions' => $sessions ?: 1,
+                'sessions' => $sessions > 0 ? $sessions : 1,
                 'description' => $package->description ?? '',
                 'expirationMonths' => $expirationMonths,
                 'serviceType' => $serviceType,
@@ -123,7 +124,8 @@ class MobilePackageController extends Controller
             ], 404);
         }
 
-        $totalSessions = (int) $package->services->sum(fn ($s) => (int) ($s->pivot->quantity ?? 1)) ?: 1;
+        // Use the package's total_sessions (admin-defined), not sum of service pivot quantities
+        $totalSessions = (int) ($package->total_sessions ?? 0) ?: 1;
         $price = (float) $package->price;
         $promoRecord = null;
 
