@@ -3,10 +3,10 @@
 namespace App\Filament\Resources\TagResource\Pages;
 
 use App\Filament\Resources\TagResource;
+use App\Filament\Resources\Pages\ManageRecordsWithFullWidthForm;
 use Filament\Actions;
-use Filament\Resources\Pages\ManageRecords;
 
-class ManageTags extends ManageRecords
+class ManageTags extends ManageRecordsWithFullWidthForm
 {
     protected static string $resource = TagResource::class;
 

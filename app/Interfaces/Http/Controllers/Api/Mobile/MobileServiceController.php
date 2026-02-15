@@ -36,12 +36,34 @@ class MobileServiceController extends Controller
             $image = $settings['pictureFullPath'] ?? $settings['pictureThumbPath'] ?? $service->picture_full_path ?? $service->picture_thumb_path ?? '';
             $level = $settings['level'] ?? 'Beginner';
 
+            $pictureFull = $service->picture_full_path ?? null;
+            $pictureThumb = $service->picture_thumb_path ?? null;
+            $galleryRaw = is_array($service->gallery) ? $service->gallery : [];
+
             $serviceData = [
                 'id' => (string) $service->id,
                 'name' => $service->name ?? '',
                 'level' => $level,
-                'image' => $image,
+                'image' => self::fullImageUrl($image),
                 'brief' => $service->description ?? '',
+                'description' => $service->description ?? '',
+                'duration' => (int) ($service->duration ?? 0),
+                'price' => (float) ($service->price ?? 0),
+                'minCapacity' => (int) ($service->min_capacity ?? 1),
+                'maxCapacity' => (int) ($service->max_capacity ?? 1),
+                'colorHex' => $service->color_hex ?? null,
+                'pictureFullPath' => self::fullImageUrl($pictureFull),
+                'pictureThumbPath' => self::fullImageUrl($pictureThumb),
+                'gallery' => array_values(array_map([self::class, 'fullImageUrl'], $galleryRaw)),
+                'timeBefore' => (int) ($service->time_before ?? 0),
+                'timeAfter' => (int) ($service->time_after ?? 0),
+                'categoryId' => $service->category_id ?? null,
+                'position' => (int) ($service->position ?? 0),
+                'deposit' => (float) ($service->deposit ?? 0),
+                'depositPayment' => $service->deposit_payment ?? null,
+                'status' => $service->status ?? null,
+                'extras' => is_array($service->extras) ? $service->extras : [],
+                'settings' => $settings,
             ];
 
             // Determine category based on service name
@@ -140,5 +162,19 @@ class MobileServiceController extends Controller
             'categories' => $mainCategories,
             'data' => $categories,
         ]);
+    }
+
+    /**
+     * Return full URL for an image path (storage path or existing URL).
+     */
+    private static function fullImageUrl(?string $path): ?string
+    {
+        if ($path === null || $path === '') {
+            return null;
+        }
+        if (str_starts_with($path, 'http://') || str_starts_with($path, 'https://')) {
+            return $path;
+        }
+        return asset('storage/'.ltrim($path, '/'));
     }
 }

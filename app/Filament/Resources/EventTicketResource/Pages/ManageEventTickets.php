@@ -3,10 +3,10 @@
 namespace App\Filament\Resources\EventTicketResource\Pages;
 
 use App\Filament\Resources\EventTicketResource;
+use App\Filament\Resources\Pages\ManageRecordsWithFullWidthForm;
 use Filament\Actions;
-use Filament\Resources\Pages\ManageRecords;
 
-class ManageEventTickets extends ManageRecords
+class ManageEventTickets extends ManageRecordsWithFullWidthForm
 {
     protected static string $resource = EventTicketResource::class;
 

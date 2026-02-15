@@ -3,10 +3,10 @@
 namespace App\Filament\Resources\PromoCodeResource\Pages;
 
 use App\Filament\Resources\PromoCodeResource;
+use App\Filament\Resources\Pages\ManageRecordsWithFullWidthForm;
 use Filament\Actions;
-use Filament\Resources\Pages\ManageRecords;
 
-class ManagePromoCodes extends ManageRecords
+class ManagePromoCodes extends ManageRecordsWithFullWidthForm
 {
     protected static string $resource = PromoCodeResource::class;
 

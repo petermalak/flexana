@@ -3,10 +3,10 @@
 namespace App\Filament\Resources\CategoryResource\Pages;
 
 use App\Filament\Resources\CategoryResource;
+use App\Filament\Resources\Pages\ManageRecordsWithFullWidthForm;
 use Filament\Actions;
-use Filament\Resources\Pages\ManageRecords;
 
-class ManageCategories extends ManageRecords
+class ManageCategories extends ManageRecordsWithFullWidthForm
 {
     protected static string $resource = CategoryResource::class;
 

@@ -3,10 +3,10 @@
 namespace App\Filament\Resources\BookingResource\Pages;
 
 use App\Filament\Resources\BookingResource;
+use App\Filament\Resources\Pages\ManageRecordsWithFullWidthForm;
 use Filament\Actions;
-use Filament\Resources\Pages\ManageRecords;
 
-class ManageBookings extends ManageRecords
+class ManageBookings extends ManageRecordsWithFullWidthForm
 {
     protected static string $resource = BookingResource::class;
 

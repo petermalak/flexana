@@ -3,10 +3,10 @@
 namespace App\Filament\Resources\CustomerResource\Pages;
 
 use App\Filament\Resources\CustomerResource;
+use App\Filament\Resources\Pages\ManageRecordsWithFullWidthForm;
 use Filament\Actions;
-use Filament\Resources\Pages\ManageRecords;
 
-class ManageCustomers extends ManageRecords
+class ManageCustomers extends ManageRecordsWithFullWidthForm
 {
     protected static string $resource = CustomerResource::class;
 

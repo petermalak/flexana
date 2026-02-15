@@ -8,6 +8,9 @@ use Filament\Forms;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Schemas\Components;
+use Filament\Schemas\Components\Tabs;
+use Filament\Schemas\Components\Tabs\Tab;
+use Filament\Support\Icons\Heroicon;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Filament\Actions;
@@ -26,77 +29,121 @@ class EventResource extends Resource
     {
         return $schema
             ->components([
-                Components\Section::make('Details')
-                    ->schema([
-                        Forms\Components\TextInput::make('name')
-                            ->required()
-                            ->maxLength(255),
-                        Forms\Components\TextInput::make('slug')
-                            ->maxLength(255)
-                            ->disabled(fn (?Event $record) => filled($record?->slug)),
-                        Forms\Components\Textarea::make('description')
-                            ->rows(4),
-                    ])->columns(2),
-                Components\Section::make('Logistics')
-                    ->schema([
-                        Forms\Components\Select::make('status')
-                            ->options([
-                                'draft' => 'Draft',
-                                'scheduled' => 'Scheduled',
-                                'published' => 'Published',
-                                'archived' => 'Archived',
-                            ])
-                            ->searchable()
-                            ->default('draft')
-                            ->required(),
-                        Forms\Components\Select::make('category')
-                            ->label('Service Type (Category)')
-                            ->options([
-                                'Yoga' => 'Yoga',
-                                'Reformer Pilates' => 'Reformer Pilates',
-                            ])
-                            ->searchable()
-                            ->helperText('Select the category for this session'),
-                        Forms\Components\TextInput::make('timezone')
-                            ->default('UTC')
-                            ->maxLength(60)
-                            ->required(),
-                        Forms\Components\Toggle::make('allow_waitlist')
-                            ->label('Allow Waitlist'),
-                    ])->columns(2),
-                Components\Section::make('Capacity & Pricing')
-                    ->schema([
-                        Forms\Components\TextInput::make('capacity')
-                            ->numeric()
-                            ->minValue(1),
-                        Forms\Components\TextInput::make('price')
-                            ->numeric()
-                            ->prefix('$')
-                            ->required(),
-                        Forms\Components\TextInput::make('deposit_amount')
-                            ->numeric()
-                            ->prefix('$')
-                            ->default(0),
-                    ])->columns(3),
-                Components\Section::make('Assignment')
-                    ->schema([
-                        Forms\Components\Select::make('instructor_id')
-                            ->label('Instructor')
-                            ->relationship('instructor', 'name')
-                            ->searchable()
-                            ->preload()
-                            ->required(),
-                        Forms\Components\Select::make('class_type_id')
-                            ->label('Class Type')
-                            ->relationship('classType', 'name')
-                            ->searchable()
-                            ->preload()
-                            ->required(),
-                        Forms\Components\CheckboxList::make('services')
-                            ->label('Services')
-                            ->relationship('services', 'name')
-                            ->columns(2),
-                    ])->columns(2),
+                Tabs::make('Event')
+                    ->tabs([
+                        Tab::make('Details & logistics')
+                            ->icon(Heroicon::OutlinedDocumentText)
+                            ->schema([
+                                Components\Section::make('Details')
+                                    ->description('Name, slug, and description for this event or session.')
+                                    ->icon(Heroicon::OutlinedCalendarDays)
+                                    ->schema([
+                                        Forms\Components\TextInput::make('name')
+                                            ->required()
+                                            ->maxLength(255)
+                                            ->placeholder('e.g. Morning Flow Yoga'),
+                                        Forms\Components\TextInput::make('slug')
+                                            ->maxLength(255)
+                                            ->disabled(fn (?Event $record) => filled($record?->slug))
+                                            ->helperText('Auto-generated from name; edit only if needed.'),
+                                        Forms\Components\Textarea::make('description')
+                                            ->rows(4)
+                                            ->placeholder('Describe the session for the app.'),
+                                    ])->columns(2),
+                                Components\Section::make('Logistics')
+                                    ->description('Status, category, timezone, and waitlist.')
+                                    ->icon(Heroicon::OutlinedCog6Tooth)
+                                    ->schema([
+                                        Forms\Components\Select::make('status')
+                                            ->options([
+                                                'draft' => 'Draft',
+                                                'scheduled' => 'Scheduled',
+                                                'published' => 'Published',
+                                                'archived' => 'Archived',
+                                            ])
+                                            ->searchable()
+                                            ->default('draft')
+                                            ->required(),
+                                        Forms\Components\Select::make('category')
+                                            ->label('Service Type (Category)')
+                                            ->options([
+                                                'Yoga' => 'Yoga',
+                                                'Reformer Pilates' => 'Reformer Pilates',
+                                            ])
+                                            ->searchable()
+                                            ->helperText('Select the category for this session'),
+                                        Forms\Components\TextInput::make('timezone')
+                                            ->default('UTC')
+                                            ->maxLength(60)
+                                            ->required(),
+                                        Forms\Components\Toggle::make('allow_waitlist')
+                                            ->label('Allow Waitlist'),
+                                    ])->columns(2),
+                            ]),
+                        Tab::make('Pricing & schedule')
+                            ->icon(Heroicon::OutlinedCurrencyDollar)
+                            ->schema([
+                                Components\Section::make('Capacity & Pricing')
+                                    ->description('Capacity, price, deposit, and publish time.')
+                                    ->icon(Heroicon::OutlinedBanknotes)
+                                    ->schema([
+                                        Forms\Components\TextInput::make('capacity')
+                                            ->numeric()
+                                            ->minValue(1),
+                                        Forms\Components\TextInput::make('price')
+                                            ->numeric()
+                                            ->prefix('$')
+                                            ->required(),
+                                        Forms\Components\TextInput::make('deposit_amount')
+                                            ->numeric()
+                                            ->prefix('$')
+                                            ->default(0),
+                                        Forms\Components\DateTimePicker::make('published_at')
+                                            ->label('Published at'),
+                                    ])->columns(3),
+                                Components\Section::make('Recurrence & meta')
+                                    ->description('Optional recurrence and meta data (JSON).')
+                                    ->icon(Heroicon::OutlinedArrowsRightLeft)
+                                    ->schema([
+                                        Forms\Components\Textarea::make('recurrence')
+                                            ->label('Recurrence (JSON)')
+                                            ->formatStateUsing(fn ($state) => is_array($state) ? json_encode($state, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) : $state)
+                                            ->dehydrateStateUsing(fn ($state) => is_string($state) ? (json_decode($state, true) ?? []) : ($state ?? [])),
+                                        Forms\Components\Textarea::make('meta')
+                                            ->label('Meta (JSON)')
+                                            ->formatStateUsing(fn ($state) => is_array($state) ? json_encode($state, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) : $state)
+                                            ->dehydrateStateUsing(fn ($state) => is_string($state) ? (json_decode($state, true) ?? []) : ($state ?? [])),
+                                    ])->columns(1)
+                                    ->collapsible(),
+                            ]),
+                        Tab::make('Assignment')
+                            ->icon(Heroicon::OutlinedUserGroup)
+                            ->schema([
+                                Components\Section::make('Instructor & services')
+                                    ->description('Assign instructor, class type, and which services this event uses.')
+                                    ->icon(Heroicon::OutlinedUserPlus)
+                                    ->schema([
+                                        Forms\Components\Select::make('instructor_id')
+                                            ->label('Instructor')
+                                            ->relationship('instructor', 'name')
+                                            ->searchable()
+                                            ->preload()
+                                            ->required(),
+                                        Forms\Components\Select::make('class_type_id')
+                                            ->label('Class Type')
+                                            ->relationship('classType', 'name')
+                                            ->searchable()
+                                            ->preload()
+                                            ->required(),
+                                        Forms\Components\CheckboxList::make('services')
+                                            ->label('Services')
+                                            ->relationship('services', 'name')
+                                            ->columns(2),
+                                    ])->columns(2),
+                            ]),
+                    ])
+                    ->persistTabInQueryString('event_tab')
+                    ->activeTab(1),
             ]);
     }
 

@@ -3,10 +3,10 @@
 namespace App\Filament\Resources\EventPeriodResource\Pages;
 
 use App\Filament\Resources\EventPeriodResource;
+use App\Filament\Resources\Pages\ManageRecordsWithFullWidthForm;
 use Filament\Actions;
-use Filament\Resources\Pages\ManageRecords;
 
-class ManageEventPeriods extends ManageRecords
+class ManageEventPeriods extends ManageRecordsWithFullWidthForm
 {
     protected static string $resource = EventPeriodResource::class;
 

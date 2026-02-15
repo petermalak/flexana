@@ -3,10 +3,10 @@
 namespace App\Filament\Resources\BannerResource\Pages;
 
 use App\Filament\Resources\BannerResource;
+use App\Filament\Resources\Pages\ManageRecordsWithFullWidthForm;
 use Filament\Actions;
-use Filament\Resources\Pages\ManageRecords;
 
-class ManageBanners extends ManageRecords
+class ManageBanners extends ManageRecordsWithFullWidthForm
 {
     protected static string $resource = BannerResource::class;
 

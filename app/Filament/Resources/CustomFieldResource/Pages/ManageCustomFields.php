@@ -3,10 +3,10 @@
 namespace App\Filament\Resources\CustomFieldResource\Pages;
 
 use App\Filament\Resources\CustomFieldResource;
+use App\Filament\Resources\Pages\ManageRecordsWithFullWidthForm;
 use Filament\Actions;
-use Filament\Resources\Pages\ManageRecords;
 
-class ManageCustomFields extends ManageRecords
+class ManageCustomFields extends ManageRecordsWithFullWidthForm
 {
     protected static string $resource = CustomFieldResource::class;
 

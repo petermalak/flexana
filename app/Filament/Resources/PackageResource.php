@@ -9,6 +9,7 @@ use Filament\Forms;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Schemas\Components;
+use Filament\Support\Icons\Heroicon;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Filament\Actions;
@@ -28,12 +29,16 @@ class PackageResource extends Resource
         return $schema
             ->components([
                 Components\Section::make('Details')
+                    ->description('Title, description, and how this package is categorized.')
+                    ->icon(Heroicon::OutlinedGift)
                     ->schema([
                         Forms\Components\TextInput::make('title')
                             ->required()
-                            ->maxLength(255),
+                            ->maxLength(255)
+                            ->placeholder('e.g. 10-Class Yoga Pack'),
                         Forms\Components\Textarea::make('description')
-                            ->rows(4),
+                            ->rows(4)
+                            ->placeholder('Describe what’s included and who it’s for.'),
                         Forms\Components\Select::make('class_type_id')
                             ->label('Class Type')
                             ->relationship('classType', 'name')
@@ -51,6 +56,8 @@ class PackageResource extends Resource
                             ->helperText('Select the category for this package'),
                     ])->columns(2),
                 Components\Section::make('Sessions & Pricing')
+                    ->description('Number of sessions, price, and discount. Used sessions are tracked automatically.')
+                    ->icon(Heroicon::OutlinedBanknotes)
                     ->schema([
                         Forms\Components\TextInput::make('total_sessions')
                             ->numeric()
@@ -75,9 +82,18 @@ class PackageResource extends Resource
                             ->required(),
                     ])->columns(4),
                 Components\Section::make('Settings')
+                    ->description('Expiry, duration, and whether the package is active.')
+                    ->icon(Heroicon::OutlinedCog6Tooth)
                     ->schema([
                         Forms\Components\DatePicker::make('expiry')
                             ->label('Expiry Date'),
+                        Forms\Components\TextInput::make('package_duration')
+                            ->label('Package Duration (months)')
+                            ->numeric()
+                            ->minValue(0)
+                            ->helperText('Duration in months'),
+                        Forms\Components\DatePicker::make('package_duration_date')
+                            ->label('Package Duration Date'),
                         Forms\Components\Select::make('status')
                             ->options([
                                 'active' => 'Active',
@@ -134,6 +150,15 @@ class PackageResource extends Resource
                     ])
                     ->sortable(),
                 Tables\Columns\TextColumn::make('expiry')
+                    ->date()
+                    ->sortable()
+                    ->toggleable(),
+                Tables\Columns\TextColumn::make('package_duration')
+                    ->label('Duration (months)')
+                    ->sortable()
+                    ->toggleable(),
+                Tables\Columns\TextColumn::make('package_duration_date')
+                    ->label('Duration Date')
                     ->date()
                     ->sortable()
                     ->toggleable(),

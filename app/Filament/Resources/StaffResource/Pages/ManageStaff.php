@@ -3,10 +3,10 @@
 namespace App\Filament\Resources\StaffResource\Pages;
 
 use App\Filament\Resources\StaffResource;
+use App\Filament\Resources\Pages\ManageRecordsWithFullWidthForm;
 use Filament\Actions;
-use Filament\Resources\Pages\ManageRecords;
 
-class ManageStaff extends ManageRecords
+class ManageStaff extends ManageRecordsWithFullWidthForm
 {
     protected static string $resource = StaffResource::class;
 

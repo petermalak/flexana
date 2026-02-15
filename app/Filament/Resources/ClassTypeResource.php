@@ -9,6 +9,7 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Schemas\Components;
 use Filament\Schemas\Components\Utilities\Set;
+use Filament\Support\Icons\Heroicon;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Filament\Actions;
@@ -28,6 +29,8 @@ class ClassTypeResource extends Resource
         return $schema
             ->components([
                 Components\Section::make('Details')
+                    ->description('Class type name, slug, optional color, and whether it’s active. Slug is used in URLs.')
+                    ->icon(Heroicon::OutlinedTag)
                     ->schema([
                         Forms\Components\TextInput::make('name')
                             ->required()
@@ -39,6 +42,10 @@ class ClassTypeResource extends Resource
                             ->disabled(fn (?ClassType $record) => filled($record?->slug)),
                         Forms\Components\Textarea::make('description')
                             ->rows(4),
+                        Forms\Components\TextInput::make('color_hex')
+                            ->label('Color (hex)')
+                            ->maxLength(7)
+                            ->placeholder('#000000'),
                         Forms\Components\Toggle::make('is_active')
                             ->label('Active')
                             ->default(true)
@@ -56,6 +63,9 @@ class ClassTypeResource extends Resource
                     ->sortable(),
                 Tables\Columns\TextColumn::make('slug')
                     ->searchable()
+                    ->toggleable(),
+                Tables\Columns\TextColumn::make('color_hex')
+                    ->label('Color')
                     ->toggleable(),
                 Tables\Columns\IconColumn::make('is_active')
                     ->boolean()

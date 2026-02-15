@@ -3,10 +3,10 @@
 namespace App\Filament\Resources\PackageResource\Pages;
 
 use App\Filament\Resources\PackageResource;
+use App\Filament\Resources\Pages\ManageRecordsWithFullWidthForm;
 use Filament\Actions;
-use Filament\Resources\Pages\ManageRecords;
 
-class ManagePackages extends ManageRecords
+class ManagePackages extends ManageRecordsWithFullWidthForm
 {
     protected static string $resource = PackageResource::class;
 
