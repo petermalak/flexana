@@ -378,6 +378,18 @@
 					]
 				},
 				{
+					"name": "Get Categories",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/categories", "host": ["{{base_url}}"], "path": ["api", "v1", "categories"] },
+						"description": "Get categories for the app. Response: { data: [{ id, name, slug, type, description, image, position }, ...] }. image is full URL (or null). Only active categories. Requires Bearer."
+					},
+					"response": [
+						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"data\":[{\"id\":\"1\",\"name\":\"Yoga\",\"slug\":\"yoga\",\"type\":\"service\",\"description\":\"Yoga classes\",\"image\":\"http://127.0.0.1:8000/storage/categories/yoga.jpg\",\"position\":0},{\"id\":\"2\",\"name\":\"Reformer Pilates\",\"slug\":\"reformer-pilates\",\"type\":\"service\",\"description\":\"Reformer Pilates\",\"image\":\"http://127.0.0.1:8000/storage/categories/pilates.jpg\",\"position\":1}]}" }
+					]
+				},
+				{
 					"name": "Get Instructors (Full)",
 					"request": {
 						"method": "GET",

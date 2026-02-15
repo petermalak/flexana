@@ -36,6 +36,13 @@ class CategoryResource extends Resource
                             ->options(['service' => 'Service', 'event' => 'Event'])
                             ->default('service'),
                         Forms\Components\Textarea::make('description')->rows(2),
+                        Forms\Components\FileUpload::make('image')
+                            ->label('Image')
+                            ->image()
+                            ->directory('categories')
+                            ->disk('public')
+                            ->visibility('public')
+                            ->imagePreviewHeight(120),
                         Forms\Components\TextInput::make('position')->numeric()->default(0),
                         Forms\Components\Toggle::make('status')->default(true),
                     ])->columns(2),
@@ -47,6 +54,11 @@ class CategoryResource extends Resource
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('id')->sortable()->toggleable(isToggledHiddenByDefault: true),
+                Tables\Columns\ImageColumn::make('image')
+                    ->label('Image')
+                    ->disk('public')
+                    ->circular()
+                    ->toggleable(),
                 Tables\Columns\TextColumn::make('name')->searchable()->sortable(),
                 Tables\Columns\TextColumn::make('slug')->searchable(),
                 Tables\Columns\TextColumn::make('type')->badge(),

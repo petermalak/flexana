@@ -26,13 +26,11 @@ class PackageModel extends Model
         'price',
         'expiry',
         'package_duration',
-        'package_duration_date',
         'status',
     ];
 
     protected $casts = [
         'expiry' => 'date',
-        'package_duration_date' => 'date',
     ];
 
     protected static function booted(): void

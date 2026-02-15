@@ -15,6 +15,7 @@ class CategoryModel extends Model
         'slug',
         'type',
         'description',
+        'image',
         'position',
         'status',
     ];

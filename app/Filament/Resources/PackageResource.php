@@ -92,8 +92,6 @@ class PackageResource extends Resource
                             ->numeric()
                             ->minValue(0)
                             ->helperText('Duration in months'),
-                        Forms\Components\DatePicker::make('package_duration_date')
-                            ->label('Package Duration Date'),
                         Forms\Components\Select::make('status')
                             ->options([
                                 'active' => 'Active',
@@ -155,11 +153,6 @@ class PackageResource extends Resource
                     ->toggleable(),
                 Tables\Columns\TextColumn::make('package_duration')
                     ->label('Duration (months)')
-                    ->sortable()
-                    ->toggleable(),
-                Tables\Columns\TextColumn::make('package_duration_date')
-                    ->label('Duration Date')
-                    ->date()
                     ->sortable()
                     ->toggleable(),
                 Tables\Columns\TextColumn::make('updated_at')

@@ -7,6 +7,7 @@ use App\Interfaces\Http\Controllers\Api\EventController;
 use App\Interfaces\Http\Controllers\Api\EventInstanceController;
 use App\Interfaces\Http\Controllers\Api\Mobile\BannerController;
 use App\Interfaces\Http\Controllers\Api\Mobile\MobileAuthController;
+use App\Interfaces\Http\Controllers\Api\Mobile\MobileCategoryController;
 use App\Interfaces\Http\Controllers\Api\Mobile\MobileBookingController;
 use App\Interfaces\Http\Controllers\Api\Mobile\MobileInstructorController;
 use App\Interfaces\Http\Controllers\Api\Mobile\MobilePackageController;
@@ -85,6 +86,7 @@ Route::prefix('v1')
         Route::middleware(['auth:sanctum'])->group(function (): void {
             // Home screen
             Route::get('banners', [BannerController::class, 'index']);
+            Route::get('categories', [MobileCategoryController::class, 'index']);
             Route::get('instructors', [MobileInstructorController::class, 'index']);
             Route::get('service', [MobileServiceController::class, 'index']);
             // Schedule screen
