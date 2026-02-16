@@ -40,9 +40,19 @@ class MobilePackageController extends Controller
                 $expirationMonths = (int) max(0, Carbon::now()->diffInMonths($expiry, false));
             }
 
-            // Category (Yoga / Reformer Pilates): from services or package.service_type only (not class format)
+            // Category (Yoga / Reformer Pilates): prioritize package.service_type (admin-set), then fallback to service names
             $serviceType = null;
-            if ($package->services->isNotEmpty()) {
+            // Prioritize admin-set service_type field (authoritative source)
+            if ($package->service_type) {
+                $lower = strtolower((string) $package->service_type);
+                if (str_contains($lower, 'reformer') || str_contains($lower, 'reform')) {
+                    $serviceType = 'Reformer Pilates';
+                } elseif (str_contains($lower, 'yoga')) {
+                    $serviceType = 'Yoga';
+                }
+            }
+            // Fallback: determine from service names if service_type is not set
+            if (!$serviceType && $package->services->isNotEmpty()) {
                 $yogaCount = 0;
                 $reformerPilatesCount = 0;
 
@@ -60,9 +70,6 @@ class MobilePackageController extends Controller
                 } elseif ($yogaCount > 0) {
                     $serviceType = 'Yoga';
                 }
-            }
-            if (!$serviceType) {
-                $serviceType = $package->service_type ?? null;
             }
 
             return [

@@ -396,11 +396,27 @@ class MobileBookingController extends Controller
         return null;
     }
 
+    /**
+     * Determine package category (Yoga / Reformer Pilates) from package.service_type (admin-set) first,
+     * then fallback to service names if service_type is not set.
+     */
     private function packageCategory($package): ?string
     {
         if (! $package) {
             return null;
         }
+        // Prioritize admin-set service_type field (authoritative source)
+        $serviceType = $package->service_type ?? null;
+        if ($serviceType !== null) {
+            $lower = strtolower((string) $serviceType);
+            if (str_contains($lower, 'reformer') || str_contains($lower, 'reform')) {
+                return 'Reformer Pilates';
+            }
+            if (str_contains($lower, 'yoga')) {
+                return 'Yoga';
+            }
+        }
+        // Fallback: determine from service names if service_type is not set
         if ($package->relationLoaded('services') && $package->services->isNotEmpty()) {
             $yogaCount = 0;
             $reformerCount = 0;
@@ -418,17 +434,6 @@ class MobileBookingController extends Controller
             if ($yogaCount > 0) {
                 return 'Yoga';
             }
-        }
-        $fallback = $package->service_type ?? null;
-        if ($fallback === null) {
-            return null;
-        }
-        $lower = strtolower((string) $fallback);
-        if (str_contains($lower, 'reformer') || str_contains($lower, 'reform')) {
-            return 'Reformer Pilates';
-        }
-        if (str_contains($lower, 'yoga')) {
-            return 'Yoga';
         }
         return null;
     }
