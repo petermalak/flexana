@@ -98,6 +98,7 @@ class MobileSessionController extends Controller
 
             return [
                 'id' => (string) $appointment->id,
+                'bookingId' => $myBooking ? (string) $myBooking->id : null,
                 'instructor' => $provider ? $provider->name : '',
                 'service' => $service ? $service->name : '',
                 'serviceType' => $serviceType,
