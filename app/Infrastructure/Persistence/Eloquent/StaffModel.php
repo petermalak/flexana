@@ -64,5 +64,15 @@ class StaffModel extends Model
     {
         return $this->hasMany(EventInstanceModel::class, 'instructor_id');
     }
+
+    public function serviceSchedules(): HasMany
+    {
+        return $this->hasMany(StaffServiceScheduleModel::class, 'staff_id');
+    }
+
+    public function offDays(): HasMany
+    {
+        return $this->hasMany(StaffOffDayModel::class, 'staff_id');
+    }
 }
 

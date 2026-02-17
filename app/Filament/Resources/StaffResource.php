@@ -47,6 +47,16 @@ class StaffResource extends Resource
                             ->default('instructor')
                             ->required(),
                     ])->columns(2),
+                Components\Section::make('Services')
+                    ->description('Assign services this staff member can provide.')
+                    ->schema([
+                        Forms\Components\Select::make('services')
+                            ->relationship('services', 'name')
+                            ->multiple()
+                            ->searchable()
+                            ->preload()
+                            ->helperText('Select all services this staff member can teach/provide'),
+                    ]),
                 Components\Section::make('Settings')
                     ->schema([
                         Forms\Components\TextInput::make('timezone')
@@ -87,6 +97,11 @@ class StaffResource extends Resource
                     ->boolean()
                     ->label('Active')
                     ->sortable(),
+                Tables\Columns\TextColumn::make('services.name')
+                    ->label('Services')
+                    ->badge()
+                    ->separator(',')
+                    ->toggleable(),
                 Tables\Columns\TextColumn::make('updated_at')
                     ->dateTime()
                     ->since()
@@ -116,6 +131,13 @@ class StaffResource extends Resource
     {
         return [
             'index' => Pages\ManageStaff::route('/'),
+        ];
+    }
+
+    public static function getRelations(): array
+    {
+        return [
+            StaffResource\RelationManagers\OffDaysRelationManager::class,
         ];
     }
 }
