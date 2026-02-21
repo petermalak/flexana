@@ -9,6 +9,7 @@ use App\Filament\Resources\AmeliaAppointments\Schemas\AmeliaAppointmentForm;
 use App\Filament\Resources\AmeliaAppointments\Tables\AmeliaAppointmentsTable;
 use App\Infrastructure\Persistence\Eloquent\AppointmentModel;
 use BackedEnum;
+use Filament\Panel;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
@@ -27,6 +28,11 @@ class AmeliaAppointmentResource extends Resource
     protected static ?string $navigationLabel = 'Appointments';
 
     protected static bool $shouldRegisterNavigation = true;
+
+    public static function getSlug(?Panel $panel = null): string
+    {
+        return 'appointments';
+    }
 
     public static function form(Schema $schema): Schema
     {

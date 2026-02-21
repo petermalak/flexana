@@ -12,10 +12,14 @@ class AppointmentModel extends Model
 {
     use HasFactory;
 
+    /** Always use MySQL (Laravel default). Used by admin /admin/amelia-appointments. */
+    protected $connection = 'mysql';
+
     protected $table = 'appointments';
 
     protected $fillable = [
         'uuid',
+        'recurrence_group_id',
         'amelia_appointment_id',
         'service_id',
         'provider_id',
@@ -59,5 +63,22 @@ class AppointmentModel extends Model
     public function bookings(): HasMany
     {
         return $this->hasMany(BookingModel::class, 'appointment_id');
+    }
+
+    /**
+     * All appointments in the same recurring group (same data, different dates), including this one.
+     */
+    public function recurrenceGroup(): HasMany
+    {
+        return $this->hasMany(self::class, 'recurrence_group_id', 'recurrence_group_id');
+    }
+
+    /**
+     * Other appointments in the same recurring group (excluding this one).
+     */
+    public function recurrenceSiblings(): HasMany
+    {
+        return $this->hasMany(self::class, 'recurrence_group_id', 'recurrence_group_id')
+            ->where('id', '!=', $this->id);
     }
 }

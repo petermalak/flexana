@@ -3,9 +3,100 @@
 namespace App\Filament\Resources\AmeliaAppointments\Pages;
 
 use App\Filament\Resources\AmeliaAppointments\AmeliaAppointmentResource;
+use App\Infrastructure\Persistence\Eloquent\AppointmentModel;
+use Carbon\Carbon;
 use Filament\Resources\Pages\CreateRecord;
+use Illuminate\Support\Str;
 
 class CreateAmeliaAppointment extends CreateRecord
 {
     protected static string $resource = AmeliaAppointmentResource::class;
+
+    /** @var array{day: string, count: int, group_id: string, duration_minutes: int, time_from: string}|null */
+    protected ?array $pendingRecurring = null;
+
+    private const DAY_MAP = [
+        'sunday' => 0,
+        'monday' => 1,
+        'tuesday' => 2,
+        'wednesday' => 3,
+        'thursday' => 4,
+        'friday' => 5,
+        'saturday' => 6,
+    ];
+
+    public function mutateFormDataBeforeCreate(array $data): array
+    {
+        $createRecurring = ! empty($data['create_recurring']);
+        $day = $data['create_recurring_day'] ?? null;
+        $count = isset($data['create_recurring_count']) ? (int) $data['create_recurring_count'] : 0;
+
+        if ($createRecurring && $day && $count >= 2) {
+            $groupId = Str::uuid()->toString();
+            $data['recurrence_group_id'] = $groupId;
+
+            $bookingStart = Carbon::parse($data['booking_start']);
+            $bookingEnd = Carbon::parse($data['booking_end']);
+            $targetDayOfWeek = self::DAY_MAP[$day] ?? 1;
+
+            // First occurrence: first date on or after booking_start that matches the selected day
+            $firstDate = $bookingStart->copy()->startOfDay();
+            while ($firstDate->dayOfWeek !== $targetDayOfWeek) {
+                $firstDate->addDay();
+            }
+            $firstStart = $firstDate->copy()->setTime($bookingStart->hour, $bookingStart->minute, $bookingStart->second);
+            $data['booking_start'] = $firstStart->format('Y-m-d H:i:s');
+            $duration = $bookingStart->diffInMinutes($bookingEnd);
+            $data['booking_end'] = $firstStart->copy()->addMinutes($duration)->format('Y-m-d H:i:s');
+
+            $this->pendingRecurring = [
+                'day' => $day,
+                'count' => $count,
+                'group_id' => $groupId,
+                'duration_minutes' => $duration,
+                'time_from' => $bookingStart->format('H:i:s'),
+            ];
+        }
+
+        unset($data['create_recurring'], $data['create_recurring_day'], $data['create_recurring_count']);
+
+        return $data;
+    }
+
+    protected function afterCreate(): void
+    {
+        if ($this->pendingRecurring === null) {
+            return;
+        }
+
+        $record = $this->record;
+        if (! $record instanceof AppointmentModel) {
+            return;
+        }
+
+        $count = $this->pendingRecurring['count'];
+        $durationMinutes = $this->pendingRecurring['duration_minutes'];
+        $groupId = $this->pendingRecurring['group_id'];
+
+        $firstStart = Carbon::parse($record->booking_start);
+
+        for ($i = 1; $i < $count; $i++) {
+            $occurrenceStart = $firstStart->copy()->addWeeks($i);
+            $occurrenceEnd = $occurrenceStart->copy()->addMinutes($durationMinutes);
+
+            AppointmentModel::create([
+                'recurrence_group_id' => $groupId,
+                'service_id' => $record->service_id,
+                'provider_id' => $record->provider_id,
+                'package_id' => $record->package_id,
+                'location_id' => $record->location_id,
+                'booking_start' => $occurrenceStart->format('Y-m-d H:i:s'),
+                'booking_end' => $occurrenceEnd->format('Y-m-d H:i:s'),
+                'status' => $record->status,
+                'internal_notes' => $record->internal_notes,
+            ]);
+        }
+
+        $this->pendingRecurring = null;
+    }
 }
