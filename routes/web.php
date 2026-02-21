@@ -30,6 +30,14 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/dashboard', function () {
         return redirect('/admin');
     })->name('dashboard');
+
+    // Appointments resource lives at /admin/appointments; redirect old URL
+    Route::redirect('/admin/amelia-appointments', '/admin/appointments', 301)
+        ->name('admin.amelia-appointments.redirect');
+    Route::redirect('/admin/amelia-appointments/create', '/admin/appointments/create', 301);
+    Route::get('/admin/amelia-appointments/{record}/edit', function ($record) {
+        return redirect("/admin/appointments/{$record}/edit", 301);
+    })->name('admin.amelia-appointments.edit.redirect');
 });
 
 // Test route to check authentication status (remove after debugging)
