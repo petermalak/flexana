@@ -4,9 +4,12 @@ namespace App\Filament\Resources\AmeliaAppointments\Pages;
 
 use App\Filament\Resources\AmeliaAppointments\AmeliaAppointmentResource;
 use App\Infrastructure\Persistence\Eloquent\AppointmentModel;
+use App\Infrastructure\Persistence\Eloquent\CompanyOffDayModel;
+use App\Infrastructure\Persistence\Eloquent\StaffOffDayModel;
 use Carbon\Carbon;
 use Filament\Resources\Pages\CreateRecord;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 class CreateAmeliaAppointment extends CreateRecord
 {
@@ -56,6 +59,8 @@ class CreateAmeliaAppointment extends CreateRecord
                 'duration_minutes' => $duration,
                 'time_from' => $bookingStart->format('H:i:s'),
             ];
+
+            $this->validateRecurringDates($data['provider_id'], $firstStart, $duration, $count);
         }
 
         unset($data['create_recurring'], $data['create_recurring_day'], $data['create_recurring_count']);
@@ -98,5 +103,57 @@ class CreateAmeliaAppointment extends CreateRecord
         }
 
         $this->pendingRecurring = null;
+    }
+
+    private function validateRecurringDates(int $providerId, Carbon $firstStart, int $durationMinutes, int $count): void
+    {
+        $errors = [];
+        for ($i = 0; $i < $count; $i++) {
+            $occurrenceStart = $firstStart->copy()->addWeeks($i);
+            $occurrenceEnd = $occurrenceStart->copy()->addMinutes($durationMinutes);
+            $dateStr = $occurrenceStart->format('Y-m-d');
+
+            $companyOff = CompanyOffDayModel::query()
+                ->where('is_active', true)
+                ->whereDate('date', $dateStr)
+                ->first();
+            if ($companyOff) {
+                $errors['create_recurring'] = "One or more selected dates fall on a company off day ({$companyOff->name} on {$occurrenceStart->format('M j, Y')}). Please adjust the start date or number of occurrences.";
+                break;
+            }
+
+            $staffOffDays = StaffOffDayModel::query()
+                ->where('staff_id', $providerId)
+                ->whereDate('date', $dateStr)
+                ->get();
+            foreach ($staffOffDays as $off) {
+                if ($off->is_all_day) {
+                    $errors['create_recurring'] = "The instructor has an off day on {$occurrenceStart->format('M j, Y')}. Please adjust the start date or number of occurrences.";
+                    break 2;
+                }
+                if ($off->start_time && $off->end_time) {
+                    $dayStr = $occurrenceStart->format('Y-m-d');
+                    $offStart = Carbon::parse($dayStr . ' ' . Carbon::parse($off->start_time)->format('H:i:s'));
+                    $offEnd = Carbon::parse($dayStr . ' ' . Carbon::parse($off->end_time)->format('H:i:s'));
+                    if ($occurrenceStart->lt($offEnd) && $occurrenceEnd->gt($offStart)) {
+                        $errors['create_recurring'] = "The instructor has an off period that overlaps with the appointment on {$occurrenceStart->format('M j, Y')}. Please adjust the start date or number of occurrences.";
+                        break 2;
+                    }
+                }
+            }
+
+            $conflict = AppointmentModel::query()
+                ->where('provider_id', $providerId)
+                ->where('booking_start', '<', $occurrenceEnd->format('Y-m-d H:i:s'))
+                ->where('booking_end', '>', $occurrenceStart->format('Y-m-d H:i:s'))
+                ->first();
+            if ($conflict) {
+                $errors['create_recurring'] = "The instructor already has another appointment on {$occurrenceStart->format('M j, Y')} (" . $conflict->booking_start->format('H:i') . ' – ' . $conflict->booking_end->format('H:i') . "). Please adjust the start date or number of occurrences.";
+                break;
+            }
+        }
+        if ($errors !== []) {
+            throw ValidationException::withMessages($errors);
+        }
     }
 }

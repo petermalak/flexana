@@ -2,6 +2,9 @@
 
 namespace App\Filament\Resources\AmeliaAppointments\Schemas;
 
+use App\Infrastructure\Persistence\Eloquent\AppointmentModel;
+use App\Infrastructure\Persistence\Eloquent\CompanyOffDayModel;
+use App\Infrastructure\Persistence\Eloquent\StaffOffDayModel;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 use Filament\Forms;
@@ -27,7 +30,68 @@ class AmeliaAppointmentForm
                             ->searchable()
                             ->preload()
                             ->required(),
-                        Forms\Components\DateTimePicker::make('booking_start')->label('Starts')->required(),
+                        Forms\Components\DateTimePicker::make('booking_start')
+                            ->label('Starts')
+                            ->required()
+                            ->rules([
+                                fn (Get $get) => function (string $attribute, $value, \Closure $fail) use ($get): void {
+                                    $providerId = $get('provider_id');
+                                    if (! $value || ! $providerId) {
+                                        return;
+                                    }
+                                    $start = \Carbon\Carbon::parse($value);
+                                    $date = $start->format('Y-m-d');
+
+                                    $companyOff = CompanyOffDayModel::query()
+                                        ->where('is_active', true)
+                                        ->whereDate('date', $date)
+                                        ->first();
+                                    if ($companyOff) {
+                                        $fail("The selected date falls on a company off day ({$companyOff->name}). Please choose another date.");
+                                        return;
+                                    }
+
+                                    $staffOffDays = StaffOffDayModel::query()
+                                        ->where('staff_id', $providerId)
+                                        ->whereDate('date', $date)
+                                        ->get();
+                                    foreach ($staffOffDays as $off) {
+                                        if ($off->is_all_day) {
+                                            $fail('The instructor has an off day on the selected date. Please choose another date.');
+                                            return;
+                                        }
+                                        $bookingEnd = $get('booking_end');
+                                        if ($bookingEnd && $off->start_time && $off->end_time) {
+                                            $end = \Carbon\Carbon::parse($bookingEnd);
+                                            $dayStr = $start->format('Y-m-d');
+                                            $offStart = \Carbon\Carbon::parse($dayStr . ' ' . \Carbon\Carbon::parse($off->start_time)->format('H:i:s'));
+                                            $offEnd = \Carbon\Carbon::parse($dayStr . ' ' . \Carbon\Carbon::parse($off->end_time)->format('H:i:s'));
+                                            if ($start->lt($offEnd) && $end->gt($offStart)) {
+                                                $fail('The instructor has an off period that overlaps with this appointment time. Please choose another date or time.');
+                                                return;
+                                            }
+                                        }
+                                    }
+
+                                    $bookingEnd = $get('booking_end');
+                                    if ($bookingEnd) {
+                                        $end = \Carbon\Carbon::parse($bookingEnd);
+                                        $excludeId = $get('id');
+                                        $conflict = AppointmentModel::query()
+                                            ->where('provider_id', $providerId)
+                                            ->where(function ($q) use ($start, $end) {
+                                                $q->where('booking_start', '<', $end)
+                                                    ->where('booking_end', '>', $start);
+                                            })
+                                            ->when($excludeId, fn ($q) => $q->where('id', '!=', $excludeId))
+                                            ->first();
+                                        if ($conflict) {
+                                            $fail('The instructor already has another appointment at this time (' . $conflict->booking_start->format('M j, Y H:i') . ' – ' . $conflict->booking_end->format('H:i') . '). Please choose another time.');
+                                            return;
+                                        }
+                                    }
+                                },
+                            ]),
                         Forms\Components\DateTimePicker::make('booking_end')
                             ->label('Ends')
                             ->required()
