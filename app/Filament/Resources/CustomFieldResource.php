@@ -24,6 +24,8 @@ class CustomFieldResource extends Resource
 
     protected static ?string $navigationLabel = 'Custom Fields';
 
+    protected static bool $shouldRegisterNavigation = false;
+
     public static function form(Schema $schema): Schema
     {
         return $schema

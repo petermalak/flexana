@@ -118,8 +118,17 @@ class StaffResource extends Resource
                     ->label('Active'),
             ])
             ->actions([
-                Actions\EditAction::make(),
+                Actions\Action::make('schedule')
+                    ->label('Week schedule')
+                    ->icon('heroicon-o-calendar-days')
+                    ->url(fn ($record) => static::getUrl('schedule', ['record' => $record]))
+                    ->color('primary'),
+                Actions\Action::make('edit_details')
+                    ->label('Edit details')
+                    ->icon('heroicon-o-pencil-square')
+                    ->url(fn ($record) => static::getUrl('edit', ['record' => $record])),
             ])
+            ->recordUrl(fn ($record) => static::getUrl('schedule', ['record' => $record]))
             ->bulkActions([
                 Actions\BulkActionGroup::make([
                     Actions\DeleteBulkAction::make(),
@@ -131,14 +140,14 @@ class StaffResource extends Resource
     {
         return [
             'index' => Pages\ManageStaff::route('/'),
+            'schedule' => Pages\ViewStaffSchedule::route('/{record}/schedule'),
+            'edit' => Pages\EditStaff::route('/{record}/edit'),
         ];
     }
 
     public static function getRelations(): array
     {
-        return [
-            StaffResource\RelationManagers\OffDaysRelationManager::class,
-        ];
+        return [];
     }
 }
 

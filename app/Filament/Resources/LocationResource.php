@@ -24,6 +24,8 @@ class LocationResource extends Resource
 
     protected static ?string $navigationLabel = 'Locations';
 
+    protected static bool $shouldRegisterNavigation = false;
+
     public static function form(Schema $schema): Schema
     {
         return $schema

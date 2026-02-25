@@ -24,6 +24,8 @@ class BookableResourceResource extends Resource
 
     protected static ?string $navigationLabel = 'Resources';
 
+    protected static bool $shouldRegisterNavigation = false;
+
     protected static ?string $modelLabel = 'Bookable Resource';
 
     protected static ?string $pluralModelLabel = 'Resources';

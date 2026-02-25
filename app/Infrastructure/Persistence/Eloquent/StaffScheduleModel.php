@@ -21,6 +21,8 @@ class StaffScheduleModel extends Model
     ];
 
     protected $casts = [
+        'starts_at' => 'datetime',
+        'ends_at' => 'datetime',
         'meta' => 'array',
     ];
 

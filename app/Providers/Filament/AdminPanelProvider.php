@@ -66,7 +66,6 @@ class AdminPanelProvider extends PanelProvider
                 'Commerce',
                 'Content',
                 'Amelia Data',
-                'Reference Data',
             ])
             ->pages([
                 Dashboard::class,

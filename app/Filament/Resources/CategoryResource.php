@@ -18,9 +18,9 @@ class CategoryResource extends Resource
 
     protected static \BackedEnum|string|null $navigationIcon = 'heroicon-o-tag';
 
-    protected static \UnitEnum|string|null $navigationGroup = 'Reference Data';
+    protected static \UnitEnum|string|null $navigationGroup = 'Settings';
 
-    protected static ?int $navigationSort = 2;
+    protected static ?int $navigationSort = 4;
 
     protected static ?string $navigationLabel = 'Categories';
 

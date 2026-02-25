@@ -24,6 +24,8 @@ class SettingResource extends Resource
 
     protected static ?string $navigationLabel = 'Settings';
 
+    protected static bool $shouldRegisterNavigation = false;
+
     public static function form(Schema $schema): Schema
     {
         return $schema

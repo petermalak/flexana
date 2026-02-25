@@ -69,5 +69,10 @@ class StaffModel extends Model
     {
         return $this->hasMany(StaffOffDayModel::class, 'staff_id');
     }
+
+    public function appointments(): HasMany
+    {
+        return $this->hasMany(AppointmentModel::class, 'provider_id');
+    }
 }
 
