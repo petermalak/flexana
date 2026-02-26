@@ -37,7 +37,7 @@ class CustomerPackagePurchaseResource extends Resource
                     ->icon('heroicon-o-ticket')
                     ->schema([
                         Forms\Components\Select::make('customer_id')
-                            ->relationship('customer', 'first_name', fn ($q) => $q->orderBy('first_name'))
+                            ->relationship('customer', 'first_name', fn ($q) => $q ? $q->orderBy('first_name') : $q)
                             ->getOptionLabelFromRecordUsing(fn ($record) => trim("{$record->first_name} {$record->last_name}"))
                             ->searchable(['first_name', 'last_name'])
                             ->required(),
