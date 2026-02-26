@@ -77,8 +77,11 @@ class AmeliaAppointmentForm
                                     if ($bookingEnd) {
                                         $end = \Carbon\Carbon::parse($bookingEnd);
                                         $excludeId = $get('id');
+
+                                        // Only consider conflicts on the same calendar day as the selected start time.
                                         $conflict = AppointmentModel::query()
                                             ->where('provider_id', $providerId)
+                                            ->whereDate('booking_start', $start->toDateString())
                                             ->where(function ($q) use ($start, $end) {
                                                 $q->where('booking_start', '<', $end)
                                                     ->where('booking_end', '>', $start);
@@ -114,7 +117,8 @@ class AmeliaAppointmentForm
                             ->label('Package')
                             ->relationship('package', 'title')
                             ->searchable()
-                            ->preload(),
+                            ->preload()
+                            ->hidden(true),
                         Forms\Components\Textarea::make('internal_notes')->label('Internal notes')->rows(2),
                     ])->columns(2),
                 Section::make('Create on multiple dates')

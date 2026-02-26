@@ -44,8 +44,7 @@ class PackageResource extends Resource
                             ->relationship('classType', 'name')
                             ->searchable()
                             ->preload()
-                            ->required()
-                            ->helperText('Session format: e.g. Private, Group, Workshop (from Settings → Class Types)'),
+                            ->hidden(true),
                         Forms\Components\Select::make('service_type')
                             ->label('Category')
                             ->options([

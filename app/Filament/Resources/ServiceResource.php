@@ -3,6 +3,7 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\ServiceResource\Pages;
+use App\Models\Category;
 use App\Models\Service;
 use Filament\Forms;
 use Filament\Resources\Resource;
@@ -52,12 +53,14 @@ class ServiceResource extends Resource
                                     ->schema([
                                         Forms\Components\Select::make('category_id')
                                             ->label('Category')
-                                            ->options([
-                                                'Yoga' => 'Yoga',
-                                                'Reformer Pilates' => 'Reformer Pilates',
-                                            ])
+                                            ->options(fn () => Category::query()
+                                                ->where(fn ($q) => $q->where('type', 'service')->orWhereNull('type'))
+                                                ->orderBy('position')
+                                                ->orderBy('name')
+                                                ->pluck('name', 'id')
+                                                ->all())
                                             ->searchable()
-                                            ->helperText('Product category for app (Yoga or Reformer Pilates)'),
+                                            ->helperText('Category from Settings → Categories (type: service).'),
                                         Forms\Components\Select::make('status')
                                             ->options([
                                                 'visible' => 'Visible',
@@ -252,14 +255,10 @@ class ServiceResource extends Resource
                     ->boolean()
                     ->label('Show')
                     ->toggleable(),
-                Tables\Columns\TextColumn::make('category_id')
+                Tables\Columns\TextColumn::make('category.name')
                     ->label('Category')
                     ->badge()
-                    ->color(fn (?string $state): string => match ($state) {
-                        'Yoga' => 'success',
-                        'Reformer Pilates' => 'info',
-                        default => 'gray',
-                    })
+                    ->color('gray')
                     ->sortable()
                     ->toggleable(),
                 Tables\Columns\BadgeColumn::make('status')
@@ -281,10 +280,9 @@ class ServiceResource extends Resource
                     ]),
                 Tables\Filters\SelectFilter::make('category_id')
                     ->label('Category')
-                    ->options([
-                        'Yoga' => 'Yoga',
-                        'Reformer Pilates' => 'Reformer Pilates',
-                    ]),
+                    ->relationship('category', 'name', fn ($query) => $query->where(fn ($q) => $q->where('type', 'service')->orWhereNull('type'))->orderBy('position')->orderBy('name'))
+                    ->searchable()
+                    ->preload(),
             ])
             ->actions([
                 Actions\EditAction::make(),
