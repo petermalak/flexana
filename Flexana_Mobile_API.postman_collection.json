@@ -2,7 +2,7 @@
 	"info": {
 		"_postman_id": "flexana-mobile-api-v1",
 		"name": "Flexana Mobile API (v1)",
-		"description": "Flexana mobile app API. Auth: Login (phone+password). Signup: POST /auth/signup (phone [+ optional profile]) -> backend sends OTP via SMS -> user enters code (+ optional password) -> POST /auth/verify -> token. Profile: me, update, phone change, change password, delete account, logout. Schedule: sessions (filter by date, category by service name, instructorID), book (optional promoCode, isDropIn), cancel, appointments history. Packages: offers, purchase (optional promoCode). Promo code flow: verify with POST /promo-codes/verify, then pass promoCode when booking or purchasing — see Promo Code Flow folder. Base: /api/v1.\n\nVariables:\n- base_url: Main URL (default: localhost). Change this value to switch environments.\n- base_url_localhost: http://127.0.0.1:8000\n- base_url_stage: https://sdhds.net/backend/backend/public\n- bearer_token: Auto-set after login/verify\n\nTo switch to stage: Edit collection variables and set base_url to {{base_url_stage}} or directly to https://sdhds.net/backend/backend/public",
+		"description": "Flexana mobile app API. Auth: Login (phone+password). Signup: POST /auth/signup -> OTP via SMS -> POST /auth/verify -> token. Profile: me, update, phone change, change password, delete account, logout. Schedule: GET sessions (filter by date, category: Yoga | yoga | reformer | Reformer Pilates, instructorID), POST session-bookings (sessionID, optional persons, promoCode, isDropIn), cancel, GET appointments/history (includes isDropIn). Packages: GET package-offers (grouped by category; Uncategorized if no match), POST purchase-package. Promo: POST promo-codes/verify, then promoCode when booking or purchasing. Base: /api/v1. Each request has example responses (Success, 4xx) where relevant.\n\nVariables:\n- base_url: Main URL (default: localhost)\n- base_url_localhost: http://127.0.0.1:8000\n- base_url_stage: https://sdhds.net/backend/backend/public\n- bearer_token: Auto-set after login/verify",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"auth": {
@@ -542,7 +542,8 @@
 							"code": 200,
 							"header": [{ "key": "Content-Type", "value": "application/json" }],
 							"body": "{\"success\":true,\"data\":[{\"id\":\"1\",\"sessionID\":\"1\",\"serviceName\":\"Yoga\",\"instructorName\":\"John\",\"bookedAt\":\"2024-01-15T10:00:00.000000Z\",\"sessionDate\":\"2024-01-20\",\"sessionTime\":\"10:00:00\",\"sessionStart\":\"2024-01-20T10:00:00.000000Z\",\"sessionEnd\":\"2024-01-20T11:00:00.000000Z\",\"status\":\"confirmed\",\"paymentStatus\":\"paid\",\"partySize\":1,\"totalAmount\":50,\"currency\":\"USD\",\"isDropIn\":true},{\"id\":\"2\",\"sessionID\":\"2\",\"serviceName\":\"Pilates\",\"instructorName\":\"Jane\",\"bookedAt\":\"2024-01-20T14:00:00.000000Z\",\"sessionDate\":\"2024-01-22\",\"sessionTime\":\"14:00:00\",\"sessionStart\":\"2024-01-22T14:00:00.000000Z\",\"sessionEnd\":\"2024-01-22T15:00:00.000000Z\",\"status\":\"confirmed\",\"paymentStatus\":\"paid\",\"partySize\":1,\"totalAmount\":75,\"currency\":\"USD\",\"isDropIn\":false}],\"meta\":{\"current_page\":1,\"last_page\":1,\"per_page\":15,\"total\":2}}"
-						}
+						},
+						{ "name": "Success (empty list)", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"data\":[],\"meta\":{\"current_page\":1,\"last_page\":1,\"per_page\":15,\"total\":0}}" }
 					]
 				}
 			],
@@ -561,10 +562,11 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "v1", "package-offers"]
 						},
-						"description": "Package offers grouped by category. Uses categories from the database; under each category returns the packages that match (by service type: Yoga, Reformer Pilates). Response: { data: [{ categoryId, categoryName, slug, packages: [{ id, name, price, sessions, description, expirationMonths, serviceType, classFormat, packageDuration }, ...] }, ...] }. Requires Bearer."
+						"description": "Package offers grouped by category. Categories from DB; packages matched by service category_id or by service_type/name/description (Yoga vs Reformer Pilates). Unmatched packages appear under Uncategorized (categoryId \"\", categoryName \"Uncategorized\"). Response: { data: [{ categoryId, categoryName, slug, packages: [{ id, name, price, sessions, description, expirationMonths, serviceType, classFormat, packageDuration }, ...] }, ...] }. No pagination. Requires Bearer."
 					},
 					"response": [
-						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"data\":[{\"categoryId\":\"1\",\"categoryName\":\"Yoga\",\"slug\":\"yoga\",\"packages\":[{\"id\":1,\"name\":\"Monthly Yoga\",\"price\":99.99,\"sessions\":10,\"description\":\"10 sessions\",\"expirationMonths\":1,\"serviceType\":\"Yoga\",\"classFormat\":\"Group\",\"packageDuration\":1}]},{\"categoryId\":\"2\",\"categoryName\":\"Reformer Pilates\",\"slug\":\"reformer-pilates\",\"packages\":[{\"id\":2,\"name\":\"Reformer 5-Pack\",\"price\":149,\"sessions\":5,\"description\":\"5 sessions\",\"expirationMonths\":1,\"serviceType\":\"Reformer Pilates\",\"classFormat\":\"Group\",\"packageDuration\":1}]}]}" }
+						{ "name": "Success (grouped by category)", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"data\":[{\"categoryId\":\"2\",\"categoryName\":\"Reformer\",\"slug\":\"reformer\",\"packages\":[{\"id\":17,\"name\":\"Test\",\"price\":300,\"sessions\":10,\"description\":\"test\",\"expirationMonths\":0,\"serviceType\":\"Reformer Pilates\",\"classFormat\":null,\"packageDuration\":3}]},{\"categoryId\":\"1\",\"categoryName\":\"Yoga  & Mat Pilates Classes\",\"slug\":\"yoga-mat-pilates-classes\",\"packages\":[{\"id\":1,\"name\":\"10 sessions pack\",\"price\":1,\"sessions\":10,\"description\":\"sdsf\",\"expirationMonths\":0,\"serviceType\":\"Yoga\",\"classFormat\":\"Yoga\",\"packageDuration\":3}]}]}" },
+						{ "name": "Success (with Uncategorized)", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"data\":[{\"categoryId\":\"2\",\"categoryName\":\"Reformer\",\"slug\":\"reformer\",\"packages\":[]},{\"categoryId\":\"1\",\"categoryName\":\"Yoga  & Mat Pilates Classes\",\"slug\":\"yoga-mat-pilates-classes\",\"packages\":[]},{\"categoryId\":\"\",\"categoryName\":\"Uncategorized\",\"slug\":\"uncategorized\",\"packages\":[{\"id\":1,\"name\":\"Misc Pack\",\"price\":50,\"sessions\":5,\"description\":\"\",\"expirationMonths\":0,\"serviceType\":null,\"classFormat\":null,\"packageDuration\":1}]}]}" }
 					]
 				},
 				{
@@ -577,10 +579,12 @@
 							"raw": "{\n    \"packageId\": 1,\n    \"promoCode\": \"SAVE10\"\n}"
 						},
 						"url": { "raw": "{{base_url}}/api/v1/purchase-package", "host": ["{{base_url}}"], "path": ["api", "v1", "purchase-package"] },
-						"description": "Purchase one package. Body: packageId (required), promoCode (optional, percentage discount). Requires Bearer."
+						"description": "Purchase one package. Body: packageId (required), promoCode (optional, percentage discount). Package must be active. Requires Bearer."
 					},
 					"response": [
-						{ "name": "Success", "status": "Created", "code": 201, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"message\":\"Package purchased successfully\",\"data\":{\"id\":1,\"packageId\":1,\"customerId\":1}}" }
+						{ "name": "Success", "status": "Created", "code": 201, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"message\":\"Package purchased successfully\",\"data\":{\"id\":\"123\",\"packageId\":\"1\",\"customerId\":\"1\"}}" },
+						{ "name": "404 Package not found or not available", "status": "Not Found", "code": 404, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":false,\"message\":\"Package not found or not available\"}" },
+						{ "name": "422 Validation failed", "status": "Unprocessable Entity", "code": 422, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":false,\"message\":\"Validation failed\",\"errors\":{\"packageId\":[\"The package id field is required.\"]}}" }
 					]
 				}
 			],
