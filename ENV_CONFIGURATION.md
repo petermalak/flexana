@@ -15,6 +15,8 @@ WP_DB_USERNAME=root
 WP_DB_PASSWORD=
 WP_DB_CHARSET=utf8mb4
 WP_DB_COLLATION=utf8mb4_unicode_ci
+# Optional: WordPress options table for wp:mail-config (default: wp_options; use e.g. rueyn_options if your WP table prefix is rueyn_)
+# WP_OPTIONS_TABLE=wp_options
 ```
 
 ### Configuration Details:
@@ -26,8 +28,9 @@ WP_DB_COLLATION=utf8mb4_unicode_ci
 - **WP_DB_PASSWORD**: MySQL password (from `wp-config.php` → `DB_PASSWORD`)
 - **WP_DB_CHARSET**: Character set (default: `utf8mb4`)
 - **WP_DB_COLLATION**: Collation (default: `utf8mb4_unicode_ci`)
+- **WP_OPTIONS_TABLE**: (Optional) WordPress options table for reading mail config (`wp:mail-config`). Default `wp_options`; if your WP table prefix is e.g. `rueyn_`, set `WP_OPTIONS_TABLE=rueyn_options`.
 
-**Note**: The table prefix `rueyn_amelia_` is hardcoded in `config/database.php` and matches your WordPress setup.
+**Note**: The table prefix `rueyn_amelia_` is for Amelia tables. The options table (e.g. `wp_options` or `rueyn_options`) is used only by `php artisan wp:mail-config` to fetch mail/SMTP settings from WordPress.
 
 ## Amelia Write Operations
 
@@ -68,6 +71,7 @@ WP_DB_USERNAME=root
 WP_DB_PASSWORD=
 WP_DB_CHARSET=utf8mb4
 WP_DB_COLLATION=utf8mb4_unicode_ci
+# WP_OPTIONS_TABLE=wp_options   # optional; for wp:mail-config (use e.g. rueyn_options if WP prefix is rueyn_)
 
 # Amelia Configuration
 AMELIA_ENABLE_WRITE=true

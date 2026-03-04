@@ -13,6 +13,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Mail;
 
 class MobileBookingController extends Controller
 {
@@ -54,6 +55,8 @@ class MobileBookingController extends Controller
                 $sessionEnd = Carbon::parse($appointment->booking_end)->toIso8601String();
             }
 
+            $isDropIn = $booking->is_drop_in ?? ($booking->answers['isDropIn'] ?? false);
+
             return [
                 'id' => (string) $booking->id,
                 'sessionID' => $booking->appointment_id ? (string) $booking->appointment_id : null,
@@ -69,6 +72,7 @@ class MobileBookingController extends Controller
                 'partySize' => $booking->party_size,
                 'totalAmount' => (float) $booking->total_amount,
                 'currency' => $booking->currency ?? 'USD',
+                'isDropIn' => (bool) $isDropIn,
             ];
         });
 
@@ -117,7 +121,7 @@ class MobileBookingController extends Controller
         $customer = $request->user();
 
         $appointment = AppointmentModel::query()
-            ->with(['service', 'bookings'])
+            ->with(['service', 'bookings', 'provider'])
             ->find($sessionID);
 
         if (! $appointment) {
@@ -207,6 +211,7 @@ class MobileBookingController extends Controller
                 'balance_amount' => $totalPrice,
                 'currency' => 'USD',
                 'channel' => 'mobile',
+                'is_drop_in' => $isDropIn,
                 'answers' => [
                     'isDropIn' => $isDropIn,
                 ],
@@ -229,6 +234,12 @@ class MobileBookingController extends Controller
 
             DB::commit();
 
+            try {
+                $this->sendBookingCreatedEmail($booking, $appointment, $customer);
+            } catch (\Throwable $e) {
+                report($e);
+            }
+
             return response()->json([
                 'success' => true,
                 'message' => 'Booking created successfully',
@@ -236,6 +247,7 @@ class MobileBookingController extends Controller
                     'id' => (string) $booking->id,
                     'sessionID' => (string) $appointment->id,
                     'customerId' => (string) $customer->id,
+                    'isDropIn' => $booking->is_drop_in,
                 ],
             ], 201);
         } catch (\Throwable $e) {
@@ -274,7 +286,7 @@ class MobileBookingController extends Controller
         $customer = $request->user();
 
         $appointment = AppointmentModel::query()
-            ->with(['service', 'bookings'])
+            ->with(['service', 'bookings', 'provider'])
             ->find($sessionID);
 
         if (! $appointment) {
@@ -322,10 +334,15 @@ class MobileBookingController extends Controller
             }
             $booking->update(['status' => 'cancelled', 'cancelled_at' => now()]);
             DB::commit();
-            return response()->json([
-                'success' => true,
-                'message' => 'Booking canceled successfully',
-            ], 200);
+                try {
+                    $this->sendBookingCancelledEmail($booking, $appointment, $customer);
+                } catch (\Throwable $e) {
+                    report($e);
+                }
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Booking canceled successfully',
+                ], 200);
         } catch (\Throwable $e) {
             DB::rollBack();
             return response()->json([
@@ -436,5 +453,71 @@ class MobileBookingController extends Controller
             }
         }
         return null;
+    }
+
+    /**
+     * Send confirmation email after a booking is created.
+     */
+    private function sendBookingCreatedEmail(BookingModel $booking, AppointmentModel $appointment, Customer $customer): void
+    {
+        if (! $customer->email) {
+            return;
+        }
+
+        $service = $appointment->service;
+        $provider = $appointment->provider;
+
+        $customerName = trim(($customer->first_name ?? '') . ' ' . ($customer->last_name ?? ''));
+        $customerName = $customerName !== '' ? $customerName : ($customer->email ?? 'Customer');
+
+        $appointmentDate = $appointment->booking_start ? Carbon::parse($appointment->booking_start)->format('Y-m-d') : '';
+        $appointmentTime = $appointment->booking_start ? Carbon::parse($appointment->booking_start)->format('H:i') : '';
+
+        $body = "Thank you for booking with Flexana!\n\n"
+            . "Booking Details\n\n"
+            . "* Name: {$customerName},\n\n"
+            . "* Email: {$customer->email}\n\n"
+            . "* Phone: {$customer->phone}\n\n"
+            . "* Class: " . ($service?->name ?? 'Unknown') . "\n\n"
+            . "* Day: {$appointmentDate}\n\n"
+            . "* Time: {$appointmentTime}\n\n"
+            . "* Instructor: " . ($provider?->name ?? 'Unknown') . "\n\n"
+            . "* Type: " . ($service?->description ?? '') . "\n\n"
+            . "If you need to cancel, please do so at least 24 hours in advance via your Flexana account or by contacting us directly.\n\n"
+            . "We look forward to seeing you on the mat!\n\n"
+            . "Flexana Team";
+
+        Mail::raw($body, function ($message) use ($customer, $customerName) {
+            $message->to($customer->email, $customerName)
+                ->subject('Your Flexana booking confirmation');
+        });
+    }
+
+    /**
+     * Send cancellation email after a booking is cancelled.
+     */
+    private function sendBookingCancelledEmail(BookingModel $booking, AppointmentModel $appointment, Customer $customer): void
+    {
+        if (! $customer->email) {
+            return;
+        }
+
+        $service = $appointment->service;
+
+        $customerName = trim(($customer->first_name ?? '') . ' ' . ($customer->last_name ?? ''));
+        $customerName = $customerName !== '' ? $customerName : ($customer->email ?? 'Customer');
+
+        $appointmentDateTime = $appointment->booking_start ? Carbon::parse($appointment->booking_start)->format('Y-m-d H:i') : '';
+
+        $body = "Dear {$customerName},\n"
+            . "Phone {$customer->phone}\n"
+            . "Your " . ($service?->name ?? 'session') . " appointment, scheduled on {$appointmentDateTime} has been canceled.\n"
+            . "Thank you for choosing our company,\n"
+            . "Flexana Team";
+
+        Mail::raw($body, function ($message) use ($customer, $customerName) {
+            $message->to($customer->email, $customerName)
+                ->subject('Your Flexana booking has been cancelled');
+        });
     }
 }

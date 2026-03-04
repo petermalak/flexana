@@ -23,7 +23,7 @@ There are two Postman collections:
 - **Forgot Password** – POST `{ "email" }`. **Reset Password** – POST `{ "email", "token", "password", "password_confirmation" }`.
 - **Get Me**, **Update Me**, **Update Me (with phone change)** (after **Send Phone Change Code**), **Send Phone Change Code**, **Change Password**, **Delete Account**, **Logout**.
 
-**Folders:** Auth, Home Screen, Schedule Screen (sessions, book, cancel, appointments/history), Packages Screen.
+**Folders:** Auth, Home Screen, Schedule Screen (sessions, book, cancel, appointments/history), Packages Screen. **Book Session** accepts `isDropIn`: `true` = drop-in (no package required); `false` = deduct from customer's package. History and create response include `isDropIn`.
 
 See `docs/MOBILE_DEVELOPER_AUTH_FLOW.md` for the full mobile auth flow and attestation details.
 

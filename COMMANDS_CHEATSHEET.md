@@ -158,6 +158,23 @@ php artisan amelia:fetch --only=locations --only=customers --only=appointments
 
 Required `.env` vars: `WP_DB_HOST`, `WP_DB_DATABASE`, `WP_DB_USERNAME`, `WP_DB_PASSWORD`. Set `WP_DB_PREFIX` to match Amelia tables (e.g. `rueyn_amelia_` if tables are `rueyn_amelia_users`, `rueyn_amelia_services`, etc.).
 
+### Fetch WordPress mail config into .env
+
+Reads mail/SMTP settings from the WordPress database (same as `WP_DB_*`) and prints suggested `MAIL_*` lines for `.env`:
+
+```bash
+# Use options table from .env (WP_OPTIONS_TABLE, default wp_options)
+php artisan wp:mail-config
+
+# Override options table (e.g. if WordPress uses rueyn_options)
+php artisan wp:mail-config --table=rueyn_options
+
+# Show raw option_name / option_value for all mail-related options
+php artisan wp:mail-config --show-raw
+```
+
+Optional `.env`: `WP_OPTIONS_TABLE=rueyn_options` if your WordPress options table is not `wp_options`.
+
 ---
 
 ## 🔐 Permissions

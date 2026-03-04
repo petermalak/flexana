@@ -8,6 +8,7 @@ use App\Infrastructure\Persistence\Eloquent\CustomerPackagePurchaseModel;
 use App\Infrastructure\Persistence\Eloquent\PackageModel;
 use App\Infrastructure\Persistence\Eloquent\PaymentModel;
 use App\Infrastructure\Persistence\Eloquent\PromoCodeModel;
+use App\Models\Category;
 use App\Models\Customer;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -18,82 +19,227 @@ use Illuminate\Support\Facades\Validator;
 class MobilePackageController extends Controller
 {
     /**
-     * Get package offers (Laravel packages) with pagination.
-     * Query params: per_page (default 15), page
+     * Get package offers grouped by category.
+     * Returns a list of categories (from database), each with its related packages.
+     * Package-to-category is resolved by: (1) package's services' category_id, (2) fallback: package service_type vs category name.
+     * All packages are included; unmatched ones appear under "Uncategorized".
      */
     public function index(Request $request): JsonResponse
     {
-        $perPage = max(1, min(50, (int) $request->query('per_page', 15)));
+        $categories = Category::query()
+            ->where('status', true)
+            ->orderBy('position')
+            ->orderBy('name')
+            ->get();
 
         $packages = PackageModel::query()
-            ->with(['services', 'classType'])
+            ->with(['services.category', 'classType'])
             ->where('status', 'active')
             ->orderBy('title')
-            ->paginate($perPage);
+            ->get();
 
-        $items = $packages->getCollection()->map(function ($package) {
-            // Use package total_sessions (admin-defined) for display and purchase consistency
-            $sessions = (int) ($package->total_sessions ?? 0);
-            $expiry = $package->expiry;
-            $expirationMonths = 0;
-            if ($expiry) {
-                $expirationMonths = (int) max(0, Carbon::now()->diffInMonths($expiry, false));
+        // Group packages by category: prefer service->category_id, then match service_type to category name
+        $packagesByCategoryId = [];
+        $uncategorized = [];
+
+        foreach ($packages as $package) {
+            $item = $this->mapPackageToItem($package);
+            $categoryIds = $this->packageCategoryIds($package);
+            $resolvedCategoryId = $this->resolveCategoryForPackage($package, $categoryIds, $categories);
+
+            if ($resolvedCategoryId !== null) {
+                $packagesByCategoryId[$resolvedCategoryId][] = $item;
+            } else {
+                $uncategorized[] = $item;
             }
+        }
 
-            // Category (Yoga / Reformer Pilates): prioritize package.service_type (admin-set), then fallback to service names
-            $serviceType = null;
-            // Prioritize admin-set service_type field (authoritative source)
-            if ($package->service_type) {
-                $lower = strtolower((string) $package->service_type);
-                if (str_contains($lower, 'reformer') || str_contains($lower, 'reform')) {
-                    $serviceType = 'Reformer Pilates';
-                } elseif (str_contains($lower, 'yoga')) {
-                    $serviceType = 'Yoga';
-                }
-            }
-            // Fallback: determine from service names if service_type is not set
-            if (!$serviceType && $package->services->isNotEmpty()) {
-                $yogaCount = 0;
-                $reformerPilatesCount = 0;
-
-                foreach ($package->services as $service) {
-                    $serviceName = strtolower($service->name ?? '');
-                    if (str_contains($serviceName, 'reformer pilates') || str_contains($serviceName, 'reform pilates')) {
-                        $reformerPilatesCount++;
-                    } elseif (str_contains($serviceName, 'yoga')) {
-                        $yogaCount++;
-                    }
-                }
-
-                if ($reformerPilatesCount > 0 && $reformerPilatesCount >= $yogaCount) {
-                    $serviceType = 'Reformer Pilates';
-                } elseif ($yogaCount > 0) {
-                    $serviceType = 'Yoga';
-                }
-            }
-
+        $data = $categories->map(function (Category $category) use ($packagesByCategoryId) {
             return [
-                'id' => (int) $package->id,
-                'name' => $package->title ?? '',
-                'price' => (float) ($package->price ?? 0),
-                'sessions' => $sessions > 0 ? $sessions : 1,
-                'description' => $package->description ?? '',
-                'expirationMonths' => $expirationMonths,
-                'serviceType' => $serviceType,
-                'classFormat' => $package->classType?->name ?? null,
-                'packageDuration' => $package->package_duration,
+                'categoryId' => (string) $category->id,
+                'categoryName' => $category->name ?? '',
+                'slug' => $category->slug ?? '',
+                'packages' => array_values($packagesByCategoryId[$category->id] ?? []),
             ];
-        });
+        })->values()->all();
+
+        if (count($uncategorized) > 0) {
+            $data[] = [
+                'categoryId' => '',
+                'categoryName' => 'Uncategorized',
+                'slug' => 'uncategorized',
+                'packages' => $uncategorized,
+            ];
+        }
 
         return response()->json([
-            'data' => $items->values()->toArray(),
-            'meta' => [
-                'current_page' => $packages->currentPage(),
-                'last_page' => $packages->lastPage(),
-                'per_page' => $packages->perPage(),
-                'total' => $packages->total(),
-            ],
+            'data' => $data,
         ]);
+    }
+
+    /**
+     * Get category IDs from package's services (service->category_id).
+     */
+    private function packageCategoryIds(PackageModel $package): array
+    {
+        $ids = [];
+        foreach ($package->services as $service) {
+            if ($service->category_id !== null) {
+                $ids[(int) $service->category_id] = true;
+            }
+        }
+
+        return array_keys($ids);
+    }
+
+    /**
+     * Resolve which category this package belongs to.
+     * 1) Use first category from package's services (category_id). 2) Else match package service_type to category by slug/name (same rules as services:categorize).
+     */
+    private function resolveCategoryForPackage(PackageModel $package, array $categoryIdsFromServices, $categories): ?int
+    {
+        if (count($categoryIdsFromServices) > 0) {
+            return (int) $categoryIdsFromServices[0];
+        }
+        $serviceType = $this->packageServiceType($package);
+        if ($serviceType !== null) {
+            $category = $this->categoryForCanonicalType($serviceType, $categories);
+
+            return $category ? (int) $category->id : null;
+        }
+
+        return null;
+    }
+
+    /**
+     * Find the DB category for canonical type "Yoga" or "Reformer Pilates".
+     * Prefers dedicated categories (yoga-only / pilates-only) so "Yoga & Mat Pilates" doesn't claim both.
+     */
+    private function categoryForCanonicalType(string $canonicalType, $categories)
+    {
+        $nameLower = fn ($c) => strtolower($c->name ?? '');
+        $slugLower = fn ($c) => strtolower($c->slug ?? '');
+
+        if ($canonicalType === 'Yoga') {
+            foreach ($categories as $cat) {
+                $nl = $nameLower($cat);
+                $sl = $slugLower($cat);
+                if ($sl === 'yoga' || (str_contains($nl, 'yoga') && ! str_contains($nl, 'pilates'))) {
+                    return $cat;
+                }
+            }
+
+            return $categories->first(fn ($c) => str_contains($nameLower($c), 'yoga'));
+        }
+
+        if ($canonicalType === 'Reformer Pilates') {
+            foreach ($categories as $cat) {
+                $nl = $nameLower($cat);
+                $sl = $slugLower($cat);
+                if (in_array($sl, ['reformer-pilates', 'pilates', 'reformer'], true)
+                    || str_contains($nl, 'reformer')
+                    || (str_contains($nl, 'pilates') && ! str_contains($nl, 'yoga'))) {
+                    return $cat;
+                }
+            }
+
+            return $categories->first(fn ($c) => str_contains($nameLower($c), 'pilates') || str_contains($nameLower($c), 'reformer'));
+        }
+
+        return null;
+    }
+
+    /**
+     * Map a package model to the API item shape.
+     */
+    private function mapPackageToItem(PackageModel $package): array
+    {
+        $sessions = (int) ($package->total_sessions ?? 0);
+        $expiry = $package->expiry;
+        $expirationMonths = 0;
+        if ($expiry) {
+            $expirationMonths = (int) max(0, Carbon::now()->diffInMonths($expiry, false));
+        }
+
+        return [
+            'id' => (int) $package->id,
+            'name' => $package->title ?? '',
+            'price' => (float) ($package->price ?? 0),
+            'sessions' => $sessions > 0 ? $sessions : 1,
+            'description' => $package->description ?? '',
+            'expirationMonths' => $expirationMonths,
+            'serviceType' => $this->packageServiceType($package),
+            'classFormat' => $package->classType?->name ?? null,
+            'packageDuration' => $package->package_duration,
+        ];
+    }
+
+    /**
+     * Derive category/service type (Yoga, Reformer Pilates) from package.
+     * Matches if any of: service_type, title, description, or any linked service name/description contain yoga or reformer.
+     */
+    private function packageServiceType(PackageModel $package): ?string
+    {
+        $text = $this->packageTextToMatch($package);
+
+        return $this->inferCategoryNameFromText($text);
+    }
+
+    /**
+     * All package and related service text that may contain category hints.
+     */
+    private function packageTextToMatch(PackageModel $package): string
+    {
+        $parts = array_filter([
+            $package->service_type ?? '',
+            $package->title ?? '',
+            $package->description ?? '',
+        ]);
+        foreach ($package->services as $service) {
+            $parts[] = $service->name ?? '';
+            $parts[] = $service->description ?? '';
+        }
+
+        return implode(' ', $parts);
+    }
+
+    /**
+     * Infer category name (Yoga | Reformer Pilates) from any text.
+     * Uses service-type keywords: yoga styles (vinyasa, hatha, yin, flow, etc.) and pilates (mat pilates, barre, reformer).
+     * Reformer Pilates wins if both match.
+     */
+    private function inferCategoryNameFromText(string $text): ?string
+    {
+        if ($text === '') {
+            return null;
+        }
+        $lower = strtolower($text);
+
+        $reformerPilatesKeywords = [
+            'reformer', 'reform pilates', 'reform pilate', 'mat pilates', 'pilates', 'barre', 'aerial pilates',
+        ];
+        foreach ($reformerPilatesKeywords as $kw) {
+            if (str_contains($lower, $kw)) {
+                return 'Reformer Pilates';
+            }
+        }
+
+        $yogaKeywords = [
+            'yoga', 'vinyasa', 'hatha', 'ashtanga', 'restorative', 'yin yoga', 'yin ', 'yin-', 'yin&', 'flow',
+            'meditation', 'breathwork', 'mindful', 'destress', 'gentle flow', 'prenatal', 'nidra', 'sukshma',
+            'patanjali', 'splits', 'flexibility', 'aerial yoga', 'aerial hoop', 'aerial healing', 'sound meditation',
+            'sculpt & yoga', 'hot sculpt', 'sculpt & strengthen', 'healing yoga', 'yin yang', 'bend & extend', 'stress relief',
+        ];
+        foreach ($yogaKeywords as $kw) {
+            if (str_contains($lower, $kw)) {
+                return 'Yoga';
+            }
+        }
+        if (preg_match('/\byin\b/', $lower) || str_contains($lower, 'vinyasa') || str_contains($lower, 'hatha')) {
+            return 'Yoga';
+        }
+
+        return null;
     }
 
     /**

@@ -131,6 +131,8 @@ return [
             'engine' => null,
             // Amelia users table: set WP_AMELIA_USERS_TABLE=amelia_users if Amelia uses a separate table (with type column)
             'amelia_users_table' => env('WP_AMELIA_USERS_TABLE', 'users'),
+            // WordPress options table for mail etc. (from wp-config.php $table_prefix . 'options', e.g. wp_options or rueyn_options)
+            'options_table' => env('WP_OPTIONS_TABLE', 'wp_options'),
             'options' => extension_loaded('pdo_mysql') ? array_filter([
                 PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
             ]) : [],

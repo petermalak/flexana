@@ -109,6 +109,13 @@ class BookingResource extends Resource
                 Tables\Columns\TextColumn::make('total_amount')
                     ->money()
                     ->sortable(),
+                Tables\Columns\IconColumn::make('is_drop_in')
+                    ->label('Drop-in')
+                    ->boolean()
+                    ->trueIcon('heroicon-o-ticket')
+                    ->falseIcon('heroicon-o-cube')
+                    ->trueColor('warning')
+                    ->sortable(),
                 Tables\Columns\TextColumn::make('booked_at')
                     ->dateTime()
                     ->since()
@@ -131,6 +138,11 @@ class BookingResource extends Resource
                         'partial' => 'Partial',
                         'refunded' => 'Refunded',
                     ]),
+                Tables\Filters\TernaryFilter::make('is_drop_in')
+                    ->label('Drop-in')
+                    ->placeholder('All')
+                    ->trueLabel('Drop-in only')
+                    ->falseLabel('Package only'),
             ])
             ->actions([
                 Actions\EditAction::make(),

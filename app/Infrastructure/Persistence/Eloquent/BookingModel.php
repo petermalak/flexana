@@ -34,6 +34,7 @@ class BookingModel extends Model
         'balance_amount',
         'currency',
         'channel',
+        'is_drop_in',
         'answers',
         'notes',
         'booked_at',
@@ -41,6 +42,7 @@ class BookingModel extends Model
     ];
 
     protected $casts = [
+        'is_drop_in' => 'boolean',
         'answers' => 'array',
         'booked_at' => 'datetime',
         'cancelled_at' => 'datetime',
