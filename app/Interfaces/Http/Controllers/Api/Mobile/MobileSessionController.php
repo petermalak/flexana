@@ -5,6 +5,8 @@ namespace App\Interfaces\Http\Controllers\Api\Mobile;
 use App\Console\Commands\CategorizeServicesCommand;
 use App\Http\Controllers\Controller;
 use App\Infrastructure\Persistence\Eloquent\AppointmentModel;
+use App\Infrastructure\Persistence\Eloquent\CustomerPackagePurchaseModel;
+use App\Infrastructure\Persistence\Eloquent\ServiceModel;
 use App\Models\Category;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -76,17 +78,26 @@ class MobileSessionController extends Controller
             $serviceText = $service ? (($service->name ?? '') . ' ' . ($service->description ?? '')) : '';
             $serviceType = CategorizeServicesCommand::inferCategoryNameFromText($serviceText);
 
+            $willPay = true;
+            if ($customerId && $service instanceof ServiceModel) {
+                $sessionCategory = $this->sessionCategoryFromService($service);
+                $validPurchase = $this->findValidPurchaseForCategory((int) $customerId, $sessionCategory, 1);
+                $willPay = $validPurchase === null;
+            }
+
             return [
                 'id' => (string) $appointment->id,
                 'bookingId' => $myBooking ? (string) $myBooking->id : null,
                 'instructor' => $provider ? $provider->name : '',
                 'service' => $service ? $service->name : '',
                 'serviceType' => $serviceType,
+                'price' => $service ? (float) ($service->price ?? 0) : 0.0,
                 'date' => Carbon::parse($appointment->booking_start)->toIso8601String(),
                 'isBooked' => $isBooked,
                 'isFull' => $isFull,
                 'canCancel' => $canCancel,
                 'canBook' => $canBook,
+                'willPay' => $willPay,
                 'minutesBeforeCancellation' => $minutesBeforeCancellation,
             ];
         });
@@ -212,5 +223,111 @@ class MobileSessionController extends Controller
         ];
 
         return implode('|', array_map('preg_quote', $keywords));
+    }
+
+    /**
+     * Session category (Yoga / Reformer Pilates) from service name. Used to match package category.
+     * MUST stay in sync with MobileBookingController::sessionCategoryFromService().
+     */
+    private function sessionCategoryFromService(?ServiceModel $service): ?string
+    {
+        if (! $service || ! $service->name) {
+            return null;
+        }
+        $name = strtolower($service->name);
+        if (str_contains($name, 'reformer') || str_contains($name, 'reform pilates')) {
+            return 'Reformer Pilates';
+        }
+        if (str_contains($name, 'yoga')) {
+            return 'Yoga';
+        }
+
+        return 'Yoga';
+    }
+
+    /**
+     * Find an active customer package purchase with matching category and enough remaining sessions.
+     * Prefers most recently purchased. Excludes expired (by package_duration + purchase_date).
+     * MUST stay in sync with MobileBookingController::findValidPurchaseForCategory().
+     */
+    private function findValidPurchaseForCategory(int $customerId, ?string $sessionCategory, int $persons): ?CustomerPackagePurchaseModel
+    {
+        if ($sessionCategory === null) {
+            return null;
+        }
+        $today = Carbon::today()->startOfDay();
+        $purchases = CustomerPackagePurchaseModel::query()
+            ->with(['package.services'])
+            ->where('customer_id', $customerId)
+            ->where('status', 'active')
+            ->where('remaining_sessions', '>=', $persons)
+            ->whereNotNull('package_id')
+            ->orderByDesc('purchase_date')
+            ->get();
+
+        foreach ($purchases as $purchase) {
+            $package = $purchase->package;
+            if (! $package) {
+                continue;
+            }
+            $packageCategory = $this->packageCategory($package);
+            if ($packageCategory !== $sessionCategory) {
+                continue;
+            }
+            if ($purchase->purchase_date && $package->package_duration) {
+                $expiresAt = $purchase->purchase_date->copy()->addMonths((int) $package->package_duration);
+                if ($expiresAt->copy()->startOfDay()->lt($today)) {
+                    continue;
+                }
+            } elseif ($package->expiry && $package->expiry->startOfDay()->lt($today)) {
+                continue;
+            }
+
+            return $purchase;
+        }
+
+        return null;
+    }
+
+    /**
+     * Determine package category (Yoga / Reformer Pilates) from package.service_type (admin-set) first,
+     * then fallback to service names if service_type is not set.
+     * MUST stay in sync with MobileBookingController::packageCategory().
+     */
+    private function packageCategory($package): ?string
+    {
+        if (! $package) {
+            return null;
+        }
+        $serviceType = $package->service_type ?? null;
+        if ($serviceType !== null) {
+            $lower = strtolower((string) $serviceType);
+            if (str_contains($lower, 'reformer') || str_contains($lower, 'reform')) {
+                return 'Reformer Pilates';
+            }
+            if (str_contains($lower, 'yoga')) {
+                return 'Yoga';
+            }
+        }
+        if ($package->relationLoaded('services') && $package->services->isNotEmpty()) {
+            $yogaCount = 0;
+            $reformerCount = 0;
+            foreach ($package->services as $service) {
+                $name = strtolower($service->name ?? '');
+                if (str_contains($name, 'reformer') || str_contains($name, 'reform pilates')) {
+                    $reformerCount++;
+                } elseif (str_contains($name, 'yoga')) {
+                    $yogaCount++;
+                }
+            }
+            if ($reformerCount > 0 && $reformerCount >= $yogaCount) {
+                return 'Reformer Pilates';
+            }
+            if ($yogaCount > 0) {
+                return 'Yoga';
+            }
+        }
+
+        return null;
     }
 }

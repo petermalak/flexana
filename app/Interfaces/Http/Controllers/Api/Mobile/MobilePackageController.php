@@ -94,18 +94,21 @@ class MobilePackageController extends Controller
 
     /**
      * Resolve which category this package belongs to.
-     * 1) Use first category from package's services (category_id). 2) Else match package service_type to category by slug/name (same rules as services:categorize).
+     * 1) Prefer package service_type (admin-chosen) → map to DB category by slug/name (same rules as services:categorize).
+     * 2) If type is not set, fallback to first category_id from package's services.
      */
     private function resolveCategoryForPackage(PackageModel $package, array $categoryIdsFromServices, $categories): ?int
     {
-        if (count($categoryIdsFromServices) > 0) {
-            return (int) $categoryIdsFromServices[0];
-        }
         $serviceType = $this->packageServiceType($package);
         if ($serviceType !== null) {
             $category = $this->categoryForCanonicalType($serviceType, $categories);
+            if ($category) {
+                return (int) $category->id;
+            }
+        }
 
-            return $category ? (int) $category->id : null;
+        if (count($categoryIdsFromServices) > 0) {
+            return (int) $categoryIdsFromServices[0];
         }
 
         return null;
