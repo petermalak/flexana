@@ -31,6 +31,14 @@ class StaffResource extends Resource
                         Forms\Components\TextInput::make('name')
                             ->required()
                             ->maxLength(255),
+                        Forms\Components\FileUpload::make('photo_path')
+                            ->label('Photo')
+                            ->image()
+                            ->disk('public')
+                            ->directory('staff-photos')
+                            ->visibility('public')
+                            ->imageEditor()
+                            ->maxSize(2048),
                         Forms\Components\TextInput::make('email')
                             ->email()
                             ->maxLength(255),

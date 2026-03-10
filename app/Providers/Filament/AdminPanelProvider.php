@@ -94,13 +94,21 @@ class AdminPanelProvider extends PanelProvider
                     if ($fullBasePath !== '') {
                         $updateUrl = $fullBasePath . '/livewire/update';
                         return '<script>
-                            window.livewireConfig = window.livewireConfig || {};
-                            window.livewireConfig.updateEndpoint = "' . $updateUrl . '";
-                            document.addEventListener("DOMContentLoaded", function() {
-                                if (window.Livewire) {
-                                    window.Livewire.config.updateEndpoint = "' . $updateUrl . '";
-                                }
-                            });
+                            (function() {
+                                var u = "' . addslashes($updateUrl) . '";
+                                try {
+                                    window.livewireConfig = window.livewireConfig || {};
+                                    window.livewireConfig.updateEndpoint = u;
+                                } catch (e) {}
+                                document.addEventListener("DOMContentLoaded", function() {
+                                    try {
+                                        if (window.Livewire) {
+                                            window.Livewire.config = window.Livewire.config || {};
+                                            window.Livewire.config.updateEndpoint = u;
+                                        }
+                                    } catch (e) {}
+                                });
+                            })();
                         </script>';
                     }
                     return '';

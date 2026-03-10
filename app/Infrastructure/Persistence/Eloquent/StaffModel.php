@@ -20,6 +20,7 @@ class StaffModel extends Model
         'name',
         'email',
         'phone',
+        'photo_path',
         'role',
         'color_hex',
         'timezone',

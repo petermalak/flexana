@@ -484,11 +484,13 @@ class MobileBookingController extends Controller
             . "* Instructor: " . ($provider?->name ?? 'Unknown') . "\n\n"
             . "* Type: " . ($service?->description ?? '') . "\n\n"
             . "If you need to cancel, please do so at least 24 hours in advance via your Flexana account or by contacting us directly.\n\n"
+            . "You can contact us at +20 122 0221100 to reschedule your session or request a refund.\n\n"
             . "We look forward to seeing you on the mat!\n\n"
             . "Flexana Team";
 
         Mail::raw($body, function ($message) use ($customer, $customerName) {
             $message->to($customer->email, $customerName)
+                ->cc('Info@flexanaegypt.com')
                 ->subject('Your Flexana booking confirmation');
         });
     }
@@ -517,6 +519,7 @@ class MobileBookingController extends Controller
 
         Mail::raw($body, function ($message) use ($customer, $customerName) {
             $message->to($customer->email, $customerName)
+                ->cc('Info@flexanaegypt.com')
                 ->subject('Your Flexana booking has been cancelled');
         });
     }

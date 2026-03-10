@@ -19,10 +19,14 @@ class MobileInstructorController extends Controller
             ->orderBy('name')
             ->get()
             ->map(function ($instructor) {
+                $imageUrl = $instructor->photo_path
+                    ? asset('storage/' . ltrim($instructor->photo_path, '/'))
+                    : '';
+
                 return [
                     'id' => (string) $instructor->id,
                     'name' => $instructor->name ?? '',
-                    'image' => '',
+                    'image' => $imageUrl,
                     'position' => $instructor->role ?? '',
                     'brief' => '',
                 ];

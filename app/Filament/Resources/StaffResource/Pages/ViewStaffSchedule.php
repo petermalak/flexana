@@ -2,8 +2,10 @@
 
 namespace App\Filament\Resources\StaffResource\Pages;
 
+use App\Filament\Resources\AmeliaAppointments\AmeliaAppointmentResource;
 use App\Filament\Resources\StaffResource;
 use App\Infrastructure\Persistence\Eloquent\AppointmentModel;
+use App\Infrastructure\Persistence\Eloquent\ServiceModel;
 use Carbon\Carbon;
 use Filament\Actions\Action;
 use Filament\Forms;
@@ -33,21 +35,24 @@ class ViewStaffSchedule extends Page
 
     /**
      * Ensure mounted action has a 'data' key so Livewire can bind form fields
-     * (mountedActions.0.data.service_id etc.). Filament does not add it by default.
+     * (mountedActions.0.data.service_id, repeat_weekly_until_month_end, etc.).
      */
     public function mountAction(string $name, array $arguments = [], array $context = []): mixed
     {
         $result = parent::mountAction($name, $arguments, $context);
 
-        if (str_starts_with($name, 'add_') && count($this->mountedActions ?? []) > 0) {
+        if (str_starts_with($name, 'add_') && ! empty($this->mountedActions)) {
             $index = array_key_last($this->mountedActions);
-            if (! array_key_exists('data', $this->mountedActions[$index])) {
-                $this->mountedActions[$index]['data'] = [
-                    'service_id' => null,
-                    'start_time' => '16:00',
-                    'end_time' => '17:00',
-                ];
-            }
+            $current = $this->mountedActions[$index]['data'] ?? [];
+
+            $defaults = [
+                'service_id' => null,
+                'start_time' => '16:00',
+                'end_time' => '17:00',
+                'repeat_weekly_until_month_end' => false,
+            ];
+
+            $this->mountedActions[$index]['data'] = array_merge($defaults, $current);
         }
 
         return $result;
@@ -69,6 +74,11 @@ class ViewStaffSchedule extends Page
                 ->icon('heroicon-o-pencil-square')
                 ->url(StaffResource::getUrl('edit', ['record' => $this->getRecord()]))
                 ->color('gray'),
+            Action::make('open_appointments_table')
+                ->label('Open appointments table')
+                ->icon('heroicon-o-table-cells')
+                ->url(fn () => AmeliaAppointmentResource::getUrl())
+                ->color('primary'),
         ];
     }
 
@@ -90,6 +100,8 @@ class ViewStaffSchedule extends Page
 
             return Section::make($day['label'])
                 ->description($description)
+                ->collapsible()
+                ->collapsed(! $isToday)
                 ->schema([
                     Html::make(fn () => $this->renderDayAppointmentsHtml($appointments)),
                     Action::make('add_' . $dateKey)
@@ -128,8 +140,8 @@ class ViewStaffSchedule extends Page
                             ->action('nextWeek'),
                     ]),
                     Group::make([
-                        Grid::make(7)->schema($daySections)->extraAttributes(['class' => 'min-w-[42rem] gap-3']),
-                    ])->extraAttributes(['class' => 'overflow-x-auto -mx-4 sm:-mx-6']),
+                        Grid::make(1)->schema($daySections)->extraAttributes(['class' => 'gap-3']),
+                    ])->extraAttributes(['class' => 'space-y-3']),
                 ])
                 ->columns(1),
         ]);
@@ -142,14 +154,8 @@ class ViewStaffSchedule extends Page
             Forms\Components\Select::make('service_id')
                 ->label('Service')
                 ->options($services)
-                ->required()
                 ->searchable()
-                ->validationAttribute('Service')
-                ->validationMessages([
-                    'required' => 'Please select a service.',
-                    'exists' => 'The selected service is invalid.',
-                ])
-                ->rules(['required', 'exists:services,id']),
+                ->placeholder('Select a service'),
             Forms\Components\TimePicker::make('start_time')
                 ->label('Start')
                 ->default('16:00')
@@ -158,6 +164,10 @@ class ViewStaffSchedule extends Page
                 ->label('End')
                 ->default('17:00')
                 ->required(),
+            Forms\Components\Toggle::make('repeat_weekly_until_month_end')
+                ->label('Repeat every week until end of month')
+                ->helperText('If enabled, this slot will be copied to the same weekday for the rest of the selected month.')
+                ->default(false),
         ];
     }
 
@@ -165,17 +175,39 @@ class ViewStaffSchedule extends Page
     protected function renderDayAppointmentsHtml(array $appointments): string
     {
         if (empty($appointments)) {
-            return '<ul class="min-h-[4rem] space-y-1.5"><li class="py-3 text-center text-sm text-gray-400 dark:text-gray-500">No appointments</li></ul>';
+            return '<div style="border:1px dashed #e5e7eb;border-radius:12px;padding:12px 14px;font-size:13px;color:#6b7280;text-align:center;">'
+                . 'No appointments scheduled'
+                . '</div>';
         }
-        $items = [];
+
+        $rows = [];
         foreach ($appointments as $apt) {
             $name = e($apt->service->name ?? '—');
-            $time = e($apt->booking_start->format('g:i') . '–' . $apt->booking_end->format('g:i A'));
-            $items[] = '<li class="flex items-center justify-between gap-2 rounded-lg bg-gray-50 px-2.5 py-2 text-sm dark:bg-gray-700/60">'
-                . '<span class="truncate font-medium text-gray-800 dark:text-gray-200">' . $name . '</span>'
-                . '<span class="shrink-0 text-xs text-gray-500 dark:text-gray-400">' . $time . '</span></li>';
+            $time = e($apt->booking_start->format('g:i a') . ' – ' . $apt->booking_end->format('g:i a'));
+            $location = 'Default location';
+            $status = strtolower($apt->status ?? 'approved');
+            $statusLabel = e(ucfirst($status));
+            $editUrl = AmeliaAppointmentResource::getUrl('edit', ['record' => $apt->getKey()]);
+
+            $rows[] = '<div style="border:1px solid #e5e7eb;border-radius:10px;padding:8px 12px;margin-bottom:8px;font-size:13px;line-height:1.35;background-color:#ffffff;">'
+                . '<div style="font-family:ui-monospace,Menlo,Monaco,Consolas,\'Liberation Mono\',\'Courier New\',monospace;font-size:12px;color:#6b7280;margin-bottom:2px;">'
+                . $time
+                . '</div>'
+                . '<div style="font-weight:600;color:#111827;margin-bottom:2px;">'
+                . $name
+                . '</div>'
+                . '<div style="font-size:12px;color:#6b7280;margin-bottom:4px;">'
+                . e($location) . ' · ' . $statusLabel
+                . '</div>'
+                . '<div>'
+                . '<a href="' . e($editUrl) . '" style="display:inline-flex;align-items:center;gap:4px;border-radius:9999px;border:1px solid #d1d5db;padding:2px 10px;font-size:11px;font-weight:500;color:#374151;text-decoration:none;background-color:#f9fafb;">'
+                . 'Edit'
+                . '</a>'
+                . '</div>'
+                . '</div>';
         }
-        return '<ul class="min-h-[4rem] flex-1 space-y-1.5">' . implode('', $items) . '</ul>';
+
+        return implode('', $rows);
     }
 
     /** @param  array<string, mixed>  $data */
@@ -187,16 +219,24 @@ class ViewStaffSchedule extends Page
         }
 
         $staff = $this->getRecord();
-        $validated = \Illuminate\Support\Facades\Validator::make($data, [
-            'service_id' => ['required', 'exists:services,id'],
-            'start_time' => ['required'],
-            'end_time' => ['required'],
-        ], [
-            'service_id.required' => 'Please select a service.',
-            'service_id.exists' => 'The selected service is invalid.',
-        ], [
-            'service_id' => 'Service',
-        ])->validate();
+        $serviceId = $data['service_id'] ?? null;
+        if ($serviceId === null || $serviceId === '') {
+            Notification::make()
+                ->title('Please select a service.')
+                ->danger()
+                ->send();
+            return;
+        }
+
+        $serviceId = (int) $serviceId;
+        $serviceExists = ServiceModel::query()->whereKey($serviceId)->exists();
+        if (! $serviceExists) {
+            Notification::make()
+                ->title('The selected service is invalid.')
+                ->danger()
+                ->send();
+            return;
+        }
 
         $startVal = $data['start_time'] ?? null;
         $endVal = $data['end_time'] ?? null;
@@ -213,15 +253,19 @@ class ViewStaffSchedule extends Page
             return;
         }
 
-        $conflict = AppointmentModel::query()
+        $repeatWeekly = (bool) ($data['repeat_weekly_until_month_end'] ?? false);
+
+        // Always handle the first appointment with conflict checking.
+        $firstConflict = AppointmentModel::query()
             ->where('provider_id', $staff->getKey())
             ->where('booking_start', '<', $end)
             ->where('booking_end', '>', $start)
             ->first();
-        if ($conflict) {
+
+        if ($firstConflict) {
             Notification::make()
                 ->title('This time overlaps with an existing appointment.')
-                ->body('The instructor already has an appointment from ' . $conflict->booking_start->format('g:i A') . ' to ' . $conflict->booking_end->format('g:i A') . '. Please choose another time.')
+                ->body('The instructor already has an appointment from ' . $firstConflict->booking_start->format('g:i A') . ' to ' . $firstConflict->booking_end->format('g:i A') . '. Please choose another time.')
                 ->danger()
                 ->send();
             return;
@@ -229,12 +273,59 @@ class ViewStaffSchedule extends Page
 
         AppointmentModel::create([
             'provider_id' => $staff->getKey(),
-            'service_id' => $validated['service_id'],
+            'service_id' => $serviceId,
             'booking_start' => $start,
             'booking_end' => $end,
             'status' => 'approved',
         ]);
-        Notification::make()->title('Appointment added')->success()->send();
+
+        if (! $repeatWeekly) {
+            Notification::make()->title('Appointment added')->success()->send();
+            return;
+        }
+
+        $createdCount = 1; // we already created the first one
+        $skippedConflicts = 0;
+
+        $currentStart = $start->copy()->addWeek();
+        $currentEnd = $end->copy()->addWeek();
+        $monthEnd = $start->copy()->endOfMonth();
+
+        while ($currentStart->lte($monthEnd)) {
+            $conflict = AppointmentModel::query()
+                ->where('provider_id', $staff->getKey())
+                ->where('booking_start', '<', $currentEnd)
+                ->where('booking_end', '>', $currentStart)
+                ->first();
+
+            if ($conflict) {
+                $skippedConflicts++;
+            } else {
+                AppointmentModel::create([
+                    'provider_id' => $staff->getKey(),
+                    'service_id' => $serviceId,
+                    'booking_start' => $currentStart->copy(),
+                    'booking_end' => $currentEnd->copy(),
+                    'status' => 'approved',
+                ]);
+                $createdCount++;
+            }
+
+            $currentStart->addWeek();
+            $currentEnd->addWeek();
+        }
+
+        $message = $createdCount > 1
+            ? "Added {$createdCount} weekly appointments until the end of the month."
+            : 'Appointment added';
+
+        $notification = Notification::make()->title($message)->success();
+
+        if ($skippedConflicts > 0) {
+            $notification->body("Skipped {$skippedConflicts} conflicting time slot(s).");
+        }
+
+        $notification->send();
     }
 
     public function getWeekStartCarbon(): Carbon
@@ -300,7 +391,9 @@ class ViewStaffSchedule extends Page
     /** Services this staff can provide (for add-appointment dropdown) */
     public function getStaffServices(): array
     {
-        $staff = $this->getRecord();
-        return $staff->services()->pluck('services.name', 'services.id')->all();
+        return ServiceModel::query()
+            ->orderBy('name')
+            ->pluck('name', 'id')
+            ->all();
     }
 }
