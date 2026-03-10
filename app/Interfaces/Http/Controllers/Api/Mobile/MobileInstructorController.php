@@ -20,7 +20,7 @@ class MobileInstructorController extends Controller
             ->get()
             ->map(function ($instructor) {
                 $imageUrl = $instructor->photo_path
-                    ? asset('storage/' . ltrim($instructor->photo_path, '/'))
+                    ? url('serve-storage.php') . '?path=' . rawurlencode(ltrim($instructor->photo_path, '/'))
                     : '';
 
                 return [
