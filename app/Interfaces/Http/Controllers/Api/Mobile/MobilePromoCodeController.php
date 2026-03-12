@@ -49,7 +49,11 @@ class MobilePromoCodeController extends Controller
             ], 200);
         }
 
-        if ($promo->valid_from && now()->lt($promo->valid_from)) {
+        // Use date-only comparison so promo is valid for the whole day,
+        // regardless of the time component stored in the database.
+        $today = now()->toDateString();
+
+        if ($promo->valid_from && $today < $promo->valid_from->toDateString()) {
             return response()->json([
                 'valid' => false,
                 'reason' => 'not_yet_valid',
@@ -59,7 +63,7 @@ class MobilePromoCodeController extends Controller
             ], 200);
         }
 
-        if ($promo->valid_until && now()->gt($promo->valid_until)) {
+        if ($promo->valid_until && $today > $promo->valid_until->toDateString()) {
             return response()->json([
                 'valid' => false,
                 'reason' => 'expired',
