@@ -32,7 +32,13 @@ class ManageStaffOffDays extends ManageRecordsWithFullWidthForm
                             $payload = $data;
                             $payload['staff_id'] = $staff->id;
 
-                            $record = StaffOffDayModel::query()->create($payload);
+                            $record = StaffOffDayModel::query()->updateOrCreate(
+                                [
+                                    'staff_id' => $payload['staff_id'],
+                                    'date' => $payload['date'],
+                                ],
+                                $payload
+                            );
                             static::cancelStaffAppointmentsForOffDay($record);
 
                             if ($firstRecord === null) {
@@ -43,7 +49,13 @@ class ManageStaffOffDays extends ManageRecordsWithFullWidthForm
                         return $firstRecord ?? new StaffOffDayModel();
                     }
 
-                    $record = StaffOffDayModel::query()->create($data);
+                    $record = StaffOffDayModel::query()->updateOrCreate(
+                        [
+                            'staff_id' => $data['staff_id'],
+                            'date' => $data['date'],
+                        ],
+                        $data
+                    );
                     static::cancelStaffAppointmentsForOffDay($record);
 
                     return $record;
