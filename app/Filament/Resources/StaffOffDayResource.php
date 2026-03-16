@@ -35,7 +35,7 @@ class StaffOffDayResource extends Resource
         return $schema
             ->components([
                 Components\Section::make('Staff & Date')
-                    ->description('Select the staff member(s) and the date they will be off.')
+                    ->description('Select the staff member(s) and the date range they will be off.')
                     ->icon(Heroicon::OutlinedUserCircle)
                     ->schema([
                         Forms\Components\Toggle::make('apply_to_all_staff')
@@ -50,11 +50,17 @@ class StaffOffDayResource extends Resource
                             ->preload()
                             ->required(fn (Get $get) => ! $get('apply_to_all_staff'))
                             ->disabled(fn (Get $get) => $get('apply_to_all_staff')),
-                        Forms\Components\DatePicker::make('date')
+                        Forms\Components\DatePicker::make('start_date')
+                            ->label('From date')
                             ->required()
                             ->default(now())
-                            ->helperText('The date the staff member will be unavailable'),
-                    ])->columns(2),
+                            ->helperText('First day off (inclusive)'),
+                        Forms\Components\DatePicker::make('end_date')
+                            ->label('Until date')
+                            ->required()
+                            ->default(now())
+                            ->helperText('Last day off (inclusive)'),
+                    ])->columns(3),
                 Components\Section::make('Details')
                     ->description('Reason and time range for the off day.')
                     ->icon(Heroicon::OutlinedDocumentText)

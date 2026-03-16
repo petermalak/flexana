@@ -23,42 +23,72 @@ class ManageStaffOffDays extends ManageRecordsWithFullWidthForm
                     $applyToAll = (bool) ($data['apply_to_all_staff'] ?? false);
                     unset($data['apply_to_all_staff']);
 
+                    $startDate = isset($data['start_date']) ? Carbon::parse($data['start_date'])->startOfDay() : null;
+                    $endDate = isset($data['end_date']) ? Carbon::parse($data['end_date'])->startOfDay() : null;
+                    unset($data['start_date'], $data['end_date']);
+
+                    if (! $startDate) {
+                        $startDate = Carbon::today();
+                    }
+                    if (! $endDate || $endDate->lt($startDate)) {
+                        $endDate = $startDate->copy();
+                    }
+
+                    $dates = [];
+                    for ($d = $startDate->copy(); $d->lte($endDate); $d->addDay()) {
+                        $dates[] = $d->toDateString();
+                    }
+
                     if ($applyToAll) {
                         $staffMembers = StaffModel::query()->get(['id']);
 
                         $firstRecord = null;
 
                         foreach ($staffMembers as $staff) {
-                            $payload = $data;
-                            $payload['staff_id'] = $staff->id;
+                            foreach ($dates as $date) {
+                                $payload = $data;
+                                $payload['staff_id'] = $staff->id;
+                                $payload['date'] = $date;
 
-                            $record = StaffOffDayModel::query()->updateOrCreate(
-                                [
-                                    'staff_id' => $payload['staff_id'],
-                                    'date' => $payload['date'],
-                                ],
-                                $payload
-                            );
-                            static::cancelStaffAppointmentsForOffDay($record);
+                                $record = StaffOffDayModel::query()->updateOrCreate(
+                                    [
+                                        'staff_id' => $payload['staff_id'],
+                                        'date' => $payload['date'],
+                                    ],
+                                    $payload
+                                );
+                                static::cancelStaffAppointmentsForOffDay($record);
 
-                            if ($firstRecord === null) {
-                                $firstRecord = $record;
+                                if ($firstRecord === null) {
+                                    $firstRecord = $record;
+                                }
                             }
                         }
 
                         return $firstRecord ?? new StaffOffDayModel();
                     }
 
-                    $record = StaffOffDayModel::query()->updateOrCreate(
-                        [
-                            'staff_id' => $data['staff_id'],
-                            'date' => $data['date'],
-                        ],
-                        $data
-                    );
-                    static::cancelStaffAppointmentsForOffDay($record);
+                    $firstRecord = null;
 
-                    return $record;
+                    foreach ($dates as $date) {
+                        $payload = $data;
+                        $payload['date'] = $date;
+
+                        $record = StaffOffDayModel::query()->updateOrCreate(
+                            [
+                                'staff_id' => $payload['staff_id'],
+                                'date' => $payload['date'],
+                            ],
+                            $payload
+                        );
+                        static::cancelStaffAppointmentsForOffDay($record);
+
+                        if ($firstRecord === null) {
+                            $firstRecord = $record;
+                        }
+                    }
+
+                    return $firstRecord ?? new StaffOffDayModel();
                 }),
         ];
     }
