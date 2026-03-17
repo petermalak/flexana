@@ -99,7 +99,7 @@ Route::prefix('v1')
             Route::get('package-offers', [MobilePackageController::class, 'index']);
             Route::post('purchase-package', [MobilePackageController::class, 'purchase']);
             // Promo code verification
-            Route::post('promo-codes/verify', [MobilePromoCodeController::class, 'verify']);
+            Route::post('promo-codes/verify', action: [MobilePromoCodeController::class, 'verify']);
             // Profile & logout
             Route::post('auth/logout', [MobileAuthController::class, 'logout']);
             Route::get('auth/me', [MobileAuthController::class, 'me']);

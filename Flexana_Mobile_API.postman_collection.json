@@ -394,11 +394,19 @@
 					"request": {
 						"method": "GET",
 						"header": [],
-						"url": { "raw": "{{base_url}}/api/v1/instructors", "host": ["{{base_url}}"], "path": ["api", "v1", "instructors"] },
-						"description": "Response: [{ id, name, image, position, brief }, ...]. Requires Bearer."
+						"url": {
+							"raw": "{{base_url}}/api/v1/instructors?category=1,Yoga",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "instructors"],
+							"query": [
+								{ "key": "category", "value": "1,Yoga", "description": "Optional. Comma-separated category IDs or names/slugs (e.g. 1,2 or Yoga,reformer-pilates). Only instructors with at least one matching category are returned. Omit for all." }
+							]
+						},
+						"description": "Response: [{ id, name, image, position, brief, categories }, ...]. categories: array of { id, name }. Query: category (optional) — comma-separated category IDs or names/slugs (e.g. ?category=1,2 or ?category=Yoga,reformer-pilates). Requires Bearer."
 					},
 					"response": [
-						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "[{\"id\":1,\"name\":\"John Doe\",\"image\":\"https://example.com/john.jpg\",\"position\":\"Instructor\",\"brief\":\"Yoga expert\"}]" }
+						{ "name": "Success (all)", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "[{\"id\":\"1\",\"name\":\"John Doe\",\"image\":\"https://example.com/serve-storage.php?path=staff-photos%2Fabc.png\",\"position\":\"Instructor\",\"brief\":\"\",\"categories\":[{\"id\":\"1\",\"name\":\"Yoga\"},{\"id\":\"2\",\"name\":\"Reformer Pilates\"}]}]" },
+						{ "name": "Success (filter category=1)", "originalRequest": { "method": "GET", "header": [], "url": { "raw": "{{base_url}}/api/v1/instructors?category=1", "host": ["{{base_url}}"], "path": ["api", "v1", "instructors"], "query": [{ "key": "category", "value": "1" }] } }, "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "[{\"id\":\"1\",\"name\":\"John Doe\",\"image\":\"https://example.com/john.jpg\",\"position\":\"Instructor\",\"brief\":\"\",\"categories\":[{\"id\":\"1\",\"name\":\"Yoga\"}]}]" }
 					]
 				},
 				{
@@ -430,11 +438,19 @@
 					"request": {
 						"method": "GET",
 						"header": [],
-						"url": { "raw": "{{base_url}}/api/v1/instructors/simple", "host": ["{{base_url}}"], "path": ["api", "v1", "instructors", "simple"] },
-						"description": "Response: [{ id, name }, ...]. Requires Bearer."
+						"url": {
+							"raw": "{{base_url}}/api/v1/instructors/simple?category=1,Yoga",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "instructors", "simple"],
+							"query": [
+								{ "key": "category", "value": "1,Yoga", "description": "Optional. Comma-separated category IDs or names/slugs (e.g. 1,2 or Yoga,reformer-pilates). Only instructors with at least one matching category. Omit for all." }
+							]
+						},
+						"description": "Response: [{ id, name }, ...]. Query: category (optional) — comma-separated category IDs or names/slugs (e.g. ?category=1,2 or ?category=Yoga). Requires Bearer."
 					},
 					"response": [
-						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "[{\"id\":1,\"name\":\"John Doe\"}]" }
+						{ "name": "Success (all)", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "[{\"id\":\"1\",\"name\":\"John Doe\"}]" },
+						{ "name": "Success (filter category=1)", "originalRequest": { "method": "GET", "header": [], "url": { "raw": "{{base_url}}/api/v1/instructors/simple?category=1", "host": ["{{base_url}}"], "path": ["api", "v1", "instructors", "simple"], "query": [{ "key": "category", "value": "1" }] } }, "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "[{\"id\":\"1\",\"name\":\"John Doe\"}]" }
 					]
 				},
 				{

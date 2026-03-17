@@ -56,6 +56,12 @@ class StaffModel extends Model
             ->withTimestamps();
     }
 
+    public function categories(): BelongsToMany
+    {
+        return $this->belongsToMany(CategoryModel::class, 'category_staff', 'staff_id', 'category_id')
+            ->withTimestamps();
+    }
+
     public function events(): HasMany
     {
         return $this->hasMany(EventModel::class, 'instructor_id');

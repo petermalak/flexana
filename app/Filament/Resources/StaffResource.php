@@ -65,6 +65,16 @@ class StaffResource extends Resource
                             ->preload()
                             ->helperText('Select all services this staff member can teach/provide'),
                     ]),
+                Components\Section::make('Categories')
+                    ->description('Assign one or more categories for this instructor.')
+                    ->schema([
+                        Forms\Components\Select::make('categories')
+                            ->relationship('categories', 'name')
+                            ->multiple()
+                            ->searchable()
+                            ->preload()
+                            ->helperText('These categories are used to group instructors (independent of services).'),
+                    ]),
                 Components\Section::make('Settings')
                     ->schema([
                         Forms\Components\TextInput::make('timezone')
