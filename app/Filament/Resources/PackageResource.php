@@ -86,11 +86,13 @@ class PackageResource extends Resource
                     ->icon(Heroicon::OutlinedCog6Tooth)
                     ->schema([
                         Forms\Components\DatePicker::make('expiry')
-                            ->label('Expiry Date'),
+                            ->label('Expiry Date')
+                            ->required(),
                         Forms\Components\TextInput::make('package_duration')
                             ->label('Package Duration (months)')
                             ->numeric()
                             ->minValue(0)
+                            ->required()
                             ->helperText('Duration in months'),
                         Forms\Components\Select::make('status')
                             ->options([

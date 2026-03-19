@@ -89,7 +89,11 @@ class BookingResource extends Resource
                     ->label('Customer')
                     ->formatStateUsing(fn ($record) => trim("{$record->customer?->first_name} {$record->customer?->last_name}"))
                     ->sortable()
-                    ->searchable(['customer.first_name', 'customer.last_name', 'customer.email']),
+                    // Important: when this column is already scoped to the `customer` relationship
+                    // (via `customer.first_name`), Filament expects plain related-table columns
+                    // (`first_name/last_name/email`). Using `customer.*` makes Filament treat it as
+                    // a JSON column and generates SQL like json_extract(`customer`, ...).
+                    ->searchable(['first_name', 'last_name', 'email']),
                 Tables\Columns\BadgeColumn::make('status')
                     ->colors([
                         'warning' => 'pending',
@@ -117,10 +121,18 @@ class BookingResource extends Resource
                     ->trueColor('warning')
                     ->sortable(),
                 Tables\Columns\TextColumn::make('booked_at')
-                    ->dateTime()
-                    ->since()
-                    ->sortable(),
+                    ->dateTime('Y-m-d H:i')
+                    // Explicitly qualify the column for sorting because the table
+                    // can join related tables for search/sort, making unqualified
+                    // ordering ambiguous.
+                    ->sortable(query: fn ($query, $direction) => $query
+                        ->orderBy('bookings.booked_at', $direction)
+                        // Tie-breaker: keep ordering stable when timestamps match.
+                        ->orderBy('bookings.id', $direction)),
             ])
+            // Ensure deterministic ordering, especially when search causes
+            // related table joins.
+            ->defaultSort('booked_at', 'desc')
             ->filters([
                 Tables\Filters\SelectFilter::make('status')
                     ->options([

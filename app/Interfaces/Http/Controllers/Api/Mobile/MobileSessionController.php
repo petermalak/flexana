@@ -24,7 +24,9 @@ class MobileSessionController extends Controller
         $date = $request->query('date');
         $category = $request->query('category');
         $instructorID = $request->query('instructorID');
-        $perPage = max(1, min(50, (int) $request->query('per_page', 15)));
+        $requestedPerPage = $request->query('per_page');
+        $requestedPage = $request->query('page');
+        $shouldPaginate = $requestedPerPage !== null || $requestedPage !== null;
 
         $query = AppointmentModel::query()
             ->with(['service', 'provider', 'bookings'])
@@ -54,10 +56,30 @@ class MobileSessionController extends Controller
 
         $query->orderBy('booking_start');
 
-        $appointments = $query->paginate($perPage);
+        if ($shouldPaginate) {
+            $perPage = max(1, min(100, (int) ($requestedPerPage ?: 15)));
+            $appointments = $query->paginate($perPage);
+            $appointmentCollection = $appointments->getCollection();
+            $meta = [
+                'current_page' => $appointments->currentPage(),
+                'last_page' => $appointments->lastPage(),
+                'per_page' => $appointments->perPage(),
+                'total' => $appointments->total(),
+            ];
+        } else {
+            $appointmentCollection = $query->get();
+            $total = $appointmentCollection->count();
+            $meta = [
+                'current_page' => 1,
+                'last_page' => 1,
+                'per_page' => $total,
+                'total' => $total,
+            ];
+        }
+
         $customerId = $request->user()?->id;
 
-        $items = $appointments->getCollection()->map(function ($appointment) use ($customerId) {
+        $items = $appointmentCollection->map(function ($appointment) use ($customerId) {
             $service = $appointment->service;
             $provider = $appointment->provider;
             $approvedBookings = $appointment->bookings->where('status', 'confirmed');
@@ -104,12 +126,7 @@ class MobileSessionController extends Controller
 
         return response()->json([
             'data' => $items->values()->toArray(),
-            'meta' => [
-                'current_page' => $appointments->currentPage(),
-                'last_page' => $appointments->lastPage(),
-                'per_page' => $appointments->perPage(),
-                'total' => $appointments->total(),
-            ],
+            'meta' => $meta,
         ]);
     }
 
@@ -134,22 +151,67 @@ class MobileSessionController extends Controller
      */
     private function applyCategoryFilter($query, string $canonicalType): void
     {
-        [$categoryIds, $regexpPattern] = $this->getCategoryFilterData($canonicalType);
+        [$yogaCategoryIds, $yogaRegexpPattern] = $this->getCategoryFilterData('Yoga');
+        [$reformerCategoryIds, $reformerRegexpPattern] = $this->getCategoryFilterData('Reformer Pilates');
 
-        $query->whereHas('service', function ($q) use ($categoryIds, $regexpPattern) {
-            $q->where(function ($q2) use ($categoryIds, $regexpPattern) {
-                if (count($categoryIds) > 0) {
-                    $q2->whereIn('category_id', $categoryIds);
-                }
-                if ($regexpPattern !== '') {
-                    $q2->orWhereRaw(
-                        'LOWER(CONCAT(COALESCE(name,""), " ", COALESCE(description,""))) REGEXP ?',
-                        [$regexpPattern]
-                    );
-                }
-                if (count($categoryIds) === 0 && $regexpPattern === '') {
-                    $q2->whereRaw('1 = 0');
-                }
+        $serviceTextExpr = 'LOWER(CONCAT(COALESCE(name,""), " ", COALESCE(description,"")))';
+
+        if ($canonicalType === 'Reformer Pilates') {
+            $query->whereHas('service', function ($q) use ($reformerCategoryIds, $reformerRegexpPattern, $serviceTextExpr) {
+                $q->where(function ($q2) use ($reformerCategoryIds, $reformerRegexpPattern, $serviceTextExpr) {
+                    if (count($reformerCategoryIds) > 0) {
+                        $q2->whereIn('category_id', $reformerCategoryIds);
+                    }
+                    if ($reformerRegexpPattern !== '') {
+                        $q2->orWhereRaw("{$serviceTextExpr} REGEXP ?", [$reformerRegexpPattern]);
+                    }
+                    if (count($reformerCategoryIds) === 0 && $reformerRegexpPattern === '') {
+                        $q2->whereRaw('1 = 0');
+                    }
+                });
+            });
+
+            return;
+        }
+
+        // Yoga includes explicit Yoga matches + any non-Reformer sessions.
+        // This ensures Yoga/Reformer split covers all sessions when only these two categories are used.
+        $query->whereHas('service', function ($q) use (
+            $yogaCategoryIds,
+            $yogaRegexpPattern,
+            $reformerCategoryIds,
+            $reformerRegexpPattern,
+            $serviceTextExpr
+        ) {
+            $q->where(function ($q2) use (
+                $yogaCategoryIds,
+                $yogaRegexpPattern,
+                $reformerCategoryIds,
+                $reformerRegexpPattern,
+                $serviceTextExpr
+            ) {
+                // Explicit Yoga match
+                $q2->where(function ($qy) use ($yogaCategoryIds, $yogaRegexpPattern, $serviceTextExpr) {
+                    if (count($yogaCategoryIds) > 0) {
+                        $qy->whereIn('category_id', $yogaCategoryIds);
+                    }
+                    if ($yogaRegexpPattern !== '') {
+                        $qy->orWhereRaw("{$serviceTextExpr} REGEXP ?", [$yogaRegexpPattern]);
+                    }
+                });
+
+                // Fallback: anything not identified as Reformer
+                $q2->orWhere(function ($qn) use ($reformerCategoryIds, $reformerRegexpPattern, $serviceTextExpr) {
+                    if (count($reformerCategoryIds) > 0) {
+                        $qn->where(function ($qCat) use ($reformerCategoryIds) {
+                            $qCat->whereNull('category_id')
+                                ->orWhereNotIn('category_id', $reformerCategoryIds);
+                        });
+                    }
+                    if ($reformerRegexpPattern !== '') {
+                        $qn->whereRaw("{$serviceTextExpr} NOT REGEXP ?", [$reformerRegexpPattern]);
+                    }
+                });
             });
         });
     }
