@@ -53,7 +53,7 @@ final class AutoSyncAmeliaService
      */
     public function syncCustomer(AmeliaUserModel $ameliaUser): ?Customer
     {
-        $existing = Customer::on('mysql')->query()
+        $existing = Customer::on('mysql')
             ->where('amelia_user_id', $ameliaUser->id)
             ->first();
 
@@ -70,7 +70,7 @@ final class AutoSyncAmeliaService
         }
 
         // Create new customer
-        return Customer::on('mysql')->query()->create([
+        return Customer::on('mysql')->create([
             'amelia_user_id' => $ameliaUser->id,
             'first_name' => $ameliaUser->firstName ?? 'Customer',
             'last_name' => $ameliaUser->lastName,
@@ -85,7 +85,7 @@ final class AutoSyncAmeliaService
      */
     public function syncStaff(AmeliaUserModel $ameliaUser): ?StaffModel
     {
-        $existing = StaffModel::on('mysql')->query()
+        $existing = StaffModel::on('mysql')
             ->where('amelia_user_id', $ameliaUser->id)
             ->first();
 
@@ -100,7 +100,7 @@ final class AutoSyncAmeliaService
             return $existing;
         }
 
-        return StaffModel::on('mysql')->query()->create([
+        return StaffModel::on('mysql')->create([
             'amelia_user_id' => $ameliaUser->id,
             'name' => trim(($ameliaUser->firstName ?? '') . ' ' . ($ameliaUser->lastName ?? '')) ?: 'Staff ' . $ameliaUser->id,
             'email' => $ameliaUser->email,
@@ -114,7 +114,7 @@ final class AutoSyncAmeliaService
      */
     public function syncService(AmeliaServiceModel $ameliaService): ?ServiceModel
     {
-        $existing = ServiceModel::on('mysql')->query()
+        $existing = ServiceModel::on('mysql')
             ->where('amelia_service_id', $ameliaService->id)
             ->first();
 
@@ -132,7 +132,7 @@ final class AutoSyncAmeliaService
             return $existing;
         }
 
-        return ServiceModel::on('mysql')->query()->create([
+        return ServiceModel::on('mysql')->create([
             'amelia_service_id' => $ameliaService->id,
             'name' => $ameliaService->name ?? 'Service ' . $ameliaService->id,
             'description' => $ameliaService->description,
@@ -149,7 +149,7 @@ final class AutoSyncAmeliaService
      */
     public function syncPackage(AmeliaPackageModel $ameliaPackage): ?PackageModel
     {
-        $existing = PackageModel::on('mysql')->query()
+        $existing = PackageModel::on('mysql')
             ->where('amelia_package_id', $ameliaPackage->id)
             ->first();
 
@@ -172,7 +172,7 @@ final class AutoSyncAmeliaService
             return $existing;
         }
 
-        return PackageModel::on('mysql')->query()->create([
+        return PackageModel::on('mysql')->create([
             'amelia_package_id' => $ameliaPackage->id,
             'title' => $ameliaPackage->name ?? 'Package ' . $ameliaPackage->id,
             'description' => $ameliaPackage->description,
@@ -194,7 +194,7 @@ final class AutoSyncAmeliaService
         }
 
         // First sync dependencies
-        $service = ServiceModel::on('mysql')->query()
+        $service = ServiceModel::on('mysql')
             ->where('amelia_service_id', $ameliaAppointment->serviceId)
             ->first();
         if (! $service) {
@@ -204,7 +204,7 @@ final class AutoSyncAmeliaService
             }
         }
 
-        $provider = StaffModel::on('mysql')->query()
+        $provider = StaffModel::on('mysql')
             ->where('amelia_user_id', $ameliaAppointment->providerId)
             ->first();
         if (! $provider) {
@@ -220,7 +220,7 @@ final class AutoSyncAmeliaService
 
         $package = null;
         if ($ameliaAppointment->packageId) {
-            $package = PackageModel::on('mysql')->query()
+            $package = PackageModel::on('mysql')
                 ->where('amelia_package_id', $ameliaAppointment->packageId)
                 ->first();
             if (! $package) {
@@ -232,7 +232,7 @@ final class AutoSyncAmeliaService
         }
 
         $locationId = $ameliaAppointment->locationId
-            ? \App\Models\Location::query()->where('amelia_location_id', $ameliaAppointment->locationId)->value('id')
+            ? \App\Models\Location::on('mysql')->where('amelia_location_id', $ameliaAppointment->locationId)->value('id')
             : null;
 
         $existing = AppointmentModel::query()
@@ -273,7 +273,7 @@ final class AutoSyncAmeliaService
     public function syncBooking(AmeliaCustomerBookingModel $ameliaBooking): ?BookingModel
     {
         // Sync customer first
-        $customer = Customer::on('mysql')->query()->where('amelia_user_id', $ameliaBooking->customerId)->first();
+        $customer = Customer::on('mysql')->where('amelia_user_id', $ameliaBooking->customerId)->first();
         if (! $customer) {
             $ameliaCustomer = AmeliaUserModel::on('wordpress')->find($ameliaBooking->customerId);
             if ($ameliaCustomer) {
@@ -301,7 +301,7 @@ final class AutoSyncAmeliaService
             }
         }
 
-        $existing = BookingModel::on('mysql')->query()
+        $existing = BookingModel::on('mysql')
             ->where('amelia_customer_booking_id', $ameliaBooking->id)
             ->first();
 
@@ -324,7 +324,7 @@ final class AutoSyncAmeliaService
 
         $bookedAt = $ameliaBooking->created ?? $appointment?->booking_start ?? now();
 
-            return BookingModel::on('mysql')->query()->create([
+            return BookingModel::on('mysql')->create([
             'amelia_customer_booking_id' => $ameliaBooking->id,
             'appointment_id' => $appointment?->id,
             'customer_id' => $customer->id,
@@ -350,7 +350,7 @@ final class AutoSyncAmeliaService
     public function syncPayment(AmeliaPaymentModel $ameliaPayment): ?PaymentModel
     {
         // Find the booking
-        $booking = BookingModel::on('mysql')->query()
+        $booking = BookingModel::on('mysql')
             ->where('amelia_customer_booking_id', $ameliaPayment->customerBookingId)
             ->first();
 
@@ -367,7 +367,7 @@ final class AutoSyncAmeliaService
             return null;
         }
 
-        $existing = PaymentModel::on('mysql')->query()
+        $existing = PaymentModel::on('mysql')
             ->where('booking_id', $booking->id)
             ->where('provider_reference', (string) $ameliaPayment->id)
             ->first();
@@ -382,7 +382,7 @@ final class AutoSyncAmeliaService
             return $existing;
         }
 
-        return PaymentModel::on('mysql')->query()->create([
+        return PaymentModel::on('mysql')->create([
             'booking_id' => $booking->id,
             'provider' => $this->mapPaymentProvider($ameliaPayment->gateway),
             'provider_reference' => (string) $ameliaPayment->id,
@@ -398,8 +398,8 @@ final class AutoSyncAmeliaService
      */
     public function syncServiceStaff(int $ameliaUserId, int $ameliaServiceId): void
     {
-        $staff = StaffModel::on('mysql')->query()->where('amelia_user_id', $ameliaUserId)->first();
-        $service = ServiceModel::on('mysql')->query()->where('amelia_service_id', $ameliaServiceId)->first();
+        $staff = StaffModel::on('mysql')->where('amelia_user_id', $ameliaUserId)->first();
+        $service = ServiceModel::on('mysql')->where('amelia_service_id', $ameliaServiceId)->first();
 
         if (! $staff || ! $service) {
             return;
@@ -425,8 +425,8 @@ final class AutoSyncAmeliaService
      */
     public function syncPackageService(int $ameliaPackageId, int $ameliaServiceId, int $quantity = 1): void
     {
-        $package = PackageModel::on('mysql')->query()->where('amelia_package_id', $ameliaPackageId)->first();
-        $service = ServiceModel::on('mysql')->query()->where('amelia_service_id', $ameliaServiceId)->first();
+        $package = PackageModel::on('mysql')->where('amelia_package_id', $ameliaPackageId)->first();
+        $service = ServiceModel::on('mysql')->where('amelia_service_id', $ameliaServiceId)->first();
 
         if (! $package || ! $service) {
             return;
