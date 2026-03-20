@@ -10,6 +10,7 @@ use Carbon\Carbon;
 use Filament\Actions\Action;
 use Filament\Forms;
 use Filament\Resources\Pages\Page;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Resources\Pages\Concerns\InteractsWithRecord;
 use Filament\Notifications\Notification;
 use Filament\Schemas\Components\Grid;
@@ -35,7 +36,7 @@ class ViewStaffSchedule extends Page
 
     /**
      * Ensure mounted action has a 'data' key so Livewire can bind form fields
-     * (mountedActions.0.data.service_id, repeat_weekly_until_month_end, etc.).
+     * (mountedActions.0.data.service_id, repeat_weekly, weekly_occurrence_count, etc.).
      */
     public function mountAction(string $name, array $arguments = [], array $context = []): mixed
     {
@@ -49,7 +50,8 @@ class ViewStaffSchedule extends Page
                 'service_id' => null,
                 'start_time' => '16:00',
                 'end_time' => '17:00',
-                'repeat_weekly_until_month_end' => false,
+                'repeat_weekly' => false,
+                'weekly_occurrence_count' => 7,
             ];
 
             $this->mountedActions[$index]['data'] = array_merge($defaults, $current);
@@ -164,10 +166,20 @@ class ViewStaffSchedule extends Page
                 ->label('End')
                 ->default('17:00')
                 ->required(),
-            Forms\Components\Toggle::make('repeat_weekly_until_month_end')
-                ->label('Repeat every week until end of month')
-                ->helperText('If enabled, this slot will be copied to the same weekday for the rest of the selected month.')
-                ->default(false),
+            Forms\Components\Toggle::make('repeat_weekly')
+                ->label('Repeat weekly')
+                ->helperText('Create the same time slot on the same weekday for multiple consecutive weeks (can span months).')
+                ->default(false)
+                ->live(),
+            Forms\Components\TextInput::make('weekly_occurrence_count')
+                ->label('Total weekly occurrences')
+                ->numeric()
+                ->minValue(2)
+                ->maxValue(52)
+                ->default(7)
+                ->required(fn (Get $get) => (bool) $get('repeat_weekly'))
+                ->visible(fn (Get $get) => (bool) $get('repeat_weekly'))
+                ->helperText('Total appointments including this one (one per week). For example, 7 = this week plus 6 more.'),
         ];
     }
 
@@ -253,7 +265,10 @@ class ViewStaffSchedule extends Page
             return;
         }
 
-        $repeatWeekly = (bool) ($data['repeat_weekly_until_month_end'] ?? false);
+        $repeatWeekly = (bool) ($data['repeat_weekly'] ?? false);
+        $totalWeeklyOccurrences = $repeatWeekly
+            ? max(2, min(52, (int) ($data['weekly_occurrence_count'] ?? 2)))
+            : 1;
 
         // Always handle the first appointment with conflict checking.
         $firstConflict = AppointmentModel::query()
@@ -279,7 +294,7 @@ class ViewStaffSchedule extends Page
             'status' => 'approved',
         ]);
 
-        if (! $repeatWeekly) {
+        if (! $repeatWeekly || $totalWeeklyOccurrences <= 1) {
             Notification::make()->title('Appointment added')->success()->send();
             return;
         }
@@ -287,11 +302,10 @@ class ViewStaffSchedule extends Page
         $createdCount = 1; // we already created the first one
         $skippedConflicts = 0;
 
-        $currentStart = $start->copy()->addWeek();
-        $currentEnd = $end->copy()->addWeek();
-        $monthEnd = $start->copy()->endOfMonth();
+        for ($i = 1; $i < $totalWeeklyOccurrences; $i++) {
+            $currentStart = $start->copy()->addWeeks($i);
+            $currentEnd = $end->copy()->addWeeks($i);
 
-        while ($currentStart->lte($monthEnd)) {
             $conflict = AppointmentModel::query()
                 ->where('provider_id', $staff->getKey())
                 ->where('booking_start', '<', $currentEnd)
@@ -310,13 +324,11 @@ class ViewStaffSchedule extends Page
                 ]);
                 $createdCount++;
             }
-
-            $currentStart->addWeek();
-            $currentEnd->addWeek();
         }
 
+        $weeksRequested = $totalWeeklyOccurrences - 1;
         $message = $createdCount > 1
-            ? "Added {$createdCount} weekly appointments until the end of the month."
+            ? "Added {$createdCount} weekly appointment(s) over " . ($weeksRequested + 1) . ' week(s).'
             : 'Appointment added';
 
         $notification = Notification::make()->title($message)->success();
