@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Infrastructure\Persistence\Eloquent\BookingModel;
 use App\Infrastructure\Persistence\Eloquent\CustomerPackagePurchaseModel;
 use App\Infrastructure\Persistence\Eloquent\PaymentModel;
+use App\Infrastructure\Persistence\Eloquent\PackageModel;
 use App\Models\Customer;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
@@ -137,22 +138,68 @@ class MigrateFromFirestoreCommand extends Command
             $totalSessions = (int) ($fields['packages'] ?? $fields['total_sessions'] ?? 0);
             $remainingSessions = (int) ($fields['remainingClasses'] ?? $fields['remaining_sessions'] ?? $totalSessions);
             $purchaseDate = $this->parseTimestamp($fields['purchaseDate'] ?? $fields['createdAt'] ?? $fields['purchase_date'] ?? null);
+            $ameliaPackageId = (int) ($fields['packageId'] ?? $fields['package_id'] ?? 0) ?: null;
+            $ameliaPackageCustomerId = (int) ($fields['packageCustomerId'] ?? $fields['package_customer_id'] ?? 0) ?: null;
 
             if ($this->dryRun) {
                 $this->packagePurchasesCreated++;
                 continue;
             }
 
-            DB::transaction(function () use ($customer, $totalSessions, $remainingSessions, $purchaseDate): void {
-                CustomerPackagePurchaseModel::query()->create([
+            DB::transaction(function () use (
+                $customer,
+                $totalSessions,
+                $remainingSessions,
+                $purchaseDate,
+                $ameliaPackageId,
+                $ameliaPackageCustomerId
+            ): void {
+                $packageId = null;
+                if ($ameliaPackageId !== null) {
+                    $packageId = PackageModel::query()
+                        ->where('amelia_package_id', (int) $ameliaPackageId)
+                        ->value('id');
+                }
+
+                $purchasePayload = [
                     'customer_id' => $customer->id,
-                    'package_id' => null,
-                    'amelia_package_id' => null,
+                    'package_id' => $packageId,
+                    'amelia_package_id' => $ameliaPackageId,
                     'total_sessions' => $totalSessions ?: 1,
                     'remaining_sessions' => $remainingSessions,
                     'purchase_date' => $purchaseDate ?? now(),
                     'status' => 'active',
-                ]);
+                    'amelia_package_customer_id' => $ameliaPackageCustomerId,
+                ];
+
+                // Re-runnable: upsert by amelia_package_customer_id when available.
+                if ($ameliaPackageCustomerId !== null) {
+                    $existing = CustomerPackagePurchaseModel::query()
+                        ->where('amelia_package_customer_id', $ameliaPackageCustomerId)
+                        ->first();
+
+                    if ($existing) {
+                        $existing->fill($purchasePayload)->save();
+                        return;
+                    }
+                }
+
+                // Fallback upsert when purchase source doesn't include packageCustomerId.
+                // Note: relies on purchase_date precision being stable in the exported JSON.
+                $existingFallback = CustomerPackagePurchaseModel::query()
+                    ->where('customer_id', $customer->id)
+                    ->where('purchase_date', $purchasePayload['purchase_date'])
+                    ->where('total_sessions', $purchasePayload['total_sessions'])
+                    ->where('remaining_sessions', $purchasePayload['remaining_sessions'])
+                    ->where('amelia_package_id', $ameliaPackageId)
+                    ->first();
+
+                if ($existingFallback) {
+                    $existingFallback->fill($purchasePayload)->save();
+                    return;
+                }
+
+                CustomerPackagePurchaseModel::query()->create($purchasePayload);
                 $this->packagePurchasesCreated++;
             });
         }
@@ -177,10 +224,8 @@ class MigrateFromFirestoreCommand extends Command
             $fields = $this->extractFields($doc);
 
             $transactionId = $fields['transactionId'] ?? $fields['transaction_id'] ?? null;
-            if ($this->skipDuplicates && $transactionId && PaymentModel::query()->where('transaction_id', $transactionId)->exists()) {
-                $this->skipped++;
-                continue;
-            }
+            $isDuplicate = $this->skipDuplicates && $transactionId
+                && PaymentModel::query()->where('transaction_id', $transactionId)->exists();
 
             $customer = $this->resolveCustomerForPaymentBooking($fields);
             if (! $customer) {
@@ -200,6 +245,22 @@ class MigrateFromFirestoreCommand extends Command
                     $this->paymentsCreated++;
                     continue;
                 }
+            } else {
+                // purchasedPackages export may have created placeholder customers (e.g. name = "Customer").
+                // When we have real name/email/phone from paymentBookings, update existing customer records.
+                if (! $this->dryRun) {
+                    $updated = $this->updateCustomerFromPaymentFields($customer, $fields);
+                    if ($updated) {
+                        $this->customersUpdated++;
+                    }
+                }
+            }
+
+            // Even when skipping duplicates, we may still want to update customer identity fields
+            // (name/email/phone) from payment data.
+            if ($isDuplicate) {
+                $this->skipped++;
+                continue;
             }
 
             $bookedAt = $this->parseTimestamp($fields['bookingDate'] ?? $fields['createdAt'] ?? $fields['booked_at'] ?? null);
@@ -256,6 +317,63 @@ class MigrateFromFirestoreCommand extends Command
                 $this->paymentsCreated++;
             });
         }
+    }
+
+    /**
+     * Update an existing customer using fields from a payment booking record.
+     * This fixes the case where purchasedPackages migration created placeholder customers
+     * without name/email/phone, but paymentBookings includes full user data.
+     */
+    private function updateCustomerFromPaymentFields(Customer $customer, array $fields): bool
+    {
+        $fullName = (string) ($fields['userName'] ?? $fields['user_name'] ?? '');
+        $email = $fields['userEmail'] ?? $fields['user_email'] ?? null;
+        $phone = $fields['userPhone'] ?? $fields['user_phone'] ?? null;
+
+        $currentFirst = (string) ($customer->first_name ?? '');
+        $currentLast = (string) ($customer->last_name ?? '');
+
+        $parts = $fullName !== '' ? explode(' ', trim($fullName), 2) : [];
+        $newFirst = $parts[0] ?? null;
+        $newLast = $parts[1] ?? null;
+
+        $shouldUpdateName =
+            ($newFirst !== null && $newFirst !== '')
+            && ($currentFirst === '' || $currentFirst === 'Customer');
+
+        $shouldUpdateEmail = $email && ($customer->email === null || $customer->email === '');
+        $shouldUpdatePhone = $phone && ($customer->phone === null || $customer->phone === '');
+
+        $changed = false;
+
+        if ($shouldUpdateName) {
+            $customer->first_name = $newFirst;
+            $customer->last_name = ($newLast !== null && $newLast !== '') ? $newLast : null;
+            $changed = true;
+        } else {
+            // If first name is already real, only fill missing last name.
+            if (! empty($newLast) && ($currentLast === '' || $currentLast === null)) {
+                $customer->last_name = $newLast;
+                $changed = true;
+            }
+        }
+
+        if ($shouldUpdateEmail) {
+            $customer->email = $email;
+            $changed = true;
+        }
+
+        if ($shouldUpdatePhone) {
+            $customer->phone = $phone;
+            $changed = true;
+        }
+
+        if (! $changed) {
+            return false;
+        }
+
+        $customer->save();
+        return true;
     }
 
     private function resolveCustomerForPaymentBooking(array $fields): ?Customer

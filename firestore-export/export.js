@@ -54,16 +54,43 @@ async function exportCollection(collectionName, outFile) {
   return docs.length;
 }
 
-/** Export all purchasedPackages subcollection docs (e.g. users/{uid}/purchasedPackages) via collection group. */
+/**
+ * Export all purchasedPackages subcollection docs (e.g. users/{uid}/purchasedPackages) via collection group.
+ * Also merges parent `users/{uid}` identity fields into each exported row, because the purchasedPackages
+ * documents do not always contain name/email/phone.
+ */
 async function exportPurchasedPackagesCollectionGroup(outFile) {
+  const usersMap = new Map();
+  try {
+    const usersSnap = await db.collection('users').get();
+    for (const userDoc of usersSnap.docs) {
+      usersMap.set(userDoc.id, userDoc.data());
+    }
+    console.log(`Loaded ${usersMap.size} user(s) for purchasedPackages merge`);
+  } catch (e) {
+    console.warn(`Could not export users for purchasedPackages merge (continuing without identity merge): ${e.message}`);
+  }
+
   const snapshot = await db.collectionGroup('purchasedPackages').get();
   const all = [];
   for (const doc of snapshot.docs) {
     const row = docToPlain(doc);
     const parentId = doc.ref.parent.parent?.id;
     if (parentId && !row.uid) row.uid = parentId;
+
+    // Merge identity fields from parent users/{uid}
+    const userData = parentId ? usersMap.get(parentId) : null;
+    if (userData) {
+      row.firstName = row.firstName ?? userData.firstName ?? userData.first_name ?? null;
+      row.lastName = row.lastName ?? userData.lastName ?? userData.last_name ?? null;
+      row.email = row.email ?? userData.email ?? null;
+      row.phone = row.phone ?? userData.phone ?? null;
+      row.isVerified = row.isVerified ?? userData.isVerified ?? userData.is_verified ?? null;
+    }
+
     all.push(row);
   }
+
   const outPath = path.join(OUT_DIR, outFile);
   fs.writeFileSync(outPath, JSON.stringify(all, null, 2));
   console.log(`Exported ${all.length} doc(s) from collection group "purchasedPackages" → ${outPath}`);
