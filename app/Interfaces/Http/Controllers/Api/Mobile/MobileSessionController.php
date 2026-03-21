@@ -29,15 +29,18 @@ class MobileSessionController extends Controller
         $requestedPage = $request->query('page');
         $shouldPaginate = $requestedPerPage !== null || $requestedPage !== null;
 
+        $scheduleTz = (string) config('sessions.schedule_timezone', config('app.timezone'));
+        $upcomingCutoff = Carbon::now($scheduleTz);
+
         $query = AppointmentModel::query()
             ->with(['service', 'provider', 'bookings'])
             ->where('status', 'approved')
-            // Only upcoming sessions (same instant as DB datetime; excludes slots that already started today)
-            ->where('booking_start', '>', Carbon::now());
+            // Only upcoming sessions — use schedule TZ so SQL + PHP match studio clocks / stored datetimes
+            ->where('booking_start', '>', $upcomingCutoff);
 
         if ($date) {
             try {
-                $dateCarbon = Carbon::parse($date);
+                $dateCarbon = Carbon::parse($date, $scheduleTz);
                 // Use whereBetween to handle timezone correctly - filter for the entire day
                 $startOfDay = $dateCarbon->copy()->startOfDay();
                 $endOfDay = $dateCarbon->copy()->endOfDay();
@@ -82,7 +85,7 @@ class MobileSessionController extends Controller
 
         $customerId = $request->user()?->id;
 
-        $items = $appointmentCollection->map(function ($appointment) use ($customerId) {
+        $items = $appointmentCollection->map(function ($appointment) use ($customerId, $scheduleTz, $upcomingCutoff) {
             $service = $appointment->service;
             $provider = $appointment->provider;
             $approvedBookings = $appointment->bookings->where('status', 'confirmed');
@@ -97,8 +100,11 @@ class MobileSessionController extends Controller
             $canCancelUntil = $myBooking
                 ? Carbon::parse($appointment->booking_start)->subMinutes($minutesBeforeCancellation)
                 : null;
-            $canCancel = $isBooked && $canCancelUntil && Carbon::now()->lte($canCancelUntil);
-            $canBook = ! $isFull && Carbon::parse($appointment->booking_start)->gt(Carbon::now());
+            $canCancel = $isBooked && $canCancelUntil && Carbon::now($scheduleTz)->lte($canCancelUntil);
+            $startInstant = $appointment->booking_start instanceof Carbon
+                ? $appointment->booking_start->copy()
+                : Carbon::parse($appointment->booking_start, $scheduleTz);
+            $canBook = ! $isFull && $startInstant->gt($upcomingCutoff);
 
             $serviceText = $service ? (($service->name ?? '') . ' ' . ($service->description ?? '')) : '';
             $serviceType = CategorizeServicesCommand::inferCategoryNameFromText($serviceText);
@@ -131,6 +137,26 @@ class MobileSessionController extends Controller
             'data' => $items->values()->toArray(),
             'meta' => $meta,
         ]);
+    }
+
+    /**
+     * Remove appointments whose start is not strictly after the cutoff (defence in depth).
+     *
+     * @param  \Illuminate\Support\Collection<int, \App\Infrastructure\Persistence\Eloquent\AppointmentModel>  $appointments
+     * @return \Illuminate\Support\Collection<int, \App\Infrastructure\Persistence\Eloquent\AppointmentModel>
+     */
+    private function filterUpcomingAppointments($appointments, Carbon $cutoff)
+    {
+        return $appointments->filter(function ($appointment) use ($cutoff) {
+            if (! $appointment->booking_start) {
+                return false;
+            }
+            $start = $appointment->booking_start instanceof Carbon
+                ? $appointment->booking_start->copy()
+                : Carbon::parse($appointment->booking_start);
+
+            return $start->gt($cutoff);
+        })->values();
     }
 
     /**

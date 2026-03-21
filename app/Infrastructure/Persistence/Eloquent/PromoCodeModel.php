@@ -52,7 +52,8 @@ class PromoCodeModel extends Model
 
     /**
      * Why the code cannot be used, or null if it is valid right now.
-     * Uses full datetime precision (same instant as DB) for valid_from / valid_until.
+     * valid_from / valid_until are interpreted as inclusive calendar days in the app timezone
+     * (valid from start of valid_from's day through end of valid_until's day), not exact instants.
      *
      * @return 'inactive'|'not_yet_valid'|'expired'|'usage_limit_reached'|null
      */
@@ -61,11 +62,20 @@ class PromoCodeModel extends Model
         if (! $this->is_active) {
             return 'inactive';
         }
-        if ($this->valid_from && now()->lt($this->valid_from)) {
-            return 'not_yet_valid';
+
+        $tz = config('app.timezone');
+
+        if ($this->valid_from) {
+            $fromStart = $this->valid_from->copy()->timezone($tz)->startOfDay();
+            if (now()->lt($fromStart)) {
+                return 'not_yet_valid';
+            }
         }
-        if ($this->valid_until && now()->gt($this->valid_until)) {
-            return 'expired';
+        if ($this->valid_until) {
+            $untilEnd = $this->valid_until->copy()->timezone($tz)->endOfDay();
+            if (now()->gt($untilEnd)) {
+                return 'expired';
+            }
         }
         if ($this->usage_limit !== null && $this->used_count >= $this->usage_limit) {
             return 'usage_limit_reached';
