@@ -620,10 +620,10 @@
 							"raw": "{\n    \"code\": \"SAVE20\"\n}"
 						},
 						"url": { "raw": "{{base_url}}/api/v1/promo-codes/verify", "host": ["{{base_url}}"], "path": ["api", "v1", "promo-codes", "verify"] },
-						"description": "Check if a promo code exists and is valid. Body: code (required). Returns valid (boolean), reason (not_found | inactive | not_yet_valid | expired | usage_limit_reached), message, and when valid or when code exists: promo_code (id, code, name, percent_discount, valid_from, valid_until, usage_limit, used_count, is_active). Requires Bearer."
+						"description": "Check if a promo code exists and is valid for the current customer. Body: code (required). Returns valid (boolean), reason (not_found | inactive | not_yet_valid | expired | usage_limit_reached), message, and when valid or when code exists: promo_code (id, code, name, percent_discount, valid_from, valid_until, usage_limit_per_user, uses_by_you, used_count_total, is_active). Requires Bearer."
 					},
 					"response": [
-						{ "name": "Valid", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"valid\":true,\"message\":\"Promo code is valid.\",\"promo_code\":{\"id\":1,\"code\":\"SAVE20\",\"name\":\"Summer Sale\",\"percent_discount\":20,\"valid_from\":null,\"valid_until\":\"2025-12-31T23:59:59+00:00\",\"usage_limit\":100,\"used_count\":42,\"is_active\":true}}" },
+						{ "name": "Valid", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"valid\":true,\"message\":\"Promo code is valid.\",\"promo_code\":{\"id\":1,\"code\":\"SAVE20\",\"name\":\"Summer Sale\",\"percent_discount\":20,\"valid_from\":null,\"valid_until\":\"2025-12-31T23:59:59+00:00\",\"usage_limit_per_user\":1,\"uses_by_you\":0,\"used_count_total\":42,\"is_active\":true}}" },
 						{ "name": "Not found", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"valid\":false,\"reason\":\"not_found\",\"message\":\"Promo code does not exist.\"}" }
 					]
 				},

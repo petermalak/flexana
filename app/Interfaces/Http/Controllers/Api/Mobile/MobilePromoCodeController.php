@@ -41,12 +41,14 @@ class MobilePromoCodeController extends Controller
             ], 200);
         }
 
-        $reason = $promo->invalidReason();
+        /** @var \App\Models\Customer $customer */
+        $customer = $request->user();
+        $reason = $promo->invalidReasonForCustomer((int) $customer->id);
         if ($reason !== null) {
             $payload = [
                 'valid' => false,
                 'reason' => $reason,
-                'promo_code' => $this->promoCodeDetails($promo),
+                'promo_code' => $this->promoCodeDetails($promo, (int) $customer->id),
             ];
 
             return match ($reason) {
@@ -66,7 +68,7 @@ class MobilePromoCodeController extends Controller
                 ], 200),
                 'usage_limit_reached' => response()->json([
                     ...$payload,
-                    'message' => 'This promo code has reached its usage limit.',
+                    'message' => 'You have already used this promo code the maximum number of times.',
                 ], 200),
                 default => response()->json([
                     ...$payload,
@@ -78,12 +80,14 @@ class MobilePromoCodeController extends Controller
         return response()->json([
             'valid' => true,
             'message' => 'Promo code is valid.',
-            'promo_code' => $this->promoCodeDetails($promo),
+            'promo_code' => $this->promoCodeDetails($promo, (int) $customer->id),
         ], 200);
     }
 
-    private function promoCodeDetails(PromoCodeModel $promo): array
+    private function promoCodeDetails(PromoCodeModel $promo, ?int $customerId = null): array
     {
+        $usesByYou = $customerId !== null ? $promo->redemptionCountForCustomer($customerId) : null;
+
         return [
             'id' => $promo->id,
             'code' => $promo->code,
@@ -91,8 +95,9 @@ class MobilePromoCodeController extends Controller
             'percent_discount' => (float) $promo->percent_discount,
             'valid_from' => ApiDateTime::toUtcIso8601($promo->valid_from),
             'valid_until' => ApiDateTime::toUtcIso8601($promo->valid_until),
-            'usage_limit' => $promo->usage_limit,
-            'used_count' => $promo->used_count,
+            'usage_limit_per_user' => $promo->usage_limit_per_user,
+            'uses_by_you' => $usesByYou,
+            'used_count_total' => $promo->used_count,
             'is_active' => $promo->is_active,
         ];
     }

@@ -5,6 +5,7 @@ namespace App\Infrastructure\Persistence\Eloquent;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class PromoCodeModel extends Model
@@ -18,6 +19,7 @@ class PromoCodeModel extends Model
         'valid_from',
         'valid_until',
         'usage_limit',
+        'usage_limit_per_user',
         'used_count',
         'is_active',
     ];
@@ -27,6 +29,7 @@ class PromoCodeModel extends Model
         'valid_from' => 'datetime',
         'valid_until' => 'datetime',
         'usage_limit' => 'integer',
+        'usage_limit_per_user' => 'integer',
         'used_count' => 'integer',
         'is_active' => 'boolean',
     ];
@@ -34,6 +37,11 @@ class PromoCodeModel extends Model
     public function payments(): HasMany
     {
         return $this->hasMany(PaymentModel::class, 'promo_code_id');
+    }
+
+    public function redemptions(): HasMany
+    {
+        return $this->hasMany(PromoCodeRedemptionModel::class, 'promo_code_id');
     }
 
     /**
@@ -52,13 +60,22 @@ class PromoCodeModel extends Model
     }
 
     /**
-     * Why the code cannot be used, or null if it is valid right now.
-     * valid_from / valid_until are interpreted as inclusive calendar days in the app timezone
-     * (valid from start of valid_from's day through end of valid_until's day), not exact instants.
+     * How many times this customer has redeemed this promo (recorded rows).
+     */
+    public function redemptionCountForCustomer(int $customerId): int
+    {
+        return (int) $this->redemptions()
+            ->where('customer_id', $customerId)
+            ->count();
+    }
+
+    /**
+     * Why the code cannot be used for this customer, or null if valid.
+     * Per-user usage limit replaces the old global usage_limit / used_count cap.
      *
      * @return 'inactive'|'not_yet_valid'|'expired'|'usage_limit_reached'|null
      */
-    public function invalidReason(): ?string
+    public function invalidReasonForCustomer(int $customerId): ?string
     {
         if (! $this->is_active) {
             return 'inactive';
@@ -78,31 +95,42 @@ class PromoCodeModel extends Model
                 return 'expired';
             }
         }
-        if ($this->usage_limit !== null && $this->used_count >= $this->usage_limit) {
-            return 'usage_limit_reached';
+        if ($this->usage_limit_per_user !== null && $this->usage_limit_per_user > 0) {
+            if ($this->redemptionCountForCustomer($customerId) >= $this->usage_limit_per_user) {
+                return 'usage_limit_reached';
+            }
         }
 
         return null;
     }
 
-    public function isValid(): bool
+    public function isValidForCustomer(int $customerId): bool
     {
-        return $this->invalidReason() === null;
+        return $this->invalidReasonForCustomer($customerId) === null;
     }
 
     /**
-     * Atomically increment used_count only if under usage_limit (when set).
-     * Returns false if limit already reached (e.g. race with another request).
+     * Atomically record a redemption for this customer if still under per-user limit.
+     * Increments global used_count for admin totals.
      */
-    public function incrementUsageIfAllowed(): bool
+    public function incrementUsageIfAllowed(int $customerId): bool
     {
-        $query = static::query()->whereKey($this->id);
+        return (bool) DB::transaction(function () use ($customerId): bool {
+            static::query()->whereKey($this->id)->lockForUpdate()->first();
+            $this->refresh();
 
-        $query->where(function ($q): void {
-            $q->whereNull('usage_limit')
-                ->orWhereColumn('used_count', '<', 'usage_limit');
+            if ($this->invalidReasonForCustomer($customerId) !== null) {
+                return false;
+            }
+
+            PromoCodeRedemptionModel::query()->create([
+                'promo_code_id' => $this->id,
+                'customer_id' => $customerId,
+            ]);
+
+            $this->increment('used_count');
+
+            return true;
         });
-
-        return (bool) $query->increment('used_count');
     }
 }

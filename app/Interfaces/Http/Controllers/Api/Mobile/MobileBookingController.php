@@ -175,7 +175,7 @@ class MobileBookingController extends Controller
             $promoRecord = null;
             if ($promoCode) {
                 $promoRecord = PromoCodeModel::findByCode($promoCode);
-                if ($promoRecord && $promoRecord->isValid()) {
+                if ($promoRecord && $promoRecord->isValidForCustomer((int) $customer->id)) {
                     $totalPrice = $totalPrice * (1 - (float) $promoRecord->percent_discount / 100);
                 } else {
                     $promoRecord = null;
@@ -187,7 +187,7 @@ class MobileBookingController extends Controller
         try {
             // Count promo use for drop-ins whenever a valid promo was applied (including 100% off → totalPrice 0).
             if ($isDropIn && $promoRecord) {
-                if (! $promoRecord->incrementUsageIfAllowed()) {
+                if (! $promoRecord->incrementUsageIfAllowed((int) $customer->id)) {
                     throw new \RuntimeException('Promo code usage limit was reached.');
                 }
             }
@@ -255,7 +255,7 @@ class MobileBookingController extends Controller
             if (str_contains($message, 'Promo code usage limit')) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'This promo code has reached its usage limit.',
+                    'message' => 'You have already used this promo code the maximum number of times.',
                 ], 400);
             }
 

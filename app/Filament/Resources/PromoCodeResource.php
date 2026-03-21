@@ -54,12 +54,13 @@ class PromoCodeResource extends Resource
                             ->label('Valid from'),
                         Forms\Components\DateTimePicker::make('valid_until')
                             ->label('Valid until'),
-                        Forms\Components\TextInput::make('usage_limit')
-                            ->label('Max uses')
+                        Forms\Components\TextInput::make('usage_limit_per_user')
+                            ->label('Max uses per customer')
                             ->numeric()
                             ->minValue(1)
                             ->nullable()
-                            ->placeholder('Unlimited'),
+                            ->placeholder('Unlimited')
+                            ->helperText('Each customer can apply this code at most this many times.'),
                         Forms\Components\Toggle::make('is_active')
                             ->label('Active')
                             ->default(true),
@@ -82,10 +83,10 @@ class PromoCodeResource extends Resource
                     ->suffix('%')
                     ->sortable(),
                 Tables\Columns\TextColumn::make('used_count')
-                    ->label('Used')
+                    ->label('Total uses')
                     ->sortable(),
-                Tables\Columns\TextColumn::make('usage_limit')
-                    ->label('Limit')
+                Tables\Columns\TextColumn::make('usage_limit_per_user')
+                    ->label('Per customer')
                     ->placeholder('∞')
                     ->sortable(),
                 Tables\Columns\IconColumn::make('is_active')
