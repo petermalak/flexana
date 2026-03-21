@@ -135,9 +135,18 @@ class MigrateFromFirestoreCommand extends Command
                 }
             }
 
-            $totalSessions = (int) ($fields['packages'] ?? $fields['total_sessions'] ?? 0);
+            // Firestore may use packages, sessions, or total_sessions; reformer/packages subs use remainingClasses.
+            $totalSessions = (int) ($fields['packages'] ?? $fields['sessions'] ?? $fields['total_sessions'] ?? 0);
             $remainingSessions = (int) ($fields['remainingClasses'] ?? $fields['remaining_sessions'] ?? $totalSessions);
-            $purchaseDate = $this->parseTimestamp($fields['purchaseDate'] ?? $fields['createdAt'] ?? $fields['purchase_date'] ?? null);
+            // purchaseDate (yoga/reformer) or startDate (unlimited); may be string or timestamp in JSON.
+            $purchaseDate = $this->parseTimestamp(
+                $fields['purchaseDate']
+                    ?? $fields['startDate']
+                    ?? $fields['start_date']
+                    ?? $fields['createdAt']
+                    ?? $fields['purchase_date']
+                    ?? null
+            );
             $ameliaPackageId = (int) ($fields['packageId'] ?? $fields['package_id'] ?? 0) ?: null;
             $ameliaPackageCustomerId = (int) ($fields['packageCustomerId'] ?? $fields['package_customer_id'] ?? 0) ?: null;
 

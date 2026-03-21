@@ -49,10 +49,12 @@ npm run export
 
 This writes JSON into **`backend/storage/app/`**:
 
-- `purchased_packages.json` (from collection `purchasedPackages`)
-- `payment_bookings.json` (from `paymentBookings`, or `bookings`, or subcollection `payment/*/booking`)
+- `purchased_packages.json` — merged from **top-level** `purchasedPackages` / `purchased_packages` (if present) and **collection group** exports for each subcollection in `PURCHASE_COLLECTION_GROUPS` (`purchasedPackages`, `purchasedReformPackages`, `purchasePackages`, `unlimitedPackages`, `reformer`, `packages`, …). The Flutter app may split data across paths (e.g. `purchasedReformPackages` for dates, `reformer` / `packages` for `remainingClasses`, `unlimitedPackages` for `startDate`). The export **merges documents with the same `uid` and package doc id** into one row so Laravel gets `remainingClasses`, `sessions`/`packages`, and dates together.  
+  - Rows may include `_merge_paths` and combined `_export_source` for debugging.  
+  - **First-time** collection group queries may require a **Firestore index**; if the script logs an error with a URL, open it in the browser to create the index.
+- `payment_bookings.json` (from `payments`, or `paymentBookings`, or `bookings`)
 
-If your Firestore uses different collection names, edit `firestore-export/export.js` and change the collection names.
+If your Firestore uses additional subcollection names (e.g. yoga-only packs), add them to `PURCHASE_COLLECTION_GROUPS` in `export.js`.
 
 ### Option: Manual export
 
@@ -80,9 +82,9 @@ Each item should contain (camelCase or snake_case):
 | lastName / last_name  | string | Last name                          |
 | phone              | string  | Phone number                           |
 | isVerified         | boolean | If true, sets `phone_verified_at`      |
-| packages           | number  | Total sessions in package              |
-| remainingClasses / remaining_sessions | number | Remaining sessions |
-| purchaseDate / purchase_date / createdAt | string/timestamp | When purchased |
+| packages / sessions / total_sessions | number | Total sessions (Firestore uses various keys) |
+| remainingClasses / remaining_sessions | number | Remaining sessions (often on `reformer` or `packages` subcollections, merged in export) |
+| purchaseDate / purchase_date / startDate / start_date / createdAt | string/timestamp | Purchase or start date (yoga/reformer often use `purchaseDate`; unlimited packs may use `startDate`). Values may be ISO strings (e.g. `2026-01-03T20:53:18.685004`) or Firestore timestamps; the export normalizes into `purchaseDate` when only `startDate` is set. |
 
 Example (flat array):
 

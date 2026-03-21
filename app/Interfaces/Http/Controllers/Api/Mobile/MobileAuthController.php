@@ -4,7 +4,9 @@ namespace App\Interfaces\Http\Controllers\Api\Mobile;
 
 use App\Application\Auth\PhoneVerificationService;
 use App\Http\Controllers\Controller;
+use App\Infrastructure\Persistence\Eloquent\CategoryModel;
 use App\Infrastructure\Persistence\Eloquent\CustomerDeviceTokenModel;
+use App\Infrastructure\Persistence\Eloquent\PackageModel;
 use App\Models\Customer;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -556,9 +558,30 @@ class MobileAuthController extends Controller
     }
 
     /**
+     * Aligns with MobileSessionController::getCategoryFilterData() heuristics for category name/slug.
+     */
+    private function packageCategoryFromServiceCategory(?CategoryModel $category): ?string
+    {
+        if (! $category) {
+            return null;
+        }
+        $nl = strtolower((string) ($category->name ?? ''));
+        $sl = strtolower((string) ($category->slug ?? ''));
+        if ($sl === 'yoga' || (str_contains($nl, 'yoga') && ! str_contains($nl, 'pilates'))) {
+            return 'Yoga';
+        }
+        if (in_array($sl, ['reformer-pilates', 'pilates', 'reformer'], true)
+            || str_contains($nl, 'reformer')
+            || (str_contains($nl, 'pilates') && ! str_contains($nl, 'yoga'))) {
+            return 'Reformer Pilates';
+        }
+
+        return null;
+    }
+
+    /**
      * Determine package category (Yoga / Reformer Pilates) from package.service_type (admin-set) first,
-     * then fallback to service names if service_type is not set.
-     * Does not use class format (Private/Group) — that is separate.
+     * then service names, then service.category (name/slug) — consistent with sessions API.
      * Returns 'Yoga', 'Reformer Pilates', or null.
      */
     private function packageServiceType($package): ?string
@@ -595,8 +618,48 @@ class MobileAuthController extends Controller
             if ($yogaCount > 0) {
                 return 'Yoga';
             }
+            // Fallback: service.category (name/slug), same idea as MobileSessionController
+            $yogaCatCount = 0;
+            $reformerCatCount = 0;
+            foreach ($package->services as $service) {
+                if ($service->relationLoaded('category') && $service->category) {
+                    $catType = $this->packageCategoryFromServiceCategory($service->category);
+                    if ($catType === 'Reformer Pilates') {
+                        $reformerCatCount++;
+                    } elseif ($catType === 'Yoga') {
+                        $yogaCatCount++;
+                    }
+                }
+            }
+            if ($reformerCatCount > 0 && $reformerCatCount >= $yogaCatCount) {
+                return 'Reformer Pilates';
+            }
+            if ($yogaCatCount > 0) {
+                return 'Yoga';
+            }
         }
+
         return null;
+    }
+
+    /**
+     * When customer_package_purchases.package_id is null but amelia_package_id is set, resolve the Package row.
+     */
+    private function resolvePackageForPurchase($purchase): ?PackageModel
+    {
+        $p = $purchase->package;
+        if ($p instanceof PackageModel) {
+            return $p;
+        }
+        $ameliaId = $purchase->amelia_package_id ?? null;
+        if ($ameliaId === null || (int) $ameliaId === 0) {
+            return null;
+        }
+
+        return PackageModel::query()
+            ->where('amelia_package_id', (int) $ameliaId)
+            ->with(['services.category', 'classType'])
+            ->first();
     }
 
     /**
@@ -619,19 +682,20 @@ class MobileAuthController extends Controller
     private function customerToArray($customer): array
     {
         $activePurchases = $customer->packagePurchases()
-            ->with(['package.services', 'package.classType'])
+            ->with(['package.services.category', 'package.classType'])
             ->where('status', 'active')
             ->get();
 
         $today = Carbon::today()->startOfDay();
         $yogaCandidates = [];
         $reformerCandidates = [];
+        $unclassifiedCandidates = [];
         foreach ($activePurchases as $purchase) {
             $remaining = (int) $purchase->remaining_sessions;
             if ($remaining <= 0) {
                 continue;
             }
-            $package = $purchase->package;
+            $package = $this->resolvePackageForPurchase($purchase);
             $expiresAt = null;
             if ($package && $purchase->purchase_date && $package->package_duration) {
                 $expiresAt = $purchase->purchase_date->copy()->addMonths((int) $package->package_duration);
@@ -641,8 +705,9 @@ class MobileAuthController extends Controller
             if ($expiresAt !== null && $expiresAt->copy()->startOfDay()->lt($today)) {
                 continue;
             }
+            $resolvedPackageId = $package?->id ?? $purchase->package_id ?? $purchase->amelia_package_id;
             $detail = [
-                'packageId' => (string) $purchase->package_id,
+                'packageId' => $resolvedPackageId !== null ? (string) $resolvedPackageId : '',
                 'packageName' => $package ? ($package->title ?? '') : '',
                 'remainingSessions' => $remaining,
                 'totalSessions' => (int) $purchase->total_sessions,
@@ -655,17 +720,21 @@ class MobileAuthController extends Controller
                 $yogaCandidates[] = $detail;
             } elseif ($serviceType === 'Reformer Pilates') {
                 $reformerCandidates[] = $detail;
+            } else {
+                $unclassifiedCandidates[] = $detail;
             }
         }
         unset($today);
 
         $yogaPackage = $this->lastValidPackageFromCandidates($yogaCandidates);
         $reformerPackage = $this->lastValidPackageFromCandidates($reformerCandidates);
+        $unclassifiedPackage = $this->lastValidPackageFromCandidates($unclassifiedCandidates);
 
         // Counts must match the chosen package per category (yogaPackage / reformerPackage)
         $remainingYogaSessions = $yogaPackage ? (int) ($yogaPackage['remainingSessions'] ?? 0) : 0;
         $remainingReformerSessions = $reformerPackage ? (int) ($reformerPackage['remainingSessions'] ?? 0) : 0;
-        $remainingSessions = $remainingYogaSessions + $remainingReformerSessions;
+        $remainingUnclassifiedSessions = $unclassifiedPackage ? (int) ($unclassifiedPackage['remainingSessions'] ?? 0) : 0;
+        $remainingSessions = $remainingYogaSessions + $remainingReformerSessions + $remainingUnclassifiedSessions;
 
         $profileImageUrl = null;
         if ($customer->profile_image) {
@@ -686,8 +755,10 @@ class MobileAuthController extends Controller
             'remainingSessionsDetail' => [
                 'remainingYogaSessions' => $remainingYogaSessions,
                 'remainingReformerSessions' => $remainingReformerSessions,
+                'remainingUnclassifiedSessions' => $remainingUnclassifiedSessions,
                 'yogaPackage' => $yogaPackage,
                 'reformerPackage' => $reformerPackage,
+                'unclassifiedPackage' => $unclassifiedPackage,
             ],
         ];
     }
