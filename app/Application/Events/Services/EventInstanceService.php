@@ -8,6 +8,7 @@ use App\Domain\Events\EventInstance;
 use App\Domain\Events\EventInstanceRepositoryInterface;
 use App\Domain\Events\EventRepositoryInterface;
 use App\Domain\Staff\StaffRepositoryInterface;
+use App\Support\ApiDateTime;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 
 final class EventInstanceService
@@ -61,7 +62,7 @@ final class EventInstanceService
 
         $instanceData = $payload->toArray();
         unset($instanceData['eventUuid'], $instanceData['instructorUuid']);
-        
+
         $instanceData['event_id'] = $event->id;
         if ($instructor) {
             $instanceData['instructor_id'] = $instructor->id;
@@ -113,7 +114,7 @@ final class EventInstanceService
 
         $instanceData = $payload->toArray();
         unset($instanceData['eventUuid'], $instanceData['instructorUuid']);
-        
+
         if (isset($event)) {
             $instanceData['event_id'] = $event->id;
         }
@@ -147,14 +148,14 @@ final class EventInstanceService
         return [
             'uuid' => $instance->uuid,
             'eventUuid' => $instance->eventUuid,
-            'startsAt' => $instance->startsAt->toIso8601String(),
-            'endsAt' => $instance->endsAt->toIso8601String(),
+            'startsAt' => ApiDateTime::toUtcIso8601($instance->startsAt),
+            'endsAt' => ApiDateTime::toUtcIso8601($instance->endsAt),
             'capacity' => $instance->capacity,
             'location' => $instance->location,
             'status' => $instance->status,
             'resources' => $instance->resources,
-            'bookingOpenDate' => $instance->bookingOpenDate?->toIso8601String(),
-            'bookingCloseDate' => $instance->bookingCloseDate?->toIso8601String(),
+            'bookingOpenDate' => ApiDateTime::toUtcIso8601($instance->bookingOpenDate),
+            'bookingCloseDate' => ApiDateTime::toUtcIso8601($instance->bookingCloseDate),
             'instructorUuid' => $instance->instructorUuid,
         ];
     }

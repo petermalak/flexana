@@ -2,6 +2,7 @@
 
 namespace App\Interfaces\Http\Resources;
 
+use App\Support\ApiDateTime;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -10,22 +11,13 @@ class FlutterCustomerResource extends JsonResource
     public function toArray(Request $request): array
     {
         $customer = $this->resource;
-        
+
         // Access database attributes directly from Eloquent model
         $preferences = $customer->getAttribute('preferences') ?? [];
         $firstName = $customer->getAttribute('first_name') ?? null;
         $lastName = $customer->getAttribute('last_name') ?? null;
-        $lastSeenAt = $customer->getAttribute('last_seen_at') ?? null;
-        
-        // Format date properly
-        if ($lastSeenAt instanceof \Carbon\Carbon || $lastSeenAt instanceof \Carbon\CarbonImmutable) {
-            $lastSeenAt = $lastSeenAt->toIso8601String();
-        } elseif (is_string($lastSeenAt)) {
-            $lastSeenAt = $lastSeenAt;
-        } else {
-            $lastSeenAt = null;
-        }
-        
+        $lastSeenAt = ApiDateTime::toUtcIso8601($customer->getAttribute('last_seen_at'));
+
         // Match WordPress/Emilia plugin response format
         return [
             'id' => $customer->id ?? null,

@@ -62,24 +62,24 @@ return [
     | Here you may specify the default timezone for your application, which
     | will be used by the PHP date and date-time functions.
     |
-    | Use UTC here so naive MySQL datetimes match Amelia/API expectations. Clients localize from ISO-8601 UTC.
-    | Studio "wall clock" (Egypt) for promos and display: see business_timezone.
+    | Default Africa/Cairo to match Egypt-local MySQL datetimes. Mobile API still emits UTC ISO-8601
+    | where ApiDateTime or explicit ->utc() is used.
     |
     */
 
-    'timezone' => env('APP_TIMEZONE', 'UTC'),
+    'timezone' => env('APP_TIMEZONE', 'Africa/Cairo'),
 
     /*
     |--------------------------------------------------------------------------
     | Business / studio timezone (Egypt)
     |--------------------------------------------------------------------------
     |
-    | Used for promo calendar days, session schedule filters, and human-readable
-    | session date/time fields — not for shifting stored DB instants.
+    | Defaults to APP_TIMEZONE so one env drives the app. Override with APP_BUSINESS_TIMEZONE if needed.
+    | Used for human-readable session date/time fields (e.g. ApiDateTime::formatInBusinessTimezone).
     |
     */
 
-    'business_timezone' => env('APP_BUSINESS_TIMEZONE', 'Africa/Cairo'),
+    'business_timezone' => env('APP_BUSINESS_TIMEZONE', env('APP_TIMEZONE', 'Africa/Cairo')),
 
     /*
     |--------------------------------------------------------------------------

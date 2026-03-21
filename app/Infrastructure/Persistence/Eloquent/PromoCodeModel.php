@@ -81,7 +81,7 @@ class PromoCodeModel extends Model
             return 'inactive';
         }
 
-        $tz = (string) config('app.business_timezone');
+        $tz = (string) config('promo.calendar_timezone', 'UTC');
 
         if ($this->valid_from) {
             $fromStart = $this->valid_from->copy()->timezone($tz)->startOfDay();

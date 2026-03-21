@@ -13,6 +13,6 @@ return [
     | datetimes are wall-clock local). Defaults to APP_TIMEZONE.
     |
     */
-    'schedule_timezone' => env('SESSIONS_SCHEDULE_TIMEZONE', env('APP_BUSINESS_TIMEZONE', 'Africa/Cairo')),
+    'schedule_timezone' => env('SESSIONS_SCHEDULE_TIMEZONE', config('app.timezone')),
 
 ];
