@@ -30,7 +30,7 @@ class MobilePromoCodeController extends Controller
         }
 
         $code = $request->input('code');
-        $promo = PromoCodeModel::query()->where('code', $code)->first();
+        $promo = PromoCodeModel::findByCode((string) $code);
 
         if (! $promo) {
             return response()->json([
@@ -40,46 +40,38 @@ class MobilePromoCodeController extends Controller
             ], 200);
         }
 
-        if (! $promo->is_active) {
-            return response()->json([
+        $reason = $promo->invalidReason();
+        if ($reason !== null) {
+            $payload = [
                 'valid' => false,
-                'reason' => 'inactive',
-                'message' => 'This promo code is not active.',
+                'reason' => $reason,
                 'promo_code' => $this->promoCodeDetails($promo),
-            ], 200);
-        }
+            ];
 
-        // Use date-only comparison so promo is valid for the whole day,
-        // regardless of the time component stored in the database.
-        $today = now()->toDateString();
-
-        if ($promo->valid_from && $today < $promo->valid_from->toDateString()) {
-            return response()->json([
-                'valid' => false,
-                'reason' => 'not_yet_valid',
-                'message' => 'This promo code is not yet valid.',
-                'valid_from' => $promo->valid_from->toIso8601String(),
-                'promo_code' => $this->promoCodeDetails($promo),
-            ], 200);
-        }
-
-        if ($promo->valid_until && $today > $promo->valid_until->toDateString()) {
-            return response()->json([
-                'valid' => false,
-                'reason' => 'expired',
-                'message' => 'This promo code has expired.',
-                'valid_until' => $promo->valid_until->toIso8601String(),
-                'promo_code' => $this->promoCodeDetails($promo),
-            ], 200);
-        }
-
-        if ($promo->usage_limit !== null && $promo->used_count >= $promo->usage_limit) {
-            return response()->json([
-                'valid' => false,
-                'reason' => 'usage_limit_reached',
-                'message' => 'This promo code has reached its usage limit.',
-                'promo_code' => $this->promoCodeDetails($promo),
-            ], 200);
+            return match ($reason) {
+                'inactive' => response()->json([
+                    ...$payload,
+                    'message' => 'This promo code is not active.',
+                ], 200),
+                'not_yet_valid' => response()->json([
+                    ...$payload,
+                    'message' => 'This promo code is not yet valid.',
+                    'valid_from' => $promo->valid_from?->toIso8601String(),
+                ], 200),
+                'expired' => response()->json([
+                    ...$payload,
+                    'message' => 'This promo code has expired.',
+                    'valid_until' => $promo->valid_until?->toIso8601String(),
+                ], 200),
+                'usage_limit_reached' => response()->json([
+                    ...$payload,
+                    'message' => 'This promo code has reached its usage limit.',
+                ], 200),
+                default => response()->json([
+                    ...$payload,
+                    'message' => 'This promo code is not valid.',
+                ], 200),
+            };
         }
 
         return response()->json([

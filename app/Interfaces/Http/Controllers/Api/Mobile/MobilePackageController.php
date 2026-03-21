@@ -284,9 +284,7 @@ class MobilePackageController extends Controller
         $promoRecord = null;
 
         if ($promoCode) {
-            $promoRecord = PromoCodeModel::query()
-                ->where('code', $promoCode)
-                ->first();
+            $promoRecord = PromoCodeModel::findByCode($promoCode);
             if ($promoRecord && $promoRecord->isValid()) {
                 $price = $price * (1 - (float) $promoRecord->percent_discount / 100);
             } else {
@@ -297,7 +295,9 @@ class MobilePackageController extends Controller
         DB::beginTransaction();
         try {
             if ($promoRecord) {
-                $promoRecord->increment('used_count');
+                if (! $promoRecord->incrementUsageIfAllowed()) {
+                    throw new \RuntimeException('Promo code usage limit was reached.');
+                }
             }
 
             $booking = BookingModel::query()->create([
@@ -353,10 +353,18 @@ class MobilePackageController extends Controller
             ], 201);
         } catch (\Throwable $e) {
             DB::rollBack();
+            $message = $e->getMessage();
+            if (str_contains($message, 'Promo code usage limit')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This promo code has reached its usage limit.',
+                ], 400);
+            }
+
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to purchase package',
-                'error' => $e->getMessage(),
+                'error' => $message,
             ], 500);
         }
     }

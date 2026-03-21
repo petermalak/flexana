@@ -58,6 +58,7 @@ class PromoCodeResource extends Resource
                             ->label('Max uses')
                             ->numeric()
                             ->minValue(1)
+                            ->nullable()
                             ->placeholder('Unlimited'),
                         Forms\Components\Toggle::make('is_active')
                             ->label('Active')

@@ -31,7 +31,9 @@ class MobileSessionController extends Controller
 
         $query = AppointmentModel::query()
             ->with(['service', 'provider', 'bookings'])
-            ->where('status', 'approved');
+            ->where('status', 'approved')
+            // Only upcoming sessions (same instant as DB datetime; excludes slots that already started today)
+            ->where('booking_start', '>', Carbon::now());
 
         if ($date) {
             try {

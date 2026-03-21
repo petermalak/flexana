@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Infrastructure\Persistence\Eloquent\AppointmentModel;
 use App\Infrastructure\Persistence\Eloquent\BookingModel;
 use App\Infrastructure\Persistence\Eloquent\CustomerPackagePurchaseModel;
+use App\Infrastructure\Persistence\Eloquent\PromoCodeModel;
 use App\Infrastructure\Persistence\Eloquent\ServiceModel;
 use App\Models\Customer;
 use App\Support\PackagePurchaseExpiry;
@@ -172,9 +173,7 @@ class MobileBookingController extends Controller
             $totalPrice = $servicePrice * $persons;
             $promoRecord = null;
             if ($promoCode) {
-                $promoRecord = \App\Infrastructure\Persistence\Eloquent\PromoCodeModel::query()
-                    ->where('code', $promoCode)
-                    ->first();
+                $promoRecord = PromoCodeModel::findByCode($promoCode);
                 if ($promoRecord && $promoRecord->isValid()) {
                     $totalPrice = $totalPrice * (1 - (float) $promoRecord->percent_discount / 100);
                 } else {
@@ -185,12 +184,10 @@ class MobileBookingController extends Controller
 
         DB::beginTransaction();
         try {
-            if ($isDropIn && $totalPrice > 0 && $promoCode) {
-                $promoRecord = \App\Infrastructure\Persistence\Eloquent\PromoCodeModel::query()
-                    ->where('code', $promoCode)
-                    ->first();
-                if ($promoRecord && $promoRecord->isValid()) {
-                    $promoRecord->increment('used_count');
+            // Count promo use for drop-ins whenever a valid promo was applied (including 100% off → totalPrice 0).
+            if ($isDropIn && $promoRecord) {
+                if (! $promoRecord->incrementUsageIfAllowed()) {
+                    throw new \RuntimeException('Promo code usage limit was reached.');
                 }
             }
 
@@ -253,10 +250,18 @@ class MobileBookingController extends Controller
             ], 201);
         } catch (\Throwable $e) {
             DB::rollBack();
+            $message = $e->getMessage();
+            if (str_contains($message, 'Promo code usage limit')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This promo code has reached its usage limit.',
+                ], 400);
+            }
+
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to create booking',
-                'error' => $e->getMessage(),
+                'error' => $message,
             ], 500);
         }
     }
