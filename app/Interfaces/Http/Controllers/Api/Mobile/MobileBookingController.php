@@ -9,6 +9,7 @@ use App\Infrastructure\Persistence\Eloquent\CustomerPackagePurchaseModel;
 use App\Infrastructure\Persistence\Eloquent\PromoCodeModel;
 use App\Infrastructure\Persistence\Eloquent\ServiceModel;
 use App\Models\Customer;
+use App\Support\ApiDateTime;
 use App\Support\PackagePurchaseExpiry;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -48,13 +49,13 @@ class MobileBookingController extends Controller
             $sessionEnd = null;
 
             if ($appointment && $appointment->booking_start) {
-                $sessionStart = Carbon::parse($appointment->booking_start)->toIso8601String();
-                $sessionDate = Carbon::parse($appointment->booking_start)->format('Y-m-d');
-                $sessionTime = Carbon::parse($appointment->booking_start)->format('H:i:s');
+                $sessionStart = ApiDateTime::toUtcIso8601($appointment->booking_start);
+                $sessionDate = ApiDateTime::formatInBusinessTimezone($appointment->booking_start, 'Y-m-d');
+                $sessionTime = ApiDateTime::formatInBusinessTimezone($appointment->booking_start, 'H:i:s');
             }
 
             if ($appointment && $appointment->booking_end) {
-                $sessionEnd = Carbon::parse($appointment->booking_end)->toIso8601String();
+                $sessionEnd = ApiDateTime::toUtcIso8601($appointment->booking_end);
             }
 
             $isDropIn = $booking->is_drop_in ?? ($booking->answers['isDropIn'] ?? false);
@@ -64,7 +65,7 @@ class MobileBookingController extends Controller
                 'sessionID' => $booking->appointment_id ? (string) $booking->appointment_id : null,
                 'serviceName' => $service?->name,
                 'instructorName' => $provider?->name,
-                'bookedAt' => $booking->booked_at?->toIso8601String(),
+                'bookedAt' => ApiDateTime::toUtcIso8601($booking->booked_at),
                 'sessionDate' => $sessionDate,
                 'sessionTime' => $sessionTime,
                 'sessionStart' => $sessionStart,
@@ -386,7 +387,8 @@ class MobileBookingController extends Controller
         if ($sessionCategory === null) {
             return null;
         }
-        $today = Carbon::today()->startOfDay();
+        $bizTz = (string) config('app.business_timezone');
+        $today = Carbon::now($bizTz)->startOfDay();
         $purchases = CustomerPackagePurchaseModel::query()
             ->with(['package.services'])
             ->where('customer_id', $customerId)
@@ -405,8 +407,13 @@ class MobileBookingController extends Controller
             if ($packageCategory !== $sessionCategory) {
                 continue;
             }
-            $expiresAt = PackagePurchaseExpiry::expiresAt($package, $purchase->purchase_date, $purchase->amelia_package_id);
-            if ($expiresAt !== null && $expiresAt->copy()->startOfDay()->lt($today)) {
+            $expiresAt = PackagePurchaseExpiry::expiresAt(
+                $package,
+                $purchase->purchase_date,
+                $purchase->amelia_package_id,
+                (bool) $purchase->expires_by_months_only,
+            );
+            if ($expiresAt !== null && $expiresAt->copy()->timezone($bizTz)->startOfDay()->lt($today)) {
                 continue;
             }
             return $purchase;
@@ -472,8 +479,8 @@ class MobileBookingController extends Controller
         $customerName = trim(($customer->first_name ?? '') . ' ' . ($customer->last_name ?? ''));
         $customerName = $customerName !== '' ? $customerName : ($customer->email ?? 'Customer');
 
-        $appointmentDate = $appointment->booking_start ? Carbon::parse($appointment->booking_start)->format('Y-m-d') : '';
-        $appointmentTime = $appointment->booking_start ? Carbon::parse($appointment->booking_start)->format('H:i') : '';
+        $appointmentDate = ApiDateTime::formatInBusinessTimezone($appointment->booking_start, 'Y-m-d');
+        $appointmentTime = ApiDateTime::formatInBusinessTimezone($appointment->booking_start, 'H:i');
 
         $body = "Thank you for booking with Flexana!\n\n"
             . "Booking Details\n\n"
@@ -511,7 +518,7 @@ class MobileBookingController extends Controller
         $customerName = trim(($customer->first_name ?? '') . ' ' . ($customer->last_name ?? ''));
         $customerName = $customerName !== '' ? $customerName : ($customer->email ?? 'Customer');
 
-        $appointmentDateTime = $appointment->booking_start ? Carbon::parse($appointment->booking_start)->format('Y-m-d H:i') : '';
+        $appointmentDateTime = ApiDateTime::formatInBusinessTimezone($appointment->booking_start, 'Y-m-d H:i');
 
         $body = "Dear {$customerName},\n"
             . "Phone {$customer->phone}\n"

@@ -8,6 +8,7 @@ use App\Infrastructure\Persistence\Eloquent\AppointmentModel;
 use App\Infrastructure\Persistence\Eloquent\CustomerPackagePurchaseModel;
 use App\Infrastructure\Persistence\Eloquent\ServiceModel;
 use App\Models\Category;
+use App\Support\ApiDateTime;
 use App\Support\PackagePurchaseExpiry;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -123,7 +124,7 @@ class MobileSessionController extends Controller
                 'service' => $service ? $service->name : '',
                 'serviceType' => $serviceType,
                 'price' => $service ? (float) ($service->price ?? 0) : 0.0,
-                'date' => Carbon::parse($appointment->booking_start)->toIso8601String(),
+                'date' => ApiDateTime::toUtcIso8601($appointment->booking_start),
                 'isBooked' => $isBooked,
                 'isFull' => $isFull,
                 'canCancel' => $canCancel,
@@ -346,7 +347,8 @@ class MobileSessionController extends Controller
         if ($sessionCategory === null) {
             return null;
         }
-        $today = Carbon::today()->startOfDay();
+        $bizTz = (string) config('app.business_timezone');
+        $today = Carbon::now($bizTz)->startOfDay();
         $purchases = CustomerPackagePurchaseModel::query()
             ->with(['package.services'])
             ->where('customer_id', $customerId)
@@ -365,8 +367,13 @@ class MobileSessionController extends Controller
             if ($packageCategory !== $sessionCategory) {
                 continue;
             }
-            $expiresAt = PackagePurchaseExpiry::expiresAt($package, $purchase->purchase_date, $purchase->amelia_package_id);
-            if ($expiresAt !== null && $expiresAt->copy()->startOfDay()->lt($today)) {
+            $expiresAt = PackagePurchaseExpiry::expiresAt(
+                $package,
+                $purchase->purchase_date,
+                $purchase->amelia_package_id,
+                (bool) $purchase->expires_by_months_only,
+            );
+            if ($expiresAt !== null && $expiresAt->copy()->timezone($bizTz)->startOfDay()->lt($today)) {
                 continue;
             }
 

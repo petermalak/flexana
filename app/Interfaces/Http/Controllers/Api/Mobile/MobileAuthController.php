@@ -8,6 +8,7 @@ use App\Infrastructure\Persistence\Eloquent\CategoryModel;
 use App\Infrastructure\Persistence\Eloquent\CustomerDeviceTokenModel;
 use App\Infrastructure\Persistence\Eloquent\PackageModel;
 use App\Models\Customer;
+use App\Support\ApiDateTime;
 use App\Support\PackagePurchaseExpiry;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -688,7 +689,8 @@ class MobileAuthController extends Controller
             ->where('status', 'active')
             ->get();
 
-        $today = Carbon::today()->startOfDay();
+        $bizTz = (string) config('app.business_timezone');
+        $today = Carbon::now($bizTz)->startOfDay();
         $yogaCandidates = [];
         $reformerCandidates = [];
         $unclassifiedCandidates = [];
@@ -698,8 +700,13 @@ class MobileAuthController extends Controller
                 continue;
             }
             $package = $this->resolvePackageForPurchase($purchase);
-            $expiresAt = PackagePurchaseExpiry::expiresAt($package, $purchase->purchase_date, $purchase->amelia_package_id);
-            if ($expiresAt !== null && $expiresAt->copy()->startOfDay()->lt($today)) {
+            $expiresAt = PackagePurchaseExpiry::expiresAt(
+                $package,
+                $purchase->purchase_date,
+                $purchase->amelia_package_id,
+                (bool) $purchase->expires_by_months_only,
+            );
+            if ($expiresAt !== null && $expiresAt->copy()->timezone($bizTz)->startOfDay()->lt($today)) {
                 continue;
             }
             $resolvedPackageId = $package?->id ?? $purchase->package_id ?? $purchase->amelia_package_id;
@@ -708,8 +715,8 @@ class MobileAuthController extends Controller
                 'packageName' => $package ? ($package->title ?? '') : '',
                 'remainingSessions' => $remaining,
                 'totalSessions' => (int) $purchase->total_sessions,
-                'purchaseDate' => $purchase->purchase_date?->toDateString(),
-                'expiresAt' => $expiresAt?->toDateString(),
+                'purchaseDate' => ApiDateTime::toBusinessDateString($purchase->purchase_date),
+                'expiresAt' => $expiresAt ? ApiDateTime::toBusinessDateString($expiresAt) : null,
                 '_purchase_date' => $purchase->purchase_date,
             ];
             $serviceType = $this->packageServiceType($package);
@@ -746,8 +753,8 @@ class MobileAuthController extends Controller
             'email' => $customer->email,
             'phone' => $customer->phone,
             'profileImage' => $profileImageUrl,
-            'phoneVerifiedAt' => $customer->phone_verified_at?->toIso8601String(),
-            'emailVerifiedAt' => $customer->email_verified_at?->toIso8601String(),
+            'phoneVerifiedAt' => ApiDateTime::toUtcIso8601($customer->phone_verified_at),
+            'emailVerifiedAt' => ApiDateTime::toUtcIso8601($customer->email_verified_at),
             'remainingSessions' => $remainingSessions,
             'remainingSessionsDetail' => [
                 'remainingYogaSessions' => $remainingYogaSessions,

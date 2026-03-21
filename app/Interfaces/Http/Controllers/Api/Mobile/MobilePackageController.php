@@ -158,10 +158,13 @@ class MobilePackageController extends Controller
     private function mapPackageToItem(PackageModel $package): array
     {
         $sessions = (int) ($package->total_sessions ?? 0);
-        $expiry = $package->expiry;
-        $expirationMonths = 0;
-        if ($expiry) {
-            $expirationMonths = (int) max(0, Carbon::now()->diffInMonths($expiry, false));
+        $durationMonths = (int) ($package->package_duration ?? 0);
+        if ($durationMonths > 0) {
+            $expirationMonths = $durationMonths;
+        } elseif ($package->expiry) {
+            $expirationMonths = (int) max(0, Carbon::now()->diffInMonths($package->expiry, false));
+        } else {
+            $expirationMonths = 0;
         }
 
         return [
@@ -328,6 +331,7 @@ class MobilePackageController extends Controller
                 'purchase_date' => Carbon::now(),
                 'status' => 'active',
                 'amelia_package_customer_id' => null,
+                'expires_by_months_only' => true,
             ]);
 
             PaymentModel::query()->create([

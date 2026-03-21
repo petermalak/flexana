@@ -18,10 +18,12 @@ class CustomerPackagePurchaseModel extends Model
         'purchase_date',
         'status',
         'amelia_package_customer_id',
+        'expires_by_months_only',
     ];
 
     protected $casts = [
         'purchase_date' => 'datetime',
+        'expires_by_months_only' => 'boolean',
     ];
 
     public function customer(): BelongsTo

@@ -82,24 +82,15 @@ class PackageResource extends Resource
                             ->required(),
                     ])->columns(4),
                 Components\Section::make('Settings')
-                    ->description('Expiry, duration, and whether the package is active.')
+                    ->description('Package duration in months (used for purchase expiry when customers buy this package). Legacy fields on the package row may still exist in the database for older purchases.')
                     ->icon(Heroicon::OutlinedCog6Tooth)
                     ->schema([
-                        Forms\Components\DatePicker::make('expiry')
-                            ->label('Expiry Date')
-                            ->required(),
                         Forms\Components\TextInput::make('package_duration')
                             ->label('Package Duration (months)')
                             ->numeric()
-                            ->minValue(0)
+                            ->minValue(1)
                             ->required()
-                            ->helperText('Duration in months. Ignored if “duration (days)” is set.'),
-                        Forms\Components\TextInput::make('package_duration_days')
-                            ->label('Package duration (days)')
-                            ->numeric()
-                            ->minValue(0)
-                            ->nullable()
-                            ->helperText('Optional. If set, app uses purchase date + days (e.g. 30-day unlimited). Overrides months.'),
+                            ->helperText('New purchases: expiry is calculated as purchase date + this many months.'),
                         Forms\Components\Select::make('status')
                             ->options([
                                 'active' => 'Active',

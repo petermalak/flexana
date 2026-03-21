@@ -52,7 +52,7 @@ final class BookingService
                 $eventInstance = $this->eventInstances->findByUuid($payload->eventInstanceUuid);
                 abort_if(!$eventInstance, 404, 'Event instance not found.');
                 abort_if($eventInstance->eventUuid !== $event->uuid, 400, 'Event instance does not belong to event.');
-                
+
                 $eventInstanceModel = EventModel::find($event->id)?->instances()->where('uuid', $payload->eventInstanceUuid)->first();
             }
 
@@ -83,7 +83,7 @@ final class BookingService
             if ($payload->packageUuid) {
                 $packageModel = $this->packages->findByUuid($payload->packageUuid);
                 abort_if(!$packageModel, 404, 'Package not found.');
-                
+
                 // Validate package
                 if ($packageModel->expiry && now() > $packageModel->expiry) {
                     abort(400, 'Package has expired.');

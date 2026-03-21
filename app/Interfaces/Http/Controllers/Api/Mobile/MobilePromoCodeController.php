@@ -4,6 +4,7 @@ namespace App\Interfaces\Http\Controllers\Api\Mobile;
 
 use App\Http\Controllers\Controller;
 use App\Infrastructure\Persistence\Eloquent\PromoCodeModel;
+use App\Support\ApiDateTime;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
@@ -56,12 +57,12 @@ class MobilePromoCodeController extends Controller
                 'not_yet_valid' => response()->json([
                     ...$payload,
                     'message' => 'This promo code is not yet valid.',
-                    'valid_from' => $promo->valid_from?->toIso8601String(),
+                    'valid_from' => ApiDateTime::toUtcIso8601($promo->valid_from),
                 ], 200),
                 'expired' => response()->json([
                     ...$payload,
                     'message' => 'This promo code has expired.',
-                    'valid_until' => $promo->valid_until?->toIso8601String(),
+                    'valid_until' => ApiDateTime::toUtcIso8601($promo->valid_until),
                 ], 200),
                 'usage_limit_reached' => response()->json([
                     ...$payload,
@@ -88,8 +89,8 @@ class MobilePromoCodeController extends Controller
             'code' => $promo->code,
             'name' => $promo->name,
             'percent_discount' => (float) $promo->percent_discount,
-            'valid_from' => $promo->valid_from?->toIso8601String(),
-            'valid_until' => $promo->valid_until?->toIso8601String(),
+            'valid_from' => ApiDateTime::toUtcIso8601($promo->valid_from),
+            'valid_until' => ApiDateTime::toUtcIso8601($promo->valid_until),
             'usage_limit' => $promo->usage_limit,
             'used_count' => $promo->used_count,
             'is_active' => $promo->is_active,

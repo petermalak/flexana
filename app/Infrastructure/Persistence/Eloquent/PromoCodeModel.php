@@ -2,6 +2,7 @@
 
 namespace App\Infrastructure\Persistence\Eloquent;
 
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Str;
@@ -63,17 +64,17 @@ class PromoCodeModel extends Model
             return 'inactive';
         }
 
-        $tz = config('app.timezone');
+        $tz = (string) config('app.business_timezone');
 
         if ($this->valid_from) {
             $fromStart = $this->valid_from->copy()->timezone($tz)->startOfDay();
-            if (now()->lt($fromStart)) {
+            if (Carbon::now($tz)->lt($fromStart)) {
                 return 'not_yet_valid';
             }
         }
         if ($this->valid_until) {
             $untilEnd = $this->valid_until->copy()->timezone($tz)->endOfDay();
-            if (now()->gt($untilEnd)) {
+            if (Carbon::now($tz)->gt($untilEnd)) {
                 return 'expired';
             }
         }

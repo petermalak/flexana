@@ -15,10 +15,28 @@ final class PackagePurchaseExpiry
      *
      * @param  int|null  $ameliaPackageIdFromPurchase  When set (e.g. from customer_package_purchases.amelia_package_id),
      *                                               used if the package row has no duration fields or package is missing.
+     * @param  bool  $expiresByMonthsOnly  New app purchases: only purchase_date + package_duration (months). Legacy rows (false)
+     *                                    keep days, package expiry date, and Amelia id fallbacks.
      */
-    public static function expiresAt(?PackageModel $package, ?Carbon $purchaseDate, ?int $ameliaPackageIdFromPurchase = null): ?Carbon
-    {
+    public static function expiresAt(
+        ?PackageModel $package,
+        ?Carbon $purchaseDate,
+        ?int $ameliaPackageIdFromPurchase = null,
+        bool $expiresByMonthsOnly = false,
+    ): ?Carbon {
         if (! $purchaseDate) {
+            return null;
+        }
+
+        if ($expiresByMonthsOnly) {
+            if (! $package) {
+                return null;
+            }
+            $months = $package->package_duration ?? null;
+            if ($months !== null && (int) $months > 0) {
+                return $purchaseDate->copy()->addMonths((int) $months);
+            }
+
             return null;
         }
 
