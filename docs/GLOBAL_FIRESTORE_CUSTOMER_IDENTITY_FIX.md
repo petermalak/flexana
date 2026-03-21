@@ -19,7 +19,9 @@ Production has **already** run `firestore:migrate` (and related imports). Fixing
 
 ## A. Reconciliation command (fix existing data)
 
-**Name (example):** `php artisan customers:merge-firestore-duplicates`
+**Command:** `php artisan customers:merge-firestore-duplicates` (dry-run by default; add `--force` after backup)
+
+- **`--keep-customer-id=1804`** — when the app login account must stay canonical (e.g. keep purchases moved onto that row), pass the id you log in with.
 
 **Behavior:**
 
