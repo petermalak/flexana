@@ -400,9 +400,8 @@ class MobilePackageController extends Controller
         $customerName = trim(($customer->first_name ?? '') . ' ' . ($customer->last_name ?? ''));
         $customerName = $customerName !== '' ? $customerName : ($customer->email ?? 'Customer');
 
-        $currency = 'USD';
         $promoLines = $promo !== null
-            ? PromoEmailText::appliedSection($promo, $priceBeforeDiscount, $priceAfterDiscount, $currency)
+            ? PromoEmailText::appliedSection($promo, $priceBeforeDiscount, $priceAfterDiscount)
             : '';
 
         $body = "Thank you for purchasing a package with Flexana!\n\n"

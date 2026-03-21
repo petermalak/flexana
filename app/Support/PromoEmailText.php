@@ -13,7 +13,6 @@ final class PromoEmailText
         ?PromoCodeModel $promo,
         float $amountBeforeDiscount,
         float $amountAfterDiscount,
-        string $currency = 'USD',
     ): string {
         if ($promo === null) {
             return '';
@@ -27,8 +26,8 @@ final class PromoEmailText
         $saved = number_format(max(0, $amountBeforeDiscount - $amountAfterDiscount), 2);
 
         return "\n* Promo code: {$code}\n"
-            . "* Discount: {$pctLabel}% off (you save {$currency} {$saved})\n"
-            . "* Price before discount: {$currency} {$before}\n"
-            . "* Amount charged: {$currency} {$after}\n\n";
+            . "* Discount: {$pctLabel}% off (you save {$saved})\n"
+            . "* Price before discount: {$before}\n"
+            . "* Amount charged: {$after}\n\n";
     }
 }

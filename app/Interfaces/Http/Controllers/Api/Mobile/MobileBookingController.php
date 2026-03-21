@@ -496,13 +496,11 @@ class MobileBookingController extends Controller
         $appointmentDate = ApiDateTime::formatInBusinessTimezone($appointment->booking_start, 'Y-m-d');
         $appointmentTime = ApiDateTime::formatInBusinessTimezone($appointment->booking_start, 'H:i');
 
-        $currency = $booking->currency ?? 'USD';
         $promoLines = $promo !== null
             ? PromoEmailText::appliedSection(
                 $promo,
                 $subtotalBeforePromo ?? (float) $booking->total_amount,
                 (float) $booking->total_amount,
-                $currency,
             )
             : '';
 
