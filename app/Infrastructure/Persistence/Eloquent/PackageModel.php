@@ -32,6 +32,7 @@ class PackageModel extends Model
 
     protected $casts = [
         'expiry' => 'date',
+        'package_duration' => 'integer',
         'package_duration_days' => 'integer',
     ];
 

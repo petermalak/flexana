@@ -173,7 +173,7 @@ class MobilePackageController extends Controller
             'expirationMonths' => $expirationMonths,
             'serviceType' => $this->packageServiceType($package),
             'classFormat' => $package->classType?->name ?? null,
-            'packageDuration' => $package->package_duration,
+            'packageDuration' => $package->package_duration !== null ? (int) $package->package_duration : null,
         ];
     }
 
