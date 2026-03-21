@@ -11,6 +11,7 @@ use App\Infrastructure\Persistence\Eloquent\ServiceModel;
 use App\Models\Customer;
 use App\Support\ApiDateTime;
 use App\Support\PackagePurchaseExpiry;
+use App\Support\PromoEmailText;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -158,6 +159,7 @@ class MobileBookingController extends Controller
         $customerPackagePurchaseId = null;
         $totalPrice = 0;
         $promoRecord = null;
+        $subtotalBeforePromo = null;
 
         if (! $isDropIn) {
             $purchaseToUse = $this->findValidPurchaseForCategory($customer->id, $sessionCategory, $persons);
@@ -171,7 +173,8 @@ class MobileBookingController extends Controller
             $customerPackagePurchaseId = $purchaseToUse->id;
         } else {
             $servicePrice = $service ? (float) ($service->price ?? 0) : 0;
-            $totalPrice = $servicePrice * $persons;
+            $subtotalBeforePromo = $servicePrice * $persons;
+            $totalPrice = $subtotalBeforePromo;
             $promoRecord = null;
             if ($promoCode) {
                 $promoRecord = PromoCodeModel::findByCode($promoCode);
@@ -234,7 +237,13 @@ class MobileBookingController extends Controller
             DB::commit();
 
             try {
-                $this->sendBookingCreatedEmail($booking, $appointment, $customer);
+                $this->sendBookingCreatedEmail(
+                    $booking,
+                    $appointment,
+                    $customer,
+                    $promoRecord,
+                    $isDropIn ? $subtotalBeforePromo : null,
+                );
             } catch (\Throwable $e) {
                 report($e);
             }
@@ -467,8 +476,13 @@ class MobileBookingController extends Controller
     /**
      * Send confirmation email after a booking is created.
      */
-    private function sendBookingCreatedEmail(BookingModel $booking, AppointmentModel $appointment, Customer $customer): void
-    {
+    private function sendBookingCreatedEmail(
+        BookingModel $booking,
+        AppointmentModel $appointment,
+        Customer $customer,
+        ?PromoCodeModel $promo = null,
+        ?float $subtotalBeforePromo = null,
+    ): void {
         if (! $customer->email) {
             return;
         }
@@ -482,6 +496,16 @@ class MobileBookingController extends Controller
         $appointmentDate = ApiDateTime::formatInBusinessTimezone($appointment->booking_start, 'Y-m-d');
         $appointmentTime = ApiDateTime::formatInBusinessTimezone($appointment->booking_start, 'H:i');
 
+        $currency = $booking->currency ?? 'USD';
+        $promoLines = $promo !== null
+            ? PromoEmailText::appliedSection(
+                $promo,
+                $subtotalBeforePromo ?? (float) $booking->total_amount,
+                (float) $booking->total_amount,
+                $currency,
+            )
+            : '';
+
         $body = "Thank you for booking with Flexana!\n\n"
             . "Booking Details\n\n"
             . "* Name: {$customerName},\n\n"
@@ -492,6 +516,7 @@ class MobileBookingController extends Controller
             . "* Time: {$appointmentTime}\n\n"
             . "* Instructor: " . ($provider?->name ?? 'Unknown') . "\n\n"
             . "* Type: " . ($service?->description ?? '') . "\n\n"
+            . $promoLines
             . "If you need to cancel, please do so at least 24 hours in advance via your Flexana account or by contacting us directly.\n\n"
             . "You can contact us at +20 122 0221100 to reschedule your session or request a refund.\n\n"
             . "We look forward to seeing you on the mat!\n\n"

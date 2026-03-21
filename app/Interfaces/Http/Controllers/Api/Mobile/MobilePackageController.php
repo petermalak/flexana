@@ -10,10 +10,12 @@ use App\Infrastructure\Persistence\Eloquent\PaymentModel;
 use App\Infrastructure\Persistence\Eloquent\PromoCodeModel;
 use App\Models\Category;
 use App\Models\Customer;
+use App\Support\PromoEmailText;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Validator;
 
 class MobilePackageController extends Controller
@@ -283,7 +285,8 @@ class MobilePackageController extends Controller
 
         // Use the package's total_sessions (admin-defined), not sum of service pivot quantities
         $totalSessions = (int) ($package->total_sessions ?? 0) ?: 1;
-        $price = (float) $package->price;
+        $originalPrice = (float) $package->price;
+        $price = $originalPrice;
         $promoRecord = null;
 
         if ($promoCode) {
@@ -346,6 +349,12 @@ class MobilePackageController extends Controller
 
             DB::commit();
 
+            try {
+                $this->sendPackagePurchaseEmail($customer, $package, $promoRecord, $originalPrice, $price, $totalSessions);
+            } catch (\Throwable $e) {
+                report($e);
+            }
+
             return response()->json([
                 'success' => true,
                 'message' => 'Package purchased successfully',
@@ -371,5 +380,46 @@ class MobilePackageController extends Controller
                 'error' => $message,
             ], 500);
         }
+    }
+
+    /**
+     * Confirmation email after a package purchase (when the customer has an email).
+     */
+    private function sendPackagePurchaseEmail(
+        Customer $customer,
+        PackageModel $package,
+        ?PromoCodeModel $promo,
+        float $priceBeforeDiscount,
+        float $priceAfterDiscount,
+        int $totalSessions,
+    ): void {
+        if (! $customer->email) {
+            return;
+        }
+
+        $customerName = trim(($customer->first_name ?? '') . ' ' . ($customer->last_name ?? ''));
+        $customerName = $customerName !== '' ? $customerName : ($customer->email ?? 'Customer');
+
+        $currency = 'USD';
+        $promoLines = $promo !== null
+            ? PromoEmailText::appliedSection($promo, $priceBeforeDiscount, $priceAfterDiscount, $currency)
+            : '';
+
+        $body = "Thank you for purchasing a package with Flexana!\n\n"
+            . "Purchase details\n\n"
+            . "* Name: {$customerName}\n\n"
+            . "* Email: {$customer->email}\n\n"
+            . "* Phone: {$customer->phone}\n\n"
+            . "* Package: " . ($package->title ?? 'Package') . "\n\n"
+            . "* Sessions included: {$totalSessions}\n\n"
+            . $promoLines
+            . "You can contact us at +20 122 0221100 if you have any questions.\n\n"
+            . "Flexana Team";
+
+        Mail::raw($body, function ($message) use ($customer, $customerName) {
+            $message->to($customer->email, $customerName)
+                ->cc('Info@flexanaegypt.com')
+                ->subject('Your Flexana package purchase confirmation');
+        });
     }
 }
