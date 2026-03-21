@@ -93,7 +93,13 @@ class PackageResource extends Resource
                             ->numeric()
                             ->minValue(0)
                             ->required()
-                            ->helperText('Duration in months'),
+                            ->helperText('Duration in months. Ignored if “duration (days)” is set.'),
+                        Forms\Components\TextInput::make('package_duration_days')
+                            ->label('Package duration (days)')
+                            ->numeric()
+                            ->minValue(0)
+                            ->nullable()
+                            ->helperText('Optional. If set, app uses purchase date + days (e.g. 30-day unlimited). Overrides months.'),
                         Forms\Components\Select::make('status')
                             ->options([
                                 'active' => 'Active',

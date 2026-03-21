@@ -8,6 +8,7 @@ use App\Infrastructure\Persistence\Eloquent\BookingModel;
 use App\Infrastructure\Persistence\Eloquent\CustomerPackagePurchaseModel;
 use App\Infrastructure\Persistence\Eloquent\ServiceModel;
 use App\Models\Customer;
+use App\Support\PackagePurchaseExpiry;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -399,12 +400,8 @@ class MobileBookingController extends Controller
             if ($packageCategory !== $sessionCategory) {
                 continue;
             }
-            if ($purchase->purchase_date && $package->package_duration) {
-                $expiresAt = $purchase->purchase_date->copy()->addMonths((int) $package->package_duration);
-                if ($expiresAt->copy()->startOfDay()->lt($today)) {
-                    continue;
-                }
-            } elseif ($package->expiry && $package->expiry->startOfDay()->lt($today)) {
+            $expiresAt = PackagePurchaseExpiry::expiresAt($package, $purchase->purchase_date);
+            if ($expiresAt !== null && $expiresAt->copy()->startOfDay()->lt($today)) {
                 continue;
             }
             return $purchase;

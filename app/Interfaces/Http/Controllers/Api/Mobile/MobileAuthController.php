@@ -8,10 +8,12 @@ use App\Infrastructure\Persistence\Eloquent\CategoryModel;
 use App\Infrastructure\Persistence\Eloquent\CustomerDeviceTokenModel;
 use App\Infrastructure\Persistence\Eloquent\PackageModel;
 use App\Models\Customer;
+use App\Support\PackagePurchaseExpiry;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
@@ -696,12 +698,7 @@ class MobileAuthController extends Controller
                 continue;
             }
             $package = $this->resolvePackageForPurchase($purchase);
-            $expiresAt = null;
-            if ($package && $purchase->purchase_date && $package->package_duration) {
-                $expiresAt = $purchase->purchase_date->copy()->addMonths((int) $package->package_duration);
-            } elseif ($package && $package->expiry) {
-                $expiresAt = $package->expiry;
-            }
+            $expiresAt = PackagePurchaseExpiry::expiresAt($package, $purchase->purchase_date);
             if ($expiresAt !== null && $expiresAt->copy()->startOfDay()->lt($today)) {
                 continue;
             }
@@ -817,7 +814,7 @@ class MobileAuthController extends Controller
 
             return $path;
         } catch (\Exception $e) {
-            \Log::error('Failed to store base64 image: ' . $e->getMessage());
+            Log::error('Failed to store base64 image: ' . $e->getMessage());
             return null;
         }
     }

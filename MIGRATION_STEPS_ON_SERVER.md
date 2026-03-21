@@ -18,6 +18,21 @@ php artisan migrate --force
 
 ---
 
+## 1b. Package expiry rules (optional, once per environment)
+
+After migrations, sync Amelia/Firestore package duration rules so `/api/v1/auth/me` can compute **`expiresAt`** from **`purchase_date`** (Yoga 3 months, Reformer 12 months, Unlimited 30 days / 3 months by `amelia_package_id`).
+
+```bash
+cd /var/www/flexana/backend   # or your app path
+php artisan packages:sync-amelia-duration-rules --dry-run   # preview
+php artisan packages:sync-amelia-duration-rules
+```
+
+- Updates **`packages`** rows where **`amelia_package_id`** is **40–41, 44–46, 47–48** (see `SyncAmeliaPackageDurationRulesCommand`).
+- If **0 rows** update, check that **`packages.amelia_package_id`** matches Amelia IDs (not Laravel internal `packages.id`).
+
+---
+
 ## 2. Firestore data migration (optional)
 
 Only if you are moving data from Firebase Firestore into Laravel.
@@ -105,6 +120,7 @@ php artisan users:sync-amelia
 | Step | Command | When |
 |------|---------|------|
 | 1 | `php artisan migrate --force` | Every deploy |
+| 1b | `php artisan packages:sync-amelia-duration-rules` | Once per env (or after changing package IDs), so `expiresAt` works |
 | 2 | `php artisan firestore:migrate ...` | Once (or when you have new Firestore exports) |
 | 3 | `php artisan amelia:fetch` | Once, or when you want to refresh from Amelia (WordPress DB) |
 | 4 | `php artisan users:sync-amelia` | Optional, when using Amelia + Laravel customers |
