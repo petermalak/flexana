@@ -698,7 +698,7 @@ class MobileAuthController extends Controller
                 continue;
             }
             $package = $this->resolvePackageForPurchase($purchase);
-            $expiresAt = PackagePurchaseExpiry::expiresAt($package, $purchase->purchase_date);
+            $expiresAt = PackagePurchaseExpiry::expiresAt($package, $purchase->purchase_date, $purchase->amelia_package_id);
             if ($expiresAt !== null && $expiresAt->copy()->startOfDay()->lt($today)) {
                 continue;
             }

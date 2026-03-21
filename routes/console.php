@@ -6,3 +6,10 @@ use Illuminate\Support\Facades\Artisan;
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
+
+Artisan::command('packages:repair-amelia-durations {--dry-run : Show changes without saving} {--skip-backfill : Skip backfilling amelia_package_id on purchases}', function () {
+    return $this->call('packages:sync-amelia-duration-rules', [
+        '--dry-run' => $this->option('dry-run'),
+        '--skip-backfill' => $this->option('skip-backfill'),
+    ]);
+})->purpose('Alias: fix wrong Yoga/Reformer months from an earlier sync — updates packages and backfills purchase amelia ids (same as packages:sync-amelia-duration-rules).');

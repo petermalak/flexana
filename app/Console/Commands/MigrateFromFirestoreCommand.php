@@ -210,6 +210,15 @@ class MigrateFromFirestoreCommand extends Command
                     ?? null
             );
             $ameliaPackageId = (int) ($fields['packageId'] ?? $fields['package_id'] ?? 0) ?: null;
+            if ($ameliaPackageId === null || $ameliaPackageId === 0) {
+                $rawDocId = $fields['id'] ?? null;
+                if (is_string($rawDocId)) {
+                    $rawDocId = trim($rawDocId);
+                }
+                if ($rawDocId !== null && $rawDocId !== '' && is_numeric($rawDocId)) {
+                    $ameliaPackageId = (int) $rawDocId;
+                }
+            }
             $ameliaPackageCustomerId = (int) ($fields['packageCustomerId'] ?? $fields['package_customer_id'] ?? 0) ?: null;
 
             if ($this->dryRun) {
