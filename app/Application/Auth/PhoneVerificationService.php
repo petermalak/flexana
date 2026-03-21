@@ -3,6 +3,7 @@
 namespace App\Application\Auth;
 
 use App\Models\Customer;
+use App\Support\PhoneNumberNormalizer;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -386,17 +387,7 @@ final class PhoneVerificationService
      */
     private function normalizePhone(string $phone): string
     {
-        $phone = preg_replace('/\s+/', '', $phone);
-        if ($phone === '') {
-            return '';
-        }
-        if (str_starts_with($phone, '0')) {
-            $phone = '+20' . substr($phone, 1);
-        }
-        if (! str_starts_with($phone, '+')) {
-            $phone = '+' . $phone;
-        }
-        return $phone;
+        return PhoneNumberNormalizer::normalize($phone);
     }
 
     private function generateCode(): string

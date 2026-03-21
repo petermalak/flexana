@@ -7,6 +7,7 @@ use App\Infrastructure\Persistence\Eloquent\CustomerPackagePurchaseModel;
 use App\Infrastructure\Persistence\Eloquent\PaymentModel;
 use App\Infrastructure\Persistence\Eloquent\PackageModel;
 use App\Models\Customer;
+use App\Support\PhoneNumberNormalizer;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -82,6 +83,61 @@ class MigrateFromFirestoreCommand extends Command
         return self::SUCCESS;
     }
 
+    /**
+     * Match app signup: same user may exist by normalized phone before Firebase uid is stored.
+     * Order: uid → normalized phone → email (with collision guards).
+     */
+    private function resolveCustomerForPurchasedPackage(array $fields, string $uid): ?Customer
+    {
+        $phoneNorm = PhoneNumberNormalizer::normalizeNullable($fields['phone'] ?? null);
+        $emailRaw = $fields['email'] ?? null;
+        $email = is_string($emailRaw) && trim($emailRaw) !== '' ? strtolower(trim($emailRaw)) : null;
+
+        $customer = null;
+
+        if ($uid !== '') {
+            $customer = Customer::query()
+                ->where(function ($q) use ($uid): void {
+                    $q->where('uid', $uid)->orWhere('firebase_uid', $uid);
+                })
+                ->first();
+        }
+
+        if (! $customer && $phoneNorm) {
+            $byPhone = Customer::query()->where('phone', $phoneNorm)->first();
+            if ($byPhone) {
+                if ($uid === '') {
+                    $customer = $byPhone;
+                } elseif (empty($byPhone->uid) && empty($byPhone->firebase_uid)) {
+                    $customer = $byPhone;
+                } elseif ((string) $byPhone->uid === $uid || (string) $byPhone->firebase_uid === $uid) {
+                    $customer = $byPhone;
+                } else {
+                    $this->warn("Phone conflict: customer {$byPhone->id} has different Firebase uid than export ({$uid}); skipping phone match.");
+                }
+            }
+        }
+
+        if (! $customer && $email) {
+            $byEmail = Customer::query()
+                ->whereRaw('LOWER(TRIM(email)) = ?', [$email])
+                ->first();
+            if ($byEmail) {
+                $canMerge = $uid === ''
+                    || ((empty($byEmail->uid) && empty($byEmail->firebase_uid))
+                        || (string) $byEmail->uid === $uid
+                        || (string) $byEmail->firebase_uid === $uid);
+                if ($canMerge) {
+                    $customer = $byEmail;
+                } else {
+                    $this->warn("Email conflict: customer {$byEmail->id} has different Firebase uid; skipping email match.");
+                }
+            }
+        }
+
+        return $customer;
+    }
+
     private function migratePurchasedPackages(string $path): void
     {
         $data = $this->readJson($path);
@@ -99,22 +155,23 @@ class MigrateFromFirestoreCommand extends Command
 
         foreach ($items as $doc) {
             $fields = $this->extractFields($doc);
-            $uid = $fields['uid'] ?? $fields['firebase_uid'] ?? null;
-            if (empty($uid)) {
-                $this->warn('Skipping doc: missing uid');
-                continue;
-            }
+            $uid = trim((string) ($fields['uid'] ?? $fields['firebase_uid'] ?? ''));
 
-            $customer = Customer::query()->where('uid', $uid)->orWhere('firebase_uid', $uid)->first();
+            $customer = $this->resolveCustomerForPurchasedPackage($fields, $uid);
             if (! $customer) {
+                if ($uid === '') {
+                    $this->warn('Skipping doc: missing uid and no matching customer by phone/email');
+                    continue;
+                }
                 if (! $this->dryRun) {
+                    $phoneNorm = PhoneNumberNormalizer::normalizeNullable($fields['phone'] ?? null);
                     $customer = Customer::query()->create([
                         'uid' => $uid,
                         'firebase_uid' => $uid,
                         'first_name' => $fields['firstName'] ?? $fields['first_name'] ?? 'Customer',
                         'last_name' => $fields['lastName'] ?? $fields['last_name'] ?? null,
                         'email' => $fields['email'] ?? null,
-                        'phone' => $fields['phone'] ?? null,
+                        'phone' => $phoneNorm,
                         'phone_verified_at' => ! empty($fields['isVerified']) ? now() : null,
                     ]);
                     $this->customersCreated++;
@@ -124,11 +181,16 @@ class MigrateFromFirestoreCommand extends Command
                 }
             } else {
                 if (! $this->dryRun) {
+                    if ($uid !== '' && (empty($customer->uid) && empty($customer->firebase_uid))) {
+                        $customer->uid = $uid;
+                        $customer->firebase_uid = $uid;
+                    }
+                    $phoneNorm = PhoneNumberNormalizer::normalizeNullable($fields['phone'] ?? null);
                     $customer->fill([
                         'first_name' => $fields['firstName'] ?? $customer->first_name,
                         'last_name' => $fields['lastName'] ?? $customer->last_name,
                         'email' => $fields['email'] ?? $customer->email,
-                        'phone' => $fields['phone'] ?? $customer->phone,
+                        'phone' => $phoneNorm ?? $customer->phone,
                         'phone_verified_at' => ! empty($fields['isVerified']) ? ($customer->phone_verified_at ?? now()) : $customer->phone_verified_at,
                     ])->save();
                     $this->customersUpdated++;
@@ -241,11 +303,12 @@ class MigrateFromFirestoreCommand extends Command
                 if (! $this->dryRun) {
                     $fullName = (string) ($fields['userName'] ?? $fields['user_name'] ?? 'Customer');
                     $parts = explode(' ', trim($fullName), 2);
+                    $phoneNorm = PhoneNumberNormalizer::normalizeNullable($fields['userPhone'] ?? $fields['user_phone'] ?? null);
                     $customer = Customer::query()->create([
                         'first_name' => $parts[0] ?: 'Customer',
                         'last_name' => $parts[1] ?? null,
                         'email' => $fields['userEmail'] ?? $fields['user_email'] ?? null,
-                        'phone' => $fields['userPhone'] ?? $fields['user_phone'] ?? null,
+                        'phone' => $phoneNorm,
                         'external_id' => (string) ($fields['userId'] ?? $fields['user_id'] ?? Str::uuid()),
                     ]);
                     $this->customersCreated++;
@@ -337,7 +400,7 @@ class MigrateFromFirestoreCommand extends Command
     {
         $fullName = (string) ($fields['userName'] ?? $fields['user_name'] ?? '');
         $email = $fields['userEmail'] ?? $fields['user_email'] ?? null;
-        $phone = $fields['userPhone'] ?? $fields['user_phone'] ?? null;
+        $phone = PhoneNumberNormalizer::normalizeNullable($fields['userPhone'] ?? $fields['user_phone'] ?? null);
 
         $currentFirst = (string) ($customer->first_name ?? '');
         $currentLast = (string) ($customer->last_name ?? '');
@@ -351,7 +414,7 @@ class MigrateFromFirestoreCommand extends Command
             && ($currentFirst === '' || $currentFirst === 'Customer');
 
         $shouldUpdateEmail = $email && ($customer->email === null || $customer->email === '');
-        $shouldUpdatePhone = $phone && ($customer->phone === null || $customer->phone === '');
+        $shouldUpdatePhone = $phone !== null && ($customer->phone === null || $customer->phone === '');
 
         $changed = false;
 
@@ -388,8 +451,9 @@ class MigrateFromFirestoreCommand extends Command
     private function resolveCustomerForPaymentBooking(array $fields): ?Customer
     {
         $userId = $fields['userId'] ?? $fields['user_id'] ?? null;
-        $email = $fields['userEmail'] ?? $fields['user_email'] ?? null;
-        $phone = $fields['userPhone'] ?? $fields['user_phone'] ?? null;
+        $emailRaw = $fields['userEmail'] ?? $fields['user_email'] ?? null;
+        $email = is_string($emailRaw) && trim($emailRaw) !== '' ? strtolower(trim($emailRaw)) : null;
+        $phoneNorm = PhoneNumberNormalizer::normalizeNullable($fields['userPhone'] ?? $fields['user_phone'] ?? null);
 
         if (is_numeric($userId)) {
             $customer = Customer::query()->where('amelia_user_id', (int) $userId)->first();
@@ -399,14 +463,16 @@ class MigrateFromFirestoreCommand extends Command
         }
 
         if ($email) {
-            $customer = Customer::query()->where('email', $email)->first();
+            $customer = Customer::query()
+                ->whereRaw('LOWER(TRIM(email)) = ?', [$email])
+                ->first();
             if ($customer) {
                 return $customer;
             }
         }
 
-        if ($phone) {
-            $customer = Customer::query()->where('phone', $phone)->first();
+        if ($phoneNorm) {
+            $customer = Customer::query()->where('phone', $phoneNorm)->first();
             if ($customer) {
                 return $customer;
             }
