@@ -10,12 +10,12 @@ use App\Infrastructure\Persistence\Eloquent\PaymentModel;
 use App\Infrastructure\Persistence\Eloquent\PromoCodeModel;
 use App\Models\Category;
 use App\Models\Customer;
+use App\Support\InternalNotificationMail;
 use App\Support\PromoEmailText;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Validator;
 
 class MobilePackageController extends Controller
@@ -422,10 +422,13 @@ class MobilePackageController extends Controller
             . "You can contact us at +20 122 0221100 if you have any questions.\n\n"
             . "Flexana Team";
 
-        Mail::raw($body, function ($message) use ($customer, $customerName) {
-            $message->to($customer->email, $customerName)
-                ->cc('Info@flexanaegypt.com')
-                ->subject('Your Flexana package purchase confirmation');
-        });
+        $subject = 'Your Flexana package purchase confirmation';
+
+        InternalNotificationMail::sendCustomerAndInternalCopy(
+            $body,
+            $subject,
+            $customer->email,
+            $customerName,
+        );
     }
 }

@@ -11,13 +11,13 @@ use App\Infrastructure\Persistence\Eloquent\ServiceModel;
 use App\Models\Customer;
 use App\Support\ApiDateTime;
 use App\Support\PackagePurchaseExpiry;
+use App\Support\InternalNotificationMail;
 use App\Support\PromoEmailText;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Facades\Mail;
 
 class MobileBookingController extends Controller
 {
@@ -520,11 +520,14 @@ class MobileBookingController extends Controller
             . "We look forward to seeing you on the mat!\n\n"
             . "Flexana Team";
 
-        Mail::raw($body, function ($message) use ($customer, $customerName) {
-            $message->to($customer->email, $customerName)
-                ->cc('Info@flexanaegypt.com')
-                ->subject('Your Flexana booking confirmation');
-        });
+        $subject = 'Your Flexana booking confirmation';
+
+        InternalNotificationMail::sendCustomerAndInternalCopy(
+            $body,
+            $subject,
+            $customer->email,
+            $customerName,
+        );
     }
 
     /**
@@ -549,10 +552,13 @@ class MobileBookingController extends Controller
             . "Thank you for choosing our company,\n"
             . "Flexana Team";
 
-        Mail::raw($body, function ($message) use ($customer, $customerName) {
-            $message->to($customer->email, $customerName)
-                ->cc('Info@flexanaegypt.com')
-                ->subject('Your Flexana booking has been cancelled');
-        });
+        $subject = 'Your Flexana booking has been cancelled';
+
+        InternalNotificationMail::sendCustomerAndInternalCopy(
+            $body,
+            $subject,
+            $customer->email,
+            $customerName,
+        );
     }
 }

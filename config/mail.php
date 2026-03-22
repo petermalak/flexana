@@ -115,4 +115,17 @@ return [
         'name' => env('MAIL_FROM_NAME', 'Example'),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Internal copy of customer-facing mail
+    |--------------------------------------------------------------------------
+    |
+    | Receives a separate outgoing message (not CC). Leave empty to disable.
+    |
+    */
+
+    'internal_copy' => [
+        'address' => env('MAIL_INTERNAL_COPY_ADDRESS', 'info@flexanaegypt.com'),
+    ],
+
 ];
