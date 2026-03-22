@@ -23,7 +23,7 @@ class MobilePackageController extends Controller
     /**
      * Get package offers grouped by category.
      * Returns a list of categories (from database), each with its related packages.
-     * Package-to-category is resolved by: (1) package's services' category_id, (2) fallback: package service_type vs category name.
+     * Package-to-category is resolved by: (1) explicit package service_type (admin Category), (2) keyword inference from text, (3) first linked service's category_id.
      * All packages are included; unmatched ones appear under "Uncategorized".
      */
     public function index(Request $request): JsonResponse
@@ -184,10 +184,17 @@ class MobilePackageController extends Controller
 
     /**
      * Derive category/service type (Yoga, Reformer Pilates) from package.
-     * Matches if any of: service_type, title, description, or any linked service name/description contain yoga or reformer.
+     * Admin "Category" is stored as service_type — that wins over text inference so descriptions
+     * like "Yoga and Mat pilates" do not override the chosen category (keywords such as "mat pilates"
+     * would otherwise map to Reformer Pilates).
      */
     private function packageServiceType(PackageModel $package): ?string
     {
+        $explicit = $package->service_type ?? null;
+        if ($explicit === 'Yoga' || $explicit === 'Reformer Pilates') {
+            return $explicit;
+        }
+
         $text = $this->packageTextToMatch($package);
 
         return $this->inferCategoryNameFromText($text);
