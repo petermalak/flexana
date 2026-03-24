@@ -93,10 +93,12 @@ class MobileInstructorController extends Controller
                 continue;
             }
             $t = (string) $token;
-            $resolved = $this->resolveCategoryIdsFromStringToken($t);
-            if ($resolved === []) {
-                $resolved = $this->resolveCategoryIdsFromCanonicalScheduleToken($t);
-            }
+            // Union exact slug/name matches with schedule-tab shortcuts (yoga / reformer-pilates etc.)
+            // so we never skip canonical IDs just because a partial DB match returned something wrong.
+            $resolved = array_values(array_unique(array_merge(
+                $this->resolveCategoryIdsFromStringToken($t),
+                $this->resolveCategoryIdsFromCanonicalScheduleToken($t),
+            )));
             $ids = array_merge($ids, $resolved);
         }
 
@@ -197,13 +199,20 @@ class MobileInstructorController extends Controller
      */
     private function normalizeScheduleCategoryParam(string $category): ?string
     {
-        $c = strtolower(trim(str_replace('-', ' ', $category)));
+        $c = strtolower(trim(str_replace(['-', '_'], ' ', $category)));
+        $c = preg_replace('/\s+/', ' ', $c) ?? '';
         if (in_array($c, ['yoga'], true)) {
             return 'Yoga';
         }
         if (in_array($c, [
             'reformer', 'reformers', 'reformer pilates', 'reformers pilates', 'reform pilates',
+            'reformer pilate', 'reform pilate',
         ], true)) {
+            return 'Reformer Pilates';
+        }
+
+        // e.g. "reformerpilates" if something strips spaces
+        if (in_array(preg_replace('/\s+/', '', $c) ?: '', ['reformerpilates', 'reformerspilates'], true)) {
             return 'Reformer Pilates';
         }
 
@@ -234,7 +243,7 @@ class MobileInstructorController extends Controller
             $sl = $slugLower($cat);
             if ($sl === 'yoga' || (str_contains($nl, 'yoga') && ! str_contains($nl, 'pilates'))) {
                 $yogaIds[] = $cat->id;
-            } elseif (in_array($sl, ['reformer-pilates', 'pilates', 'reformer'], true)
+            } elseif (in_array($sl, ['reformer-pilates', 'reformers-pilates', 'pilates', 'reformer', 'reformers'], true)
                 || str_contains($nl, 'reformer')
                 || (str_contains($nl, 'pilates') && ! str_contains($nl, 'yoga'))) {
                 $reformerIds[] = $cat->id;
@@ -250,7 +259,18 @@ class MobileInstructorController extends Controller
         }
         if (count($reformerIds) === 0) {
             foreach ($categories as $cat) {
-                if (str_contains($nameLower($cat), 'pilates') || str_contains($nameLower($cat), 'reformer')) {
+                $nl = $nameLower($cat);
+                $sl = $slugLower($cat);
+                if (str_contains($nl, 'reformer') || in_array($sl, ['reformer-pilates', 'reformers-pilates', 'pilates', 'reformer', 'reformers'], true)) {
+                    $reformerIds[] = $cat->id;
+                    break;
+                }
+            }
+        }
+        if (count($reformerIds) === 0) {
+            foreach ($categories as $cat) {
+                $nl = $nameLower($cat);
+                if (str_contains($nl, 'pilates') && ! str_contains($nl, 'yoga')) {
                     $reformerIds[] = $cat->id;
                     break;
                 }
