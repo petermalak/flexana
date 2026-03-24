@@ -716,6 +716,8 @@ class MobileAuthController extends Controller
                 'remainingSessions' => $remaining,
                 'totalSessions' => (int) $purchase->total_sessions,
                 'purchaseDate' => ApiDateTime::toBusinessDateString($purchase->purchase_date),
+                'purchaseAt' => ApiDateTime::toBusinessIso8601($purchase->purchase_date),
+                'purchaseAtUtc' => ApiDateTime::toUtcIso8601($purchase->purchase_date),
                 'expiresAt' => $expiresAt ? ApiDateTime::toBusinessDateString($expiresAt) : null,
                 '_purchase_date' => $purchase->purchase_date,
             ];
@@ -753,8 +755,10 @@ class MobileAuthController extends Controller
             'email' => $customer->email,
             'phone' => $customer->phone,
             'profileImage' => $profileImageUrl,
-            'phoneVerifiedAt' => ApiDateTime::toUtcIso8601($customer->phone_verified_at),
-            'emailVerifiedAt' => ApiDateTime::toUtcIso8601($customer->email_verified_at),
+            'phoneVerifiedAt' => ApiDateTime::toBusinessIso8601($customer->phone_verified_at),
+            'phoneVerifiedAtUtc' => ApiDateTime::toUtcIso8601($customer->phone_verified_at),
+            'emailVerifiedAt' => ApiDateTime::toBusinessIso8601($customer->email_verified_at),
+            'emailVerifiedAtUtc' => ApiDateTime::toUtcIso8601($customer->email_verified_at),
             'remainingSessions' => $remainingSessions,
             'remainingSessionsDetail' => [
                 'remainingYogaSessions' => $remainingYogaSessions,

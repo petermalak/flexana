@@ -124,6 +124,7 @@ class MobileSessionController extends Controller
                 'serviceType' => $serviceType,
                 'price' => $service ? (float) ($service->price ?? 0) : 0.0,
                 'date' => ApiDateTime::toBusinessIso8601($appointment->booking_start),
+                'dateUtc' => ApiDateTime::toUtcIso8601($appointment->booking_start),
                 'isBooked' => $isBooked,
                 'isFull' => $isFull,
                 'canCancel' => $canCancel,

@@ -47,16 +47,20 @@ class MobileBookingController extends Controller
             $sessionDate = null;
             $sessionTime = null;
             $sessionStart = null;
+            $sessionStartUtc = null;
             $sessionEnd = null;
+            $sessionEndUtc = null;
 
             if ($appointment && $appointment->booking_start) {
-                $sessionStart = ApiDateTime::toUtcIso8601($appointment->booking_start);
+                $sessionStart = ApiDateTime::toBusinessIso8601($appointment->booking_start);
+                $sessionStartUtc = ApiDateTime::toUtcIso8601($appointment->booking_start);
                 $sessionDate = ApiDateTime::formatInBusinessTimezone($appointment->booking_start, 'Y-m-d');
                 $sessionTime = ApiDateTime::formatInBusinessTimezone($appointment->booking_start, 'H:i:s');
             }
 
             if ($appointment && $appointment->booking_end) {
-                $sessionEnd = ApiDateTime::toUtcIso8601($appointment->booking_end);
+                $sessionEnd = ApiDateTime::toBusinessIso8601($appointment->booking_end);
+                $sessionEndUtc = ApiDateTime::toUtcIso8601($appointment->booking_end);
             }
 
             $isDropIn = $booking->is_drop_in ?? ($booking->answers['isDropIn'] ?? false);
@@ -66,11 +70,14 @@ class MobileBookingController extends Controller
                 'sessionID' => $booking->appointment_id ? (string) $booking->appointment_id : null,
                 'serviceName' => $service?->name,
                 'instructorName' => $provider?->name,
-                'bookedAt' => ApiDateTime::toUtcIso8601($booking->booked_at),
+                'bookedAt' => ApiDateTime::toBusinessIso8601($booking->booked_at),
+                'bookedAtUtc' => ApiDateTime::toUtcIso8601($booking->booked_at),
                 'sessionDate' => $sessionDate,
                 'sessionTime' => $sessionTime,
                 'sessionStart' => $sessionStart,
+                'sessionStartUtc' => $sessionStartUtc,
                 'sessionEnd' => $sessionEnd,
+                'sessionEndUtc' => $sessionEndUtc,
                 'status' => $booking->status,
                 'paymentStatus' => $booking->payment_status,
                 'partySize' => $booking->party_size,

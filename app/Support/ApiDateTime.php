@@ -6,8 +6,11 @@ use Carbon\Carbon;
 use DateTimeInterface;
 
 /**
- * Mobile API: emit absolute instants as UTC ISO-8601 so clients can localize correctly.
- * Wall-clock strings (session date/time, emails) use {@see config('app.business_timezone')}.
+ * Mobile API datetime convention:
+ * - Studio-scheduled instants (sessions, bookings, promo validity windows): primary field uses
+ *   {@see toBusinessIso8601} (wall clock + offset matching admin); add a sibling `*Utc` field via
+ *   {@see toUtcIso8601} when the client needs an absolute instant.
+ * - Calendar-only dates (e.g. package expiry day) may use {@see toBusinessDateString}.
  */
 final class ApiDateTime
 {
