@@ -9,14 +9,15 @@ use App\Models\Category;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class MobileInstructorController extends Controller
 {
     /**
      * Get instructors for home screen (full details).
-     * Query: category (optional) — comma-separated category IDs, slugs (as in GET /api/v1/categories), or names;
-     * only instructors with at least one matching category are returned.
+     * Query: category (optional) — comma-separated category IDs, slugs (as in GET /api/v1/categories), or names.
+     * Filtering uses the same instructor categories as Filament (staff “Categories”, category_staff pivot), not service categories.
      */
     public function index(Request $request): JsonResponse
     {
@@ -51,8 +52,8 @@ class MobileInstructorController extends Controller
 
     /**
      * Get instructors for schedule screen (simple list).
-     * Query: category (optional) — comma-separated category IDs, slugs (as in GET /api/v1/categories), or names;
-     * only instructors with at least one matching category are returned.
+     * Query: category (optional) — comma-separated category IDs, slugs (as in GET /api/v1/categories), or names.
+     * Filtering uses the same instructor categories as Filament (staff “Categories”, category_staff pivot), not service categories.
      */
     public function simple(Request $request): JsonResponse
     {
@@ -74,7 +75,7 @@ class MobileInstructorController extends Controller
     }
 
     /**
-     * Filter query by category from request (query param: category — comma-separated IDs, slugs, or names).
+     * Filter staff by categories assigned on the instructor record (category_staff), matching resolved category IDs.
      */
     private function applyCategoryFilter($query, Request $request): void
     {
@@ -100,14 +101,23 @@ class MobileInstructorController extends Controller
         }
 
         $ids = array_values(array_unique(array_filter($ids)));
+
+        $linkedToStaff = $this->categoryIdsLinkedToActiveStaff();
+        if ($linkedToStaff !== []) {
+            $ids = array_values(array_intersect($ids, $linkedToStaff));
+        }
+
         if (count($ids) === 0) {
-            // Param was provided but nothing matched — do not return unfiltered instructors.
+            // Param was provided but nothing matched (or no instructor uses those categories).
             $query->whereRaw('0 = 1');
 
             return;
         }
 
-        $query->whereHas('categories', fn ($q) => $q->whereIn('categories.id', $ids));
+        $query->whereHas(
+            'categories',
+            fn ($q) => $q->whereIn('categories.id', $ids),
+        );
     }
 
     /**
@@ -191,7 +201,9 @@ class MobileInstructorController extends Controller
         if (in_array($c, ['yoga'], true)) {
             return 'Yoga';
         }
-        if (in_array($c, ['reformer', 'reformer pilates', 'reform pilates'], true)) {
+        if (in_array($c, [
+            'reformer', 'reformers', 'reformer pilates', 'reformers pilates', 'reform pilates',
+        ], true)) {
             return 'Reformer Pilates';
         }
 
@@ -248,5 +260,21 @@ class MobileInstructorController extends Controller
         $ids = $canonicalType === 'Yoga' ? $yogaIds : $reformerIds;
 
         return array_map(static fn ($id) => (int) $id, $ids);
+    }
+
+    /**
+     * Category IDs that appear on at least one active staff row (Filament “Categories”).
+     *
+     * @return list<int>
+     */
+    private function categoryIdsLinkedToActiveStaff(): array
+    {
+        $rows = DB::table('category_staff')
+            ->join('staff', 'staff.id', '=', 'category_staff.staff_id')
+            ->where('staff.is_active', true)
+            ->distinct()
+            ->pluck('category_staff.category_id');
+
+        return array_values(array_unique(array_map(static fn ($id) => (int) $id, $rows->all())));
     }
 }
