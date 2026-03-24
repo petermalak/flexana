@@ -9,7 +9,6 @@ use App\Models\Category;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class MobileInstructorController extends Controller
@@ -79,7 +78,7 @@ class MobileInstructorController extends Controller
      */
     private function applyCategoryFilter($query, Request $request): void
     {
-        $param = $request->query('category');
+        $param = $request->input('category');
         if ($param === null || $param === '') {
             return;
         }
@@ -92,25 +91,12 @@ class MobileInstructorController extends Controller
                 $ids[] = (int) $token;
                 continue;
             }
-            $t = (string) $token;
-            // Union exact slug/name matches with schedule-tab shortcuts (yoga / reformer-pilates etc.)
-            // so we never skip canonical IDs just because a partial DB match returned something wrong.
-            $resolved = array_values(array_unique(array_merge(
-                $this->resolveCategoryIdsFromStringToken($t),
-                $this->resolveCategoryIdsFromCanonicalScheduleToken($t),
-            )));
-            $ids = array_merge($ids, $resolved);
+            $ids = array_merge($ids, $this->resolveCategoryIdsForInstructorFilter((string) $token));
         }
 
         $ids = array_values(array_unique(array_filter($ids)));
 
-        $linkedToStaff = $this->categoryIdsLinkedToActiveStaff();
-        if ($linkedToStaff !== []) {
-            $ids = array_values(array_intersect($ids, $linkedToStaff));
-        }
-
         if (count($ids) === 0) {
-            // Param was provided but nothing matched (or no instructor uses those categories).
             $query->whereRaw('0 = 1');
 
             return;
@@ -120,6 +106,52 @@ class MobileInstructorController extends Controller
             'categories',
             fn ($q) => $q->whereIn('categories.id', $ids),
         );
+    }
+
+    /**
+     * Resolve one filter token to category IDs. Mobile sends the category slug from GET /api/v1/categories — match that first.
+     *
+     * @return list<int>
+     */
+    private function resolveCategoryIdsForInstructorFilter(string $token): array
+    {
+        $t = trim($token);
+        if ($t === '') {
+            return [];
+        }
+
+        // 1) Slug: same field as `slug` in categories API (case-insensitive, trimmed).
+        $bySlug = CategoryModel::query()
+            ->where('status', true)
+            ->whereNotNull('slug')
+            ->where('slug', '!=', '')
+            ->whereRaw('LOWER(TRIM(slug)) = LOWER(?)', [$t])
+            ->pluck('id')
+            ->all();
+
+        if ($bySlug !== []) {
+            return array_map(static fn ($id) => (int) $id, $bySlug);
+        }
+
+        // 2) Exact display name (case-insensitive).
+        $byName = CategoryModel::query()
+            ->where('status', true)
+            ->whereRaw('LOWER(TRIM(name)) = LOWER(?)', [$t])
+            ->pluck('id')
+            ->all();
+
+        if ($byName !== []) {
+            return array_map(static fn ($id) => (int) $id, $byName);
+        }
+
+        // 3) Hyphen / slugify variants (e.g. legacy tokens).
+        $fromVariants = $this->resolveCategoryIdsFromStringToken($t);
+        if ($fromVariants !== []) {
+            return $fromVariants;
+        }
+
+        // 4) Schedule-tab shortcuts: yoga, reformer, reformer-pilates, etc.
+        return $this->resolveCategoryIdsFromCanonicalScheduleToken($t);
     }
 
     /**
@@ -165,11 +197,11 @@ class MobileInstructorController extends Controller
             ->where(function ($q) use ($candidates) {
                 $q->where(function ($slugQ) use ($candidates) {
                     foreach ($candidates as $c) {
-                        $slugQ->orWhereRaw('LOWER(slug) = ?', [$c]);
+                        $slugQ->orWhereRaw('LOWER(TRIM(slug)) = ?', [$c]);
                     }
                 })->orWhere(function ($nameQ) use ($candidates) {
                     foreach ($candidates as $c) {
-                        $nameQ->orWhereRaw('LOWER(name) = ?', [$c]);
+                        $nameQ->orWhereRaw('LOWER(TRIM(name)) = ?', [$c]);
                     }
                 });
             })
@@ -280,21 +312,5 @@ class MobileInstructorController extends Controller
         $ids = $canonicalType === 'Yoga' ? $yogaIds : $reformerIds;
 
         return array_map(static fn ($id) => (int) $id, $ids);
-    }
-
-    /**
-     * Category IDs that appear on at least one active staff row (Filament “Categories”).
-     *
-     * @return list<int>
-     */
-    private function categoryIdsLinkedToActiveStaff(): array
-    {
-        $rows = DB::table('category_staff')
-            ->join('staff', 'staff.id', '=', 'category_staff.staff_id')
-            ->where('staff.is_active', true)
-            ->distinct()
-            ->pluck('category_staff.category_id');
-
-        return array_values(array_unique(array_map(static fn ($id) => (int) $id, $rows->all())));
     }
 }
