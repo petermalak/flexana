@@ -34,7 +34,7 @@ class MobileSessionController extends Controller
         $upcomingCutoff = Carbon::now($scheduleTz);
 
         $query = AppointmentModel::query()
-            ->with(['service', 'provider', 'bookings'])
+            ->with(['service.category', 'provider', 'bookings'])
             ->where('status', 'approved')
             // Only upcoming sessions — use schedule TZ so SQL + PHP match studio clocks / stored datetimes
             ->where('booking_start', '>', $upcomingCutoff);
@@ -107,8 +107,7 @@ class MobileSessionController extends Controller
                 : Carbon::parse($appointment->booking_start, $scheduleTz);
             $canBook = ! $isFull && $startInstant->gt($upcomingCutoff);
 
-            $serviceText = $service ? (($service->name ?? '') . ' ' . ($service->description ?? '')) : '';
-            $serviceType = CategorizeServicesCommand::inferCategoryNameFromText($serviceText);
+            $serviceType = $this->sessionCategoryFromService($service);
 
             $willPay = true;
             if ($customerId && $service instanceof ServiceModel) {
@@ -193,7 +192,10 @@ class MobileSessionController extends Controller
                         $q2->whereIn('category_id', $reformerCategoryIds);
                     }
                     if ($reformerRegexpPattern !== '') {
-                        $q2->orWhereRaw("{$serviceTextExpr} REGEXP ?", [$reformerRegexpPattern]);
+                        $q2->orWhere(function ($qRegex) use ($serviceTextExpr, $reformerRegexpPattern) {
+                            $qRegex->whereNull('category_id')
+                                ->whereRaw("{$serviceTextExpr} REGEXP ?", [$reformerRegexpPattern]);
+                        });
                     }
                     if (count($reformerCategoryIds) === 0 && $reformerRegexpPattern === '') {
                         $q2->whereRaw('1 = 0');
@@ -226,7 +228,10 @@ class MobileSessionController extends Controller
                         $qy->whereIn('category_id', $yogaCategoryIds);
                     }
                     if ($yogaRegexpPattern !== '') {
-                        $qy->orWhereRaw("{$serviceTextExpr} REGEXP ?", [$yogaRegexpPattern]);
+                        $qy->orWhere(function ($qRegex) use ($serviceTextExpr, $yogaRegexpPattern) {
+                            $qRegex->whereNull('category_id')
+                                ->whereRaw("{$serviceTextExpr} REGEXP ?", [$yogaRegexpPattern]);
+                        });
                     }
                 });
 
@@ -323,18 +328,28 @@ class MobileSessionController extends Controller
      */
     private function sessionCategoryFromService(?ServiceModel $service): ?string
     {
-        if (! $service || ! $service->name) {
+        if (! $service) {
             return null;
         }
-        $name = strtolower($service->name);
-        if (str_contains($name, 'reformer') || str_contains($name, 'reform pilates')) {
-            return 'Reformer Pilates';
+        $category = $service->relationLoaded('category') ? $service->category : null;
+        if ($category) {
+            $name = strtolower((string) ($category->name ?? ''));
+            $slug = strtolower((string) ($category->slug ?? ''));
+            if ($slug === 'yoga' || (str_contains($name, 'yoga') && ! str_contains($name, 'pilates'))) {
+                return 'Yoga';
+            }
+            if (in_array($slug, ['reformer-pilates', 'pilates', 'reformer'], true)
+                || str_contains($name, 'reformer')
+                || (str_contains($name, 'pilates') && ! str_contains($name, 'yoga'))) {
+                return 'Reformer Pilates';
+            }
         }
-        if (str_contains($name, 'yoga')) {
-            return 'Yoga';
+        if (! $service->name) {
+            return null;
         }
+        $serviceText = trim(($service->name ?? '') . ' ' . ($service->description ?? ''));
 
-        return 'Yoga';
+        return CategorizeServicesCommand::inferCategoryNameFromText($serviceText) ?? 'Yoga';
     }
 
     /**
