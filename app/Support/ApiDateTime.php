@@ -44,4 +44,19 @@ final class ApiDateTime
 
         return $formatted !== '' ? $formatted : null;
     }
+
+    /**
+     * Emit ISO-8601 in business timezone (with offset), useful when API must
+     * match admin wall-clock display exactly.
+     */
+    public static function toBusinessIso8601(Carbon|DateTimeInterface|string|null $value): ?string
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+        $c = $value instanceof Carbon ? $value->copy() : Carbon::parse($value);
+        $tz = (string) config('app.business_timezone');
+
+        return $c->timezone($tz)->toIso8601String();
+    }
 }
