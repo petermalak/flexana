@@ -8,12 +8,14 @@ use App\Infrastructure\Persistence\Eloquent\StaffModel;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 
 class MobileInstructorController extends Controller
 {
     /**
      * Get instructors for home screen (full details).
-     * Query: category (optional) — comma-separated category IDs or names (or slugs); only instructors with at least one matching category are returned.
+     * Query: category (optional) — comma-separated category IDs, slugs (as in GET /api/v1/categories), or names;
+     * only instructors with at least one matching category are returned.
      */
     public function index(Request $request): JsonResponse
     {
@@ -48,7 +50,8 @@ class MobileInstructorController extends Controller
 
     /**
      * Get instructors for schedule screen (simple list).
-     * Query: category (optional) — comma-separated category IDs or names (or slugs); only instructors with at least one matching category are returned.
+     * Query: category (optional) — comma-separated category IDs, slugs (as in GET /api/v1/categories), or names;
+     * only instructors with at least one matching category are returned.
      */
     public function simple(Request $request): JsonResponse
     {
@@ -70,7 +73,7 @@ class MobileInstructorController extends Controller
     }
 
     /**
-     * Filter query by category IDs or names from request (query param: category — comma-separated IDs or names/slugs).
+     * Filter query by category from request (query param: category — comma-separated IDs, slugs, or names).
      */
     private function applyCategoryFilter($query, Request $request): void
     {
@@ -87,16 +90,7 @@ class MobileInstructorController extends Controller
                 $ids[] = (int) $token;
                 continue;
             }
-            $found = CategoryModel::query()
-                ->where('status', true)
-                ->where(function ($q) use ($token) {
-                    $lower = strtolower($token);
-                    $q->whereRaw('LOWER(name) = ?', [$lower])
-                        ->orWhereRaw('LOWER(slug) = ?', [$lower]);
-                })
-                ->pluck('id')
-                ->all();
-            $ids = array_merge($ids, $found);
+            $ids = array_merge($ids, $this->resolveCategoryIdsFromStringToken((string) $token));
         }
 
         $ids = array_values(array_unique(array_filter($ids)));
@@ -105,5 +99,62 @@ class MobileInstructorController extends Controller
         }
 
         $query->whereHas('categories', fn ($q) => $q->whereIn('categories.id', $ids));
+    }
+
+    /**
+     * Build match candidates for a category query token (slug variants align with Str::slug on create).
+     *
+     * @return list<string>
+     */
+    private function categoryTokenCandidates(string $token): array
+    {
+        $trimmed = trim($token);
+        if ($trimmed === '') {
+            return [];
+        }
+
+        $lower = strtolower($trimmed);
+        $hyphenated = preg_replace('/-+/', '-', str_replace([' ', '_'], '-', $lower));
+        $hyphenated = trim((string) $hyphenated, '-');
+        $slugified = Str::slug($trimmed);
+
+        $candidates = array_unique(array_values(array_filter([
+            $lower,
+            $hyphenated !== '' ? $hyphenated : null,
+            $slugified !== '' ? strtolower($slugified) : null,
+        ])));
+
+        return array_values($candidates);
+    }
+
+    /**
+     * Resolve active category IDs for one non-numeric token (name or slug, with hyphen/spacing variants).
+     *
+     * @return list<int>
+     */
+    private function resolveCategoryIdsFromStringToken(string $token): array
+    {
+        $candidates = $this->categoryTokenCandidates($token);
+        if ($candidates === []) {
+            return [];
+        }
+
+        $rows = CategoryModel::query()
+            ->where('status', true)
+            ->where(function ($q) use ($candidates) {
+                $q->where(function ($slugQ) use ($candidates) {
+                    foreach ($candidates as $c) {
+                        $slugQ->orWhereRaw('LOWER(slug) = ?', [$c]);
+                    }
+                })->orWhere(function ($nameQ) use ($candidates) {
+                    foreach ($candidates as $c) {
+                        $nameQ->orWhereRaw('LOWER(name) = ?', [$c]);
+                    }
+                });
+            })
+            ->pluck('id')
+            ->all();
+
+        return array_map(static fn ($id) => (int) $id, $rows);
     }
 }
