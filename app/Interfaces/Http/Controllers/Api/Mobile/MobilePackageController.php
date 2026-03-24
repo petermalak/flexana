@@ -410,6 +410,7 @@ class MobilePackageController extends Controller
         $promoLines = $promo !== null
             ? PromoEmailText::appliedSection($promo, $priceBeforeDiscount, $priceAfterDiscount)
             : '';
+        $category = $this->packageServiceType($package) ?? 'Uncategorized';
 
         $body = "Thank you for purchasing a package with Flexana!\n\n"
             . "Purchase details\n\n"
@@ -417,6 +418,7 @@ class MobilePackageController extends Controller
             . "* Email: {$customer->email}\n\n"
             . "* Phone: {$customer->phone}\n\n"
             . "* Package: " . ($package->title ?? 'Package') . "\n\n"
+            . "* Category: {$category}\n\n"
             . "* Sessions included: {$totalSessions}\n\n"
             . $promoLines
             . "You can contact us at +20 122 0221100 if you have any questions.\n\n"

@@ -99,7 +99,7 @@ class MobileSessionController extends Controller
             $isBooked = $myBooking !== null;
             $minutesBeforeCancellation = (int) ($service->time_before ?? 0);
             $canCancelUntil = $myBooking
-                ? Carbon::parse($appointment->booking_start)->subMinutes($minutesBeforeCancellation)
+                ? Carbon::parse($appointment->booking_start, $scheduleTz)->subMinutes($minutesBeforeCancellation)
                 : null;
             $canCancel = $isBooked && $canCancelUntil && Carbon::now($scheduleTz)->lte($canCancelUntil);
             $startInstant = $appointment->booking_start instanceof Carbon
