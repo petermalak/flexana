@@ -19,6 +19,7 @@ class PackageModel extends Model
         'amelia_package_id',
         'class_type_id',
         'service_type',
+        'sort_order',
         'title',
         'description',
         'total_sessions',
@@ -32,6 +33,7 @@ class PackageModel extends Model
 
     protected $casts = [
         'expiry' => 'date',
+        'sort_order' => 'integer',
         'package_duration' => 'integer',
         'package_duration_days' => 'integer',
     ];

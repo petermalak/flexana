@@ -11,6 +11,7 @@ final class PackageData extends Data
         public readonly ?array $classType,
         public readonly string $title,
         public readonly ?string $description,
+        public readonly int $sortOrder,
         public readonly int $totalSessions,
         public readonly int $usedSessions,
         public readonly float $discount,

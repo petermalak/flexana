@@ -59,7 +59,14 @@ class AmeliaBookingResource extends Resource
                     ->numeric()
                     ->minValue(1)
                     ->default(1)
-                    ->required(),
+                    ->required()
+                    ->label('Party size (total seats)'),
+                Forms\Components\TextInput::make('spots')
+                    ->numeric()
+                    ->minValue(0)
+                    ->default(0)
+                    ->label('Extra spots')
+                    ->helperText('Drop-in only: additional seats beyond the base party; total seats should match party size.'),
                 Forms\Components\DateTimePicker::make('booked_at')
                     ->label('Booked At'),
             ]);
@@ -97,8 +104,12 @@ class AmeliaBookingResource extends Resource
                     ->money('USD')
                     ->sortable(),
                 Tables\Columns\TextColumn::make('party_size')
-                    ->label('Persons')
+                    ->label('Party size')
                     ->sortable(),
+                Tables\Columns\TextColumn::make('spots')
+                    ->label('Extra spots')
+                    ->sortable()
+                    ->toggleable(),
                 Tables\Columns\TextColumn::make('booked_at')
                     ->label('Booked')
                     ->dateTime('Y-m-d H:i')

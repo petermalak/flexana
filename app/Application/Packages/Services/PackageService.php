@@ -34,6 +34,10 @@ final class PackageService
 
         $packageData = $payload->toArray();
         unset($packageData['classTypeUuid'], $packageData['serviceUuids']);
+        if (array_key_exists('sortOrder', $packageData)) {
+            $packageData['sort_order'] = (int) ($packageData['sortOrder'] ?? 0);
+            unset($packageData['sortOrder']);
+        }
         
         if ($payload->classTypeUuid) {
             $classType = $this->classTypes->findByUuid($payload->classTypeUuid);
@@ -62,6 +66,10 @@ final class PackageService
 
         $packageData = $payload->toArray();
         unset($packageData['classTypeUuid'], $packageData['serviceUuids']);
+        if (array_key_exists('sortOrder', $packageData)) {
+            $packageData['sort_order'] = (int) ($packageData['sortOrder'] ?? 0);
+            unset($packageData['sortOrder']);
+        }
         
         if ($payload->classTypeUuid) {
             $classType = $this->classTypes->findByUuid($payload->classTypeUuid);
@@ -114,6 +122,7 @@ final class PackageService
             ] : null,
             'title' => $package->title,
             'description' => $package->description,
+            'sortOrder' => (int) ($package->sort_order ?? 0),
             'totalSessions' => $package->total_sessions,
             'usedSessions' => $package->used_sessions ?? 0,
             'discount' => $package->discount,

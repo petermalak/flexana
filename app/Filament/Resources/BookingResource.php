@@ -43,7 +43,14 @@ class BookingResource extends Resource
                 Forms\Components\TextInput::make('party_size')
                     ->numeric()
                     ->minValue(1)
-                    ->default(1),
+                    ->default(1)
+                    ->label('Party size (total seats)'),
+                Forms\Components\TextInput::make('spots')
+                    ->numeric()
+                    ->minValue(0)
+                    ->default(0)
+                    ->label('Extra spots')
+                    ->helperText('Additional drop-in seats (Yoga/Reformer); keep in sync with party size.'),
                 Forms\Components\Select::make('status')
                     ->options([
                         'pending' => 'Pending',
@@ -113,6 +120,10 @@ class BookingResource extends Resource
                 Tables\Columns\TextColumn::make('total_amount')
                     ->money()
                     ->sortable(),
+                Tables\Columns\TextColumn::make('spots')
+                    ->label('Extra spots')
+                    ->sortable()
+                    ->toggleable(),
                 Tables\Columns\IconColumn::make('is_drop_in')
                     ->label('Drop-in')
                     ->boolean()

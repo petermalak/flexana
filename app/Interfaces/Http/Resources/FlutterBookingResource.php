@@ -21,6 +21,7 @@ class FlutterBookingResource extends JsonResource
         $customerId = $booking->getAttribute('customer_id') ?? null;
         $eventId = $booking->getAttribute('event_id') ?? null;
         $partySize = $booking->getAttribute('party_size') ?? 1;
+        $spots = $booking->getAttribute('spots') ?? 0;
         $totalAmount = $booking->getAttribute('total_amount') ?? 0;
         $depositAmount = $booking->getAttribute('deposit_amount') ?? 0;
         $balanceAmount = $booking->getAttribute('balance_amount') ?? 0;
@@ -41,6 +42,7 @@ class FlutterBookingResource extends JsonResource
             'serviceId' => $eventId,
             'eventId' => $eventId,
             'partySize' => (int) $partySize,
+            'spots' => (int) $spots,
             'totalAmount' => (float) $totalAmount,
             'depositAmount' => (float) $depositAmount,
             'balanceAmount' => (float) $balanceAmount,

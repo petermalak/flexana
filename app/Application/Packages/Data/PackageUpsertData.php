@@ -19,6 +19,8 @@ final class PackageUpsertData extends Data
         #[StringType]
         public ?string $description,
         #[IntegerType]
+        public ?int $sortOrder,
+        #[IntegerType]
         public int $totalSessions,
         #[NumericType]
         public float $discount,
@@ -39,6 +41,7 @@ final class PackageUpsertData extends Data
             'classTypeUuid' => ['nullable', 'uuid'],
             'title' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string'],
+            'sortOrder' => ['nullable', 'integer', 'min:0'],
             'totalSessions' => ['required', 'integer', 'min:1'],
             'discount' => ['required', 'numeric', 'min:0'],
             'price' => ['required', 'numeric', 'min:0'],

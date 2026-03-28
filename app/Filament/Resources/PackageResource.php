@@ -85,6 +85,12 @@ class PackageResource extends Resource
                     ->description('Package duration in months (used for purchase expiry when customers buy this package). Legacy fields on the package row may still exist in the database for older purchases.')
                     ->icon(Heroicon::OutlinedCog6Tooth)
                     ->schema([
+                        Forms\Components\TextInput::make('sort_order')
+                            ->label('Sort order')
+                            ->numeric()
+                            ->default(0)
+                            ->required()
+                            ->helperText('Lower numbers appear first in the mobile app package list.'),
                         Forms\Components\TextInput::make('package_duration')
                             ->label('Package Duration (months)')
                             ->numeric()
@@ -99,7 +105,7 @@ class PackageResource extends Resource
                             ->searchable()
                             ->default('active')
                             ->required(),
-                    ])->columns(2),
+                    ])->columns(3),
             ]);
     }
 
@@ -124,6 +130,9 @@ class PackageResource extends Resource
                     })
                     ->sortable()
                     ->toggleable(),
+                Tables\Columns\TextColumn::make('sort_order')
+                    ->label('Order')
+                    ->sortable(),
                 Tables\Columns\TextColumn::make('total_sessions')
                     ->label('Total')
                     ->sortable(),
@@ -176,7 +185,8 @@ class PackageResource extends Resource
                 Actions\BulkActionGroup::make([
                     Actions\DeleteBulkAction::make(),
                 ]),
-            ]);
+            ])
+            ->defaultSort('sort_order');
     }
 
     public static function getPages(): array

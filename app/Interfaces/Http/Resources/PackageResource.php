@@ -16,6 +16,7 @@ class PackageResource extends JsonResource
             'classType' => $this->classType,
             'title' => $this->title,
             'description' => $this->description,
+            'sortOrder' => $this->sortOrder,
             'totalSessions' => $this->totalSessions,
             'usedSessions' => $this->usedSessions,
             'discount' => $this->discount,

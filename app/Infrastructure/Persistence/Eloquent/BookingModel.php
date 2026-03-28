@@ -29,6 +29,7 @@ class BookingModel extends Model
         'status',
         'payment_status',
         'party_size',
+        'spots',
         'total_amount',
         'deposit_amount',
         'balance_amount',
@@ -42,6 +43,7 @@ class BookingModel extends Model
     ];
 
     protected $casts = [
+        'spots' => 'integer',
         'is_drop_in' => 'boolean',
         'answers' => 'array',
         'booked_at' => 'datetime',

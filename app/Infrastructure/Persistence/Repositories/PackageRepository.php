@@ -20,7 +20,7 @@ final class PackageRepository implements PackageRepositoryInterface
                 AllowedFilter::exact('status'),
                 AllowedFilter::exact('class_type_id'),
             ])
-            ->allowedSorts(['title', 'price', 'created_at']);
+            ->allowedSorts(['sort_order', 'title', 'price', 'created_at']);
 
         if ($search = data_get($filters, 'search')) {
             $builder->where(function ($query) use ($search) {

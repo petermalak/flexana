@@ -37,6 +37,7 @@ class MobilePackageController extends Controller
         $packages = PackageModel::query()
             ->with(['services.category', 'classType'])
             ->where('status', 'active')
+            ->orderBy('sort_order')
             ->orderBy('title')
             ->get();
 
