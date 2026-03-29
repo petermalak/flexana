@@ -84,8 +84,7 @@ class MobileBookingController extends Controller
                 'sessionEndUtc' => $sessionEndUtc,
                 'status' => $booking->status,
                 'paymentStatus' => $booking->payment_status,
-                'partySize' => $booking->party_size,
-                'spots' => (int) ($booking->spots ?? 0),
+                'spots' => (int) $booking->party_size,
                 'totalAmount' => (float) $booking->total_amount,
                 'currency' => $booking->currency ?? 'USD',
                 'isDropIn' => (bool) $isDropIn,
@@ -108,18 +107,16 @@ class MobileBookingController extends Controller
 
     /**
      * Book a session (appointment). Uses authenticated customer.
-     * Body: { sessionID, persons (optional, default 1) [, promoCode, isDropIn, spots ] }
+     * Body: { sessionID, spots (optional, default 1) [, promoCode, isDropIn ] }
+     * spots: how many persons this booking covers (1–20); capacity and pricing use this count.
      * isDropIn: boolean flag to clarify whether this booking is a drop-in
      *           (true) or taken from the customer's package sessions (false).
-     * spots: optional extra spots (default 0), only for drop-in Yoga/Reformer classes;
-     *        total seats = persons + spots; price and capacity use that total.
      */
     public function store(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
             'sessionID' => 'required|integer',
-            'persons' => 'nullable|integer|min:1|max:20',
-            'spots' => 'nullable|integer|min:0|max:20',
+            'spots' => 'nullable|integer|min:1|max:20',
             'promoCode' => 'nullable|string|max:64',
             'isDropIn' => 'nullable|boolean',
         ]);
@@ -134,8 +131,7 @@ class MobileBookingController extends Controller
 
         $data = $validator->validated();
         $sessionID = (int) $data['sessionID'];
-        $persons = (int) ($data['persons'] ?? 1);
-        $spots = (int) ($data['spots'] ?? 0);
+        $spots = (int) ($data['spots'] ?? 1);
         $promoCode = $data['promoCode'] ?? null;
         $isDropIn = array_key_exists('isDropIn', $data) ? (bool) $data['isDropIn'] : true;
 
@@ -143,7 +139,7 @@ class MobileBookingController extends Controller
         $customer = $request->user();
 
         $appointment = AppointmentModel::query()
-            ->with(['service.category', 'bookings', 'provider'])
+            ->with(['service', 'bookings', 'provider'])
             ->find($sessionID);
 
         if (! $appointment) {
@@ -155,32 +151,10 @@ class MobileBookingController extends Controller
 
         $service = $appointment->service;
 
-        if ($spots > 0 && ! $isDropIn) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Extra spots are only available for drop-in bookings.',
-            ], 422);
-        }
-
-        if ($spots > 0 && ! $this->serviceAllowsDropInExtraSpots($service)) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Extra spots are only available for Yoga and Reformer Pilates sessions.',
-            ], 422);
-        }
-
-        $totalParty = $persons + $spots;
-        if ($totalParty > 20) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Persons plus extra spots cannot exceed 20.',
-            ], 422);
-        }
-
         $maxCapacity = $service ? ($service->max_capacity ?? 1) : 1;
         $currentBookings = $appointment->bookings->whereIn('status', ['confirmed', 'pending'])->sum('party_size');
 
-        if (($currentBookings + $totalParty) > $maxCapacity) {
+        if (($currentBookings + $spots) > $maxCapacity) {
             return response()->json([
                 'success' => false,
                 'message' => 'Session is full',
@@ -203,7 +177,7 @@ class MobileBookingController extends Controller
         $subtotalBeforePromo = null;
 
         if (! $isDropIn) {
-            $purchaseToUse = $this->findValidPurchaseForCategory($customer->id, $sessionCategory, $persons);
+            $purchaseToUse = $this->findValidPurchaseForCategory($customer->id, $sessionCategory, $spots);
             if (! $purchaseToUse) {
                 return response()->json([
                     'success' => false,
@@ -214,7 +188,7 @@ class MobileBookingController extends Controller
             $customerPackagePurchaseId = $purchaseToUse->id;
         } else {
             $servicePrice = $service ? (float) ($service->price ?? 0) : 0;
-            $subtotalBeforePromo = $servicePrice * $totalParty;
+            $subtotalBeforePromo = $servicePrice * $spots;
             $totalPrice = $subtotalBeforePromo;
             $promoRecord = null;
             if ($promoCode) {
@@ -248,8 +222,7 @@ class MobileBookingController extends Controller
                 'location_id' => $appointment->location_id,
                 'status' => 'confirmed',
                 'payment_status' => $isDropIn ? 'pending' : 'paid',
-                'party_size' => $isDropIn ? $totalParty : $persons,
-                'spots' => $isDropIn ? $spots : 0,
+                'party_size' => $spots,
                 'total_amount' => $totalPrice,
                 'deposit_amount' => 0,
                 'balance_amount' => $totalPrice,
@@ -258,13 +231,13 @@ class MobileBookingController extends Controller
                 'is_drop_in' => $isDropIn,
                 'answers' => [
                     'isDropIn' => $isDropIn,
-                    'spots' => $isDropIn ? $spots : 0,
+                    'spots' => $spots,
                 ],
                 'booked_at' => $appointment->booking_start,
             ]);
 
             if ($purchaseToUse) {
-                $purchaseToUse->decrement('remaining_sessions', $persons);
+                $purchaseToUse->decrement('remaining_sessions', $spots);
             }
 
             \App\Infrastructure\Persistence\Eloquent\PaymentModel::query()->create([
@@ -299,8 +272,7 @@ class MobileBookingController extends Controller
                     'sessionID' => (string) $appointment->id,
                     'customerId' => (string) $customer->id,
                     'isDropIn' => $booking->is_drop_in,
-                    'spots' => (int) ($booking->spots ?? 0),
-                    'partySize' => (int) $booking->party_size,
+                    'spots' => (int) $booking->party_size,
                 ],
             ], 201);
         } catch (\Throwable $e) {
@@ -410,28 +382,6 @@ class MobileBookingController extends Controller
                 'error' => $e->getMessage(),
             ], 500);
         }
-    }
-
-    /**
-     * Extra drop-in spots: Yoga / Reformer Pilates sessions (category or service name keywords).
-     */
-    private function serviceAllowsDropInExtraSpots(?ServiceModel $service): bool
-    {
-        if (! $service) {
-            return false;
-        }
-        $service->loadMissing('category');
-        $catName = strtolower((string) ($service->category?->name ?? ''));
-        if ($catName !== '') {
-            if (str_contains($catName, 'yoga') || str_contains($catName, 'reformer')) {
-                return true;
-            }
-        }
-        $name = strtolower((string) ($service->name ?? ''));
-
-        return str_contains($name, 'yoga')
-            || str_contains($name, 'reformer')
-            || str_contains($name, 'reform pilates');
     }
 
     /**
