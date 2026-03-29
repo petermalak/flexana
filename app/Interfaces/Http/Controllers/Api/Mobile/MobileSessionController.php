@@ -89,12 +89,14 @@ class MobileSessionController extends Controller
         $items = $appointmentCollection->map(function ($appointment) use ($customerId, $scheduleTz, $upcomingCutoff) {
             $service = $appointment->service;
             $provider = $appointment->provider;
-            $approvedBookings = $appointment->bookings->where('status', 'confirmed');
-            $totalPersons = $approvedBookings->sum('party_size');
+            // Capacity should consider both confirmed and pending bookings (pending is already used in booking checks).
+            $reservedBookings = $appointment->bookings->whereIn('status', ['confirmed', 'pending']);
+            $totalPersons = $reservedBookings->sum('party_size');
             $maxCapacity = $service ? ($service->max_capacity ?? 1) : 1;
+            $remainingSpots = max(0, $maxCapacity - $totalPersons);
             $isFull = $totalPersons >= $maxCapacity;
             $myBooking = $customerId
-                ? $approvedBookings->where('customer_id', $customerId)->first()
+                ? $reservedBookings->where('customer_id', $customerId)->first()
                 : null;
             $isBooked = $myBooking !== null;
             $minutesBeforeCancellation = (int) ($service->time_before ?? 0);
@@ -127,6 +129,7 @@ class MobileSessionController extends Controller
                 'dateUtc' => ApiDateTime::toUtcIso8601($appointment->booking_start),
                 'isBooked' => $isBooked,
                 'isFull' => $isFull,
+                'remainingSpots' => $remainingSpots,
                 'canCancel' => $canCancel,
                 'canBook' => $canBook,
                 'willPay' => $willPay,

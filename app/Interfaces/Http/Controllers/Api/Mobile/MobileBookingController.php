@@ -357,8 +357,21 @@ class MobileBookingController extends Controller
 
         DB::beginTransaction();
         try {
-            if ($booking->customer_package_purchase_id) {
-                $purchase = CustomerPackagePurchaseModel::query()->find($booking->customer_package_purchase_id);
+            // Restore package sessions when this booking was made from a package.
+            // Primary link is customer_package_purchase_id; fallback to latest purchase for (customer, package)
+            // because older bookings may not have the purchase id stored.
+            if (! $booking->is_drop_in && $booking->package_id) {
+                $purchase = null;
+                if ($booking->customer_package_purchase_id) {
+                    $purchase = CustomerPackagePurchaseModel::query()->find($booking->customer_package_purchase_id);
+                }
+                if (! $purchase) {
+                    $purchase = CustomerPackagePurchaseModel::query()
+                        ->where('customer_id', $booking->customer_id)
+                        ->where('package_id', $booking->package_id)
+                        ->orderByDesc('purchase_date')
+                        ->first();
+                }
                 if ($purchase) {
                     $purchase->increment('remaining_sessions', (int) $booking->party_size);
                 }
