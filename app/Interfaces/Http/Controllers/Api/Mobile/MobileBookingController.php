@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Infrastructure\Persistence\Eloquent\AppointmentModel;
 use App\Infrastructure\Persistence\Eloquent\BookingModel;
 use App\Infrastructure\Persistence\Eloquent\CustomerPackagePurchaseModel;
+use App\Infrastructure\Persistence\Eloquent\PackageModel;
 use App\Infrastructure\Persistence\Eloquent\PromoCodeModel;
 use App\Infrastructure\Persistence\Eloquent\ServiceModel;
 use App\Models\Customer;
@@ -357,10 +358,53 @@ class MobileBookingController extends Controller
 
         DB::beginTransaction();
         try {
+            $creditedDropIn = false;
+
+            // If this was a PAID drop-in booking, convert the cancellation into a package credit
+            // so the customer can rebook using isDropIn=false within normal expiry rules.
+            if ((bool) $booking->is_drop_in) {
+                $paidStatuses = ['paid', 'completed'];
+                if (in_array((string) $booking->payment_status, $paidStatuses, true)) {
+                    $service = $appointment->service;
+                    $serviceType = $this->sessionCategoryFromService($service) ?? 'Yoga';
+                    $packageTitle = "Drop-in Credit - {$serviceType}";
+
+                    $creditPackage = PackageModel::query()
+                        ->where('status', 'active')
+                        ->where('title', $packageTitle)
+                        ->where('service_type', $serviceType)
+                        ->first();
+
+                    if (! $creditPackage) {
+                        $creditPackage = PackageModel::query()->create([
+                            'title' => $packageTitle,
+                            'description' => 'Auto-generated credit created when a paid drop-in booking is cancelled.',
+                            'service_type' => $serviceType,
+                            'total_sessions' => (int) $booking->party_size,
+                            'discount' => 0,
+                            'price' => 0,
+                            'package_duration' => 3, // months
+                            'status' => 'active',
+                        ]);
+                    }
+
+                    CustomerPackagePurchaseModel::query()->create([
+                        'customer_id' => $booking->customer_id,
+                        'package_id' => $creditPackage->id,
+                        'total_sessions' => (int) $booking->party_size,
+                        'remaining_sessions' => (int) $booking->party_size,
+                        'purchase_date' => now(),
+                        'status' => 'active',
+                        'expires_by_months_only' => true,
+                    ]);
+                    $creditedDropIn = true;
+                }
+            }
+
             // Restore package sessions when this booking was made from a package.
             // Primary link is customer_package_purchase_id; fallback to latest purchase for (customer, package)
             // because older bookings may not have the purchase id stored.
-            if (! $booking->is_drop_in && $booking->package_id) {
+            if (! $creditedDropIn && ! $booking->is_drop_in && $booking->package_id) {
                 $purchase = null;
                 if ($booking->customer_package_purchase_id) {
                     $purchase = CustomerPackagePurchaseModel::query()->find($booking->customer_package_purchase_id);

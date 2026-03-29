@@ -528,7 +528,7 @@
 							"raw": "{\n    \"sessionID\": 1,\n    \"customerBookingId\": 1\n}"
 						},
 						"url": { "raw": "{{base_url}}/api/v1/cancel-booking", "host": ["{{base_url}}"], "path": ["api", "v1", "cancel-booking"] },
-						"description": "Cancel one booking. Body: sessionID (required), customerBookingId (optional — if multiple bookings for same session). Cancellation must be before the session's cutoff (service time_before). Requires Bearer."
+						"description": "Cancel one booking. Body: sessionID (required), customerBookingId (optional — if multiple bookings for same session). Cancellation must be before the session's cutoff (service time_before). If the canceled booking was a PAID drop-in (paymentStatus paid/completed), the backend auto-creates a package purchase credit (3 months expiry) so the customer can rebook using isDropIn=false. Requires Bearer."
 					},
 					"response": [
 						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"message\":\"Booking canceled successfully\"}" },
