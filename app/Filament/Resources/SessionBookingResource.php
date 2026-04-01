@@ -1,0 +1,143 @@
+<?php
+
+namespace App\Filament\Resources;
+
+use App\Filament\Resources\SessionBookingResource\Pages;
+use App\Infrastructure\Persistence\Eloquent\AppointmentModel;
+use App\Infrastructure\Persistence\Eloquent\BookingModel;
+use App\Infrastructure\Persistence\Eloquent\CustomerModel;
+use Filament\Forms;
+use Filament\Resources\Resource;
+use Filament\Schemas\Schema;
+use Filament\Tables;
+use Filament\Tables\Table;
+
+class SessionBookingResource extends Resource
+{
+    protected static ?string $model = BookingModel::class;
+
+    protected static \BackedEnum|string|null $navigationIcon = 'heroicon-o-calendar-days';
+
+    protected static \UnitEnum|string|null $navigationGroup = 'Scheduling';
+
+    protected static ?int $navigationSort = 3;
+
+    protected static ?string $navigationLabel = 'Session bookings';
+
+    public static function form(Schema $schema): Schema
+    {
+        return $schema->components([
+            Forms\Components\Select::make('appointment_id')
+                ->label('Session')
+                ->required()
+                ->options(function () {
+                    return AppointmentModel::query()
+                        ->with(['service', 'provider'])
+                        ->orderByDesc('booking_start')
+                        ->limit(500)
+                        ->get()
+                        ->mapWithKeys(function (AppointmentModel $a) {
+                            $service = $a->service?->name ?? 'Unknown';
+                            $provider = $a->provider?->name ?? '';
+                            $dt = $a->booking_start ? $a->booking_start->format('Y-m-d H:i') : 'N/A';
+                            $label = trim("{$service} — {$dt}" . ($provider !== '' ? " — {$provider}" : ''));
+                            return [$a->id => "#{$a->id} {$label}"];
+                        })
+                        ->all();
+                })
+                ->searchable(),
+
+            Forms\Components\Select::make('customer_id')
+                ->label('Customer')
+                ->required()
+                ->options(function () {
+                    return CustomerModel::query()
+                        ->orderBy('first_name')
+                        ->limit(500)
+                        ->get()
+                        ->mapWithKeys(function (CustomerModel $c) {
+                            $name = trim(($c->first_name ?? '') . ' ' . ($c->last_name ?? ''));
+                            $email = $c->email ?? '';
+                            $label = trim($name !== '' ? $name : $email);
+                            if ($email !== '' && $label !== $email) {
+                                $label .= " ({$email})";
+                            }
+                            return [$c->id => $label !== '' ? $label : (string) $c->id];
+                        })
+                        ->all();
+                })
+                ->searchable(),
+
+            Forms\Components\TextInput::make('spots')
+                ->label('Spots (persons)')
+                ->numeric()
+                ->minValue(1)
+                ->maxValue(20)
+                ->default(1)
+                ->required(),
+
+            Forms\Components\Toggle::make('isDropIn')
+                ->label('Drop-in')
+                ->default(true)
+                ->helperText('On = drop-in pricing. Off = deduct from an active package.'),
+
+            Forms\Components\TextInput::make('promoCode')
+                ->label('Promo code')
+                ->maxLength(64)
+                ->helperText('Drop-in only. Invalid code will be ignored.'),
+        ]);
+    }
+
+    public static function table(Table $table): Table
+    {
+        return $table
+            ->columns([
+                Tables\Columns\TextColumn::make('id')->sortable(),
+                Tables\Columns\TextColumn::make('appointment.booking_start')
+                    ->label('Session start')
+                    ->dateTime('Y-m-d H:i')
+                    ->sortable(),
+                Tables\Columns\TextColumn::make('appointment.service.name')
+                    ->label('Service')
+                    ->sortable()
+                    ->toggleable(),
+                Tables\Columns\TextColumn::make('customer.email')
+                    ->label('Customer')
+                    ->searchable()
+                    ->toggleable(),
+                Tables\Columns\TextColumn::make('party_size')
+                    ->label('Spots')
+                    ->sortable(),
+                Tables\Columns\IconColumn::make('is_drop_in')
+                    ->label('Drop-in')
+                    ->boolean()
+                    ->sortable(),
+                Tables\Columns\TextColumn::make('payment_status')
+                    ->label('Payment')
+                    ->badge()
+                    ->sortable(),
+                Tables\Columns\TextColumn::make('total_amount')
+                    ->money('USD')
+                    ->sortable(),
+                Tables\Columns\TextColumn::make('status')
+                    ->badge()
+                    ->sortable(),
+                Tables\Columns\TextColumn::make('booked_at')
+                    ->dateTime('Y-m-d H:i')
+                    ->sortable(),
+            ])
+            ->actions([
+                \Filament\Actions\ViewAction::make(),
+                \Filament\Actions\EditAction::make(),
+            ])
+            ->defaultSort('booked_at', 'desc');
+    }
+
+    public static function getPages(): array
+    {
+        return [
+            'index' => Pages\ManageSessionBookings::route('/'),
+        ];
+    }
+}
+
