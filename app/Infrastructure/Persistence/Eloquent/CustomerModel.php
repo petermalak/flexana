@@ -9,6 +9,7 @@ use Illuminate\Contracts\Auth\CanResetPassword as CanResetPasswordContract;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\HasApiTokens;
@@ -20,6 +21,7 @@ class CustomerModel extends Model implements AuthenticatableContract, CanResetPa
     use HasApiTokens;
     use HasFactory;
     use Notifiable;
+    use SoftDeletes;
 
     protected $table = 'customers';
 
@@ -69,6 +71,15 @@ class CustomerModel extends Model implements AuthenticatableContract, CanResetPa
             if (empty($customer->uuid)) {
                 $customer->uuid = Str::uuid()->toString();
             }
+        });
+
+        static::deleting(function (self $customer): void {
+            if ($customer->isForceDeleting()) {
+                return;
+            }
+            // Clear unique auth identifiers so the same Firebase user can register again.
+            $customer->uid = null;
+            $customer->firebase_uid = null;
         });
     }
 
