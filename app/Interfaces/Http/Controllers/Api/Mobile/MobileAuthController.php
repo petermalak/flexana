@@ -682,6 +682,15 @@ class MobileAuthController extends Controller
         return $last;
     }
 
+    private function sumRemainingSessionsFromCandidates(array $candidates): int
+    {
+        $sum = 0;
+        foreach ($candidates as $detail) {
+            $sum += (int) ($detail['remainingSessions'] ?? 0);
+        }
+        return $sum;
+    }
+
     private function customerToArray($customer): array
     {
         $activePurchases = $customer->packagePurchases()
@@ -736,10 +745,19 @@ class MobileAuthController extends Controller
         $reformerPackage = $this->lastValidPackageFromCandidates($reformerCandidates);
         $unclassifiedPackage = $this->lastValidPackageFromCandidates($unclassifiedCandidates);
 
-        // Counts must match the chosen package per category (yogaPackage / reformerPackage)
-        $remainingYogaSessions = $yogaPackage ? (int) ($yogaPackage['remainingSessions'] ?? 0) : 0;
-        $remainingReformerSessions = $reformerPackage ? (int) ($reformerPackage['remainingSessions'] ?? 0) : 0;
-        $remainingUnclassifiedSessions = $unclassifiedPackage ? (int) ($unclassifiedPackage['remainingSessions'] ?? 0) : 0;
+        // Sum remaining sessions across all valid purchases per category; nested package objects still use the latest purchase for metadata (e.g. expiresAt).
+        $remainingYogaSessions = $this->sumRemainingSessionsFromCandidates($yogaCandidates);
+        $remainingReformerSessions = $this->sumRemainingSessionsFromCandidates($reformerCandidates);
+        $remainingUnclassifiedSessions = $this->sumRemainingSessionsFromCandidates($unclassifiedCandidates);
+        if ($yogaPackage !== null) {
+            $yogaPackage['remainingSessions'] = $remainingYogaSessions;
+        }
+        if ($reformerPackage !== null) {
+            $reformerPackage['remainingSessions'] = $remainingReformerSessions;
+        }
+        if ($unclassifiedPackage !== null) {
+            $unclassifiedPackage['remainingSessions'] = $remainingUnclassifiedSessions;
+        }
         $remainingSessions = $remainingYogaSessions + $remainingReformerSessions + $remainingUnclassifiedSessions;
 
         $profileImageUrl = null;
