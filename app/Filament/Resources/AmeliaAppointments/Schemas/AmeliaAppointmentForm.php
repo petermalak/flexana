@@ -9,6 +9,7 @@ use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 use Filament\Forms;
 use Filament\Schemas\Components\Utilities\Get;
+use Filament\Support\Enums\Operation;
 
 class AmeliaAppointmentForm
 {
@@ -123,6 +124,7 @@ class AmeliaAppointmentForm
                     ])->columns(2),
                 Section::make('Create on multiple dates')
                     ->description('Create several appointments with the same details on repeated weekdays (e.g. next 4 Mondays).')
+                    ->visibleOn(Operation::Create)
                     ->schema([
                         Forms\Components\Toggle::make('create_recurring')
                             ->label('Create weekly on multiple dates')
