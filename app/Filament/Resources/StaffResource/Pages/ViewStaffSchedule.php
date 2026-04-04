@@ -100,12 +100,16 @@ class ViewStaffSchedule extends Page
             $isToday = $dateKey === now()->format('Y-m-d');
             $description = $day['shortDate'] . ($isToday ? ' · Today' : '');
 
+            // Stable, URL-safe keys (no "::" from default heading slugs) so Livewire partials
+            // and collapse IDs match the DOM reliably; include the date so keys stay unique per week.
+            $dayComponentKey = 'staff-schedule-day-' . $dateKey;
+
             return Section::make($day['label'])
+                ->key($dayComponentKey)
                 ->description($description)
                 ->collapsible()
                 ->collapsed(! $isToday)
-                ->schema([
-                    Html::make(fn () => $this->renderDayAppointmentsHtml($appointments)),
+                ->headerActions([
                     Action::make('add_' . $dateKey)
                         ->label('Add')
                         ->icon('heroicon-o-plus')
@@ -118,6 +122,9 @@ class ViewStaffSchedule extends Page
                         ->action(function (array $data) {
                             $this->addAppointmentFromData($data);
                         }),
+                ])
+                ->schema([
+                    Html::make(fn () => $this->renderDayAppointmentsHtml($appointments)),
                 ]);
         })->all();
 
@@ -141,9 +148,7 @@ class ViewStaffSchedule extends Page
                             ->color('gray')
                             ->action('nextWeek'),
                     ]),
-                    Group::make([
-                        Grid::make(1)->schema($daySections)->extraAttributes(['class' => 'gap-3']),
-                    ])->extraAttributes(['class' => 'space-y-3']),
+                    Group::make($daySections)->extraAttributes(['class' => 'space-y-3']),
                 ])
                 ->columns(1),
         ]);
