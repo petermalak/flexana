@@ -405,25 +405,32 @@ class MobilePackageController extends Controller
             return;
         }
 
-        $customerName = trim(($customer->first_name ?? '') . ' ' . ($customer->last_name ?? ''));
+        $customerName = trim(($customer->first_name ?? '').' '.($customer->last_name ?? ''));
         $customerName = $customerName !== '' ? $customerName : ($customer->email ?? 'Customer');
 
         $promoLines = $promo !== null
             ? PromoEmailText::appliedSection($promo, $priceBeforeDiscount, $priceAfterDiscount)
             : '';
-        $category = $this->packageServiceType($package) ?? 'Uncategorized';
+        $resolvedCategory = $this->packageServiceType($package);
+        $typeForDisplay = $package->service_type;
+        if (($typeForDisplay === null || trim((string) $typeForDisplay) === '') && $resolvedCategory !== null) {
+            $typeForDisplay = $resolvedCategory;
+        }
+        $packageDisplay = $package->title ?? 'Package';
+        if ($typeForDisplay !== null && trim((string) $typeForDisplay) !== '') {
+            $packageDisplay .= ' || '.trim((string) $typeForDisplay);
+        }
 
         $body = "Thank you for purchasing a package with Flexana!\n\n"
-            . "Purchase details\n\n"
-            . "* Name: {$customerName}\n\n"
-            . "* Email: {$customer->email}\n\n"
-            . "* Phone: {$customer->phone}\n\n"
-            . "* Package: " . ($package->title ?? 'Package') . "\n\n"
-            . "* Category: {$category}\n\n"
-            . "* Sessions included: {$totalSessions}\n\n"
-            . $promoLines
-            . "You can contact us at +20 122 0221100 if you have any questions.\n\n"
-            . "Flexana Team";
+            ."Purchase details\n\n"
+            ."* Name: {$customerName}\n\n"
+            ."* Email: {$customer->email}\n\n"
+            ."* Phone: {$customer->phone}\n\n"
+            ."* Package: {$packageDisplay}\n\n"
+            ."* Sessions included: {$totalSessions}\n\n"
+            .$promoLines
+            ."You can contact us at +20 122 0221100 if you have any questions.\n\n"
+            .'Flexana Team';
 
         $subject = 'Your Flexana package purchase confirmation';
 

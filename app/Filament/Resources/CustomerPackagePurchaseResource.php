@@ -4,13 +4,14 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\CustomerPackagePurchaseResource\Pages;
 use App\Infrastructure\Persistence\Eloquent\CustomerPackagePurchaseModel;
+use App\Infrastructure\Persistence\Eloquent\PackageModel;
+use Filament\Actions;
 use Filament\Forms;
 use Filament\Resources\Resource;
-use Filament\Schemas\Schema;
 use Filament\Schemas\Components;
+use Filament\Schemas\Schema;
 use Filament\Tables;
 use Filament\Tables\Table;
-use Filament\Actions;
 
 class CustomerPackagePurchaseResource extends Resource
 {
@@ -39,10 +40,16 @@ class CustomerPackagePurchaseResource extends Resource
                         Forms\Components\Select::make('customer_id')
                             ->relationship('customer', 'first_name', fn ($q) => $q ? $q->orderBy('first_name') : $q)
                             ->getOptionLabelFromRecordUsing(fn ($record) => trim("{$record->first_name} {$record->last_name}"))
-                            ->searchable(['first_name', 'last_name'])
+                            ->searchable(['first_name', 'last_name', 'phone'])
+                            ->searchPrompt('Search by name or phone')
                             ->required(),
                         Forms\Components\Select::make('package_id')
-                            ->relationship('package', 'title')
+                            ->relationship(
+                                'package',
+                                'title',
+                                fn ($query) => $query ? $query->orderBy('title') : $query,
+                            )
+                            ->getOptionLabelFromRecordUsing(fn (PackageModel $record): string => self::formatPackageLabel($record))
                             ->searchable()
                             ->required(),
                         Forms\Components\TextInput::make('total_sessions')
@@ -87,7 +94,13 @@ class CustomerPackagePurchaseResource extends Resource
                     ->sortable(),
                 Tables\Columns\TextColumn::make('package.title')
                     ->label('Package')
-                    ->searchable()
+                    ->formatStateUsing(fn (CustomerPackagePurchaseModel $record): string => self::formatPackageLabel($record->package))
+                    ->searchable(query: function ($query, $search) {
+                        return $query->whereHas('package', function ($q) use ($search) {
+                            $q->where('title', 'like', "%{$search}%")
+                                ->orWhere('service_type', 'like', "%{$search}%");
+                        });
+                    })
                     ->sortable(),
                 Tables\Columns\TextColumn::make('total_sessions')
                     ->label('Total')
@@ -116,7 +129,10 @@ class CustomerPackagePurchaseResource extends Resource
                         'expired' => 'Expired',
                     ]),
                 Tables\Filters\SelectFilter::make('package_id')
-                    ->relationship('package', 'title')
+                    ->label('Package')
+                    ->options(fn (): array => PackageModel::query()->orderBy('title')->get()->mapWithKeys(
+                        fn (PackageModel $p): array => [(string) $p->id => self::formatPackageLabel($p)],
+                    )->all())
                     ->searchable()
                     ->preload(),
             ])
@@ -145,5 +161,19 @@ class CustomerPackagePurchaseResource extends Resource
     public static function canCreate(): bool
     {
         return true;
+    }
+
+    private static function formatPackageLabel(?PackageModel $package): string
+    {
+        if (! $package) {
+            return '-';
+        }
+        $title = $package->title ?? '';
+        $type = trim((string) ($package->service_type ?? ''));
+        if ($type !== '') {
+            return $title.' || '.$type;
+        }
+
+        return $title !== '' ? $title : '-';
     }
 }
