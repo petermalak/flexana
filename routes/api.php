@@ -17,6 +17,7 @@ use App\Interfaces\Http\Controllers\Api\Mobile\MobileSessionController;
 use App\Interfaces\Http\Controllers\Api\PackageController;
 use App\Interfaces\Http\Controllers\Api\ServiceController;
 use App\Interfaces\Http\Controllers\Api\StaffController;
+use App\Interfaces\Http\Controllers\Api\WebSessionController;
 use Illuminate\Support\Facades\Route;
 
 // Admin / Frontend API (signature auth)
@@ -93,6 +94,8 @@ Route::prefix('v1')
             Route::get('instructors/simple', [MobileInstructorController::class, 'simple']);
             Route::get('service/simple', [MobileServiceController::class, 'simple']);
             Route::get('sessions', [MobileSessionController::class, 'index']);
+            // Web schedule (does not change mobile sessions contract)
+            Route::get('web-sessions', [WebSessionController::class, 'index']);
             Route::post('session-bookings', [MobileBookingController::class, 'store']);
             Route::post('cancel-booking', [MobileBookingController::class, 'cancel']);
             // Packages screen (path 'package-offers' to avoid conflict with admin GET /v1/packages)

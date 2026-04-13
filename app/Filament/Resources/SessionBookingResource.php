@@ -11,6 +11,7 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 
 class SessionBookingResource extends Resource
 {
@@ -50,23 +51,33 @@ class SessionBookingResource extends Resource
             Forms\Components\Select::make('customer_id')
                 ->label('Customer')
                 ->required()
-                ->options(function () {
+                ->searchable()
+                ->getSearchResultsUsing(function (string $search): array {
+                    $search = trim($search);
+                    if ($search === '') {
+                        return [];
+                    }
+
                     return CustomerModel::query()
-                        ->orderBy('first_name')
-                        ->limit(500)
-                        ->get()
-                        ->mapWithKeys(function (CustomerModel $c) {
-                            $name = trim(($c->first_name ?? '') . ' ' . ($c->last_name ?? ''));
-                            $email = $c->email ?? '';
-                            $label = trim($name !== '' ? $name : $email);
-                            if ($email !== '' && $label !== $email) {
-                                $label .= " ({$email})";
-                            }
-                            return [$c->id => $label !== '' ? $label : (string) $c->id];
+                        ->where(function (Builder $q) use ($search) {
+                            $q->where('first_name', 'like', "%{$search}%")
+                                ->orWhere('last_name', 'like', "%{$search}%")
+                                ->orWhereRaw("concat(first_name, ' ', last_name) like ?", ["%{$search}%"])
+                                ->orWhere('phone', 'like', "%{$search}%");
                         })
+                        ->orderBy('first_name')
+                        ->limit(50)
+                        ->get()
+                        ->mapWithKeys(fn (CustomerModel $c) => [$c->id => self::customerOptionLabel($c)])
                         ->all();
                 })
-                ->searchable(),
+                ->getOptionLabelUsing(function ($value): ?string {
+                    if ($value === null || $value === '') {
+                        return null;
+                    }
+                    $c = CustomerModel::query()->find($value);
+                    return $c ? self::customerOptionLabel($c) : null;
+                }),
 
             Forms\Components\TextInput::make('spots')
                 ->label('Spots (persons)')
@@ -86,6 +97,25 @@ class SessionBookingResource extends Resource
                 ->maxLength(64)
                 ->helperText('Drop-in only. Invalid code will be ignored.'),
         ]);
+    }
+
+    private static function customerOptionLabel(CustomerModel $c): string
+    {
+        $name = trim(($c->first_name ?? '') . ' ' . ($c->last_name ?? ''));
+        $phone = trim((string) ($c->phone ?? ''));
+        if ($phone !== '') {
+            $phone = preg_replace('/\s+/', ' ', $phone) ?? $phone;
+        }
+
+        if ($name === '' && $phone === '') {
+            return (string) $c->id;
+        }
+
+        if ($name !== '' && $phone !== '') {
+            return "{$name} — {$phone}";
+        }
+
+        return $name !== '' ? $name : $phone;
     }
 
     public static function table(Table $table): Table

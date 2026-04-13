@@ -682,6 +682,23 @@ class MobileAuthController extends Controller
         return $last;
     }
 
+    /**
+     * From valid package candidates (same category), return the first purchased one (by purchase date).
+     * Drops the internal _purchase_date key from the returned detail.
+     */
+    private function oldestValidPackageFromCandidates(array $candidates): ?array
+    {
+        if ($candidates === []) {
+            return null;
+        }
+        $oldest = collect($candidates)->sortBy(function ($detail) {
+            $d = $detail['_purchase_date'] ?? null;
+            return $d ? $d->format('Y-m-d H:i:s') : '9999-12-31 23:59:59';
+        })->first();
+        unset($oldest['_purchase_date']);
+        return $oldest;
+    }
+
     private function sumRemainingSessionsFromCandidates(array $candidates): int
     {
         $sum = 0;
@@ -729,6 +746,7 @@ class MobileAuthController extends Controller
                 'purchaseAtUtc' => ApiDateTime::toUtcIso8601($purchase->purchase_date),
                 'expiresAt' => $expiresAt ? ApiDateTime::toBusinessDateString($expiresAt) : null,
                 '_purchase_date' => $purchase->purchase_date,
+                '_expires_at' => $expiresAt,
             ];
             $serviceType = $this->packageServiceType($package);
             if ($serviceType === 'Yoga') {
@@ -741,8 +759,8 @@ class MobileAuthController extends Controller
         }
         unset($today);
 
-        $yogaPackage = $this->lastValidPackageFromCandidates($yogaCandidates);
-        $reformerPackage = $this->lastValidPackageFromCandidates($reformerCandidates);
+        $yogaPackage = $this->oldestExpiringPackageFromCandidates($yogaCandidates);
+        $reformerPackage = $this->oldestExpiringPackageFromCandidates($reformerCandidates);
         $unclassifiedPackage = $this->lastValidPackageFromCandidates($unclassifiedCandidates);
 
         // Sum remaining sessions across all valid purchases per category; nested package objects still use the latest purchase for metadata (e.g. expiresAt).
@@ -787,6 +805,28 @@ class MobileAuthController extends Controller
                 'unclassifiedPackage' => $unclassifiedPackage,
             ],
         ];
+    }
+
+    /**
+     * From valid package candidates (same category), return the one that expires soonest (by expiresAt).
+     * Falls back to purchase date if expiresAt is null.
+     * Drops internal keys from the returned detail.
+     */
+    private function oldestExpiringPackageFromCandidates(array $candidates): ?array
+    {
+        if ($candidates === []) {
+            return null;
+        }
+        $oldest = collect($candidates)->sortBy(function ($detail) {
+            $e = $detail['_expires_at'] ?? null;
+            if ($e instanceof Carbon) {
+                return $e->format('Y-m-d H:i:s');
+            }
+            $d = $detail['_purchase_date'] ?? null;
+            return $d instanceof Carbon ? ('9999-12-31 23:59:59|' . $d->format('Y-m-d H:i:s')) : '9999-12-31 23:59:59|9999-12-31 23:59:59';
+        })->first();
+        unset($oldest['_purchase_date'], $oldest['_expires_at']);
+        return $oldest;
     }
 
     /**

@@ -60,6 +60,11 @@ class AppointmentModel extends Model
         return $this->belongsTo(PackageModel::class, 'package_id');
     }
 
+    public function location(): BelongsTo
+    {
+        return $this->belongsTo(LocationModel::class, 'location_id');
+    }
+
     public function bookings(): HasMany
     {
         return $this->hasMany(BookingModel::class, 'appointment_id');
