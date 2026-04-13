@@ -8,6 +8,7 @@ use App\Filament\Resources\SessionBookingResource;
 use Filament\Actions;
 use Filament\Notifications\Notification;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Validation\ValidationException;
 
 class ManageSessionBookings extends ManageRecordsWithFullWidthForm
 {
@@ -28,7 +29,10 @@ class ManageSessionBookings extends ManageRecordsWithFullWidthForm
                             ->danger()
                             ->send();
 
-                        throw $e;
+                        // Convert to a validation error so Livewire doesn't show a 500 error page.
+                        throw ValidationException::withMessages([
+                            'appointment_id' => $e->getMessage(),
+                        ]);
                     }
                 }),
         ];
