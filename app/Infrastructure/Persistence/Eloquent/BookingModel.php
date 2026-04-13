@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class BookingModel extends Model
@@ -72,6 +73,63 @@ class BookingModel extends Model
             if (empty($booking->channel)) {
                 $booking->channel = 'admin';
             }
+        });
+
+        static::created(function (self $booking): void {
+            // Safety net for admin/session booking flows that create a package booking
+            // without decrementing remaining sessions on the purchase record.
+            //
+            // If the booking already has `customer_package_purchase_id`, the dedicated
+            // booking services handle deduction and we must not double-deduct.
+            if (
+                $booking->appointment_id === null
+                || (bool) $booking->is_drop_in
+                || $booking->package_id === null
+                || $booking->customer_id === null
+                || $booking->customer_package_purchase_id !== null
+            ) {
+                return;
+            }
+
+            DB::transaction(function () use ($booking): void {
+                // Re-load the booking row with a lock to avoid races.
+                /** @var self|null $fresh */
+                $fresh = self::query()
+                    ->whereKey($booking->getKey())
+                    ->lockForUpdate()
+                    ->first();
+
+                if (! $fresh) {
+                    return;
+                }
+
+                if (
+                    $fresh->customer_package_purchase_id !== null
+                    || $fresh->package_id === null
+                    || $fresh->customer_id === null
+                    || (bool) $fresh->is_drop_in
+                ) {
+                    return;
+                }
+
+                $spots = max(1, (int) ($fresh->party_size ?? 1));
+
+                $purchase = CustomerPackagePurchaseModel::query()
+                    ->where('customer_id', $fresh->customer_id)
+                    ->where('package_id', $fresh->package_id)
+                    ->where('status', 'active')
+                    ->where('remaining_sessions', '>=', $spots)
+                    ->orderByDesc('purchase_date')
+                    ->lockForUpdate()
+                    ->first();
+
+                if (! $purchase) {
+                    return;
+                }
+
+                $purchase->decrement('remaining_sessions', $spots);
+                $fresh->updateQuietly(['customer_package_purchase_id' => $purchase->id]);
+            });
         });
     }
 
