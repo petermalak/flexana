@@ -60,7 +60,9 @@ class CustomerPackagePurchaseResource extends Resource
                             ->numeric()
                             ->minValue(0)
                             ->required()
-                            ->helperText('Deducted when customer books a session from package; refunded on cancel.'),
+                            ->helperText('Deducted when customer books a session from package; refunded on cancel.')
+                            ->disabled(fn ($get): bool => (string) $get('status') !== 'active')
+                            ->dehydrated(),
                         Forms\Components\DatePicker::make('purchase_date')
                             ->required(),
                         Forms\Components\Select::make('status')
@@ -70,7 +72,13 @@ class CustomerPackagePurchaseResource extends Resource
                                 'expired' => 'Expired',
                             ])
                             ->default('active')
-                            ->required(),
+                            ->required()
+                            ->live()
+                            ->afterStateUpdated(function ($state, $set): void {
+                                if ((string) $state !== 'active') {
+                                    $set('remaining_sessions', 0);
+                                }
+                            }),
                     ])->columns(2),
             ]);
     }
