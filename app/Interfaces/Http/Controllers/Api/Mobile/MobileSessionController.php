@@ -341,9 +341,24 @@ class MobileSessionController extends Controller
         // purely from keywords when the business has stored it under Yoga.
         $category = $service->relationLoaded('category') ? $service->category : null;
         if ($category) {
-            $name = strtolower((string) ($category->name ?? ''));
+            // Prefer the same Yoga/Reformer category grouping used elsewhere in this controller.
+            // This handles categories like "Yoga & Mat Pilates" which should still be treated as Yoga.
+            [$yogaCategoryIds] = $this->getCategoryFilterData('Yoga');
+            [$reformerCategoryIds] = $this->getCategoryFilterData('Reformer Pilates');
+
+            $categoryId = $category->id ?? null;
+            if ($categoryId !== null) {
+                if (in_array($categoryId, $yogaCategoryIds, true)) {
+                    return 'Yoga';
+                }
+                if (in_array($categoryId, $reformerCategoryIds, true)) {
+                    return 'Reformer Pilates';
+                }
+            }
+
+            // Fallback: very small heuristic for common slugs.
             $slug = strtolower((string) ($category->slug ?? ''));
-            if ($slug === 'yoga' || (str_contains($name, 'yoga') && ! str_contains($name, 'pilates'))) {
+            if ($slug === 'yoga' || str_contains($slug, 'yoga')) {
                 return 'Yoga';
             }
         }
