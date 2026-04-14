@@ -413,7 +413,7 @@ class MobileBookingController extends Controller
                     $purchase = CustomerPackagePurchaseModel::query()
                         ->where('customer_id', $booking->customer_id)
                         ->where('package_id', $booking->package_id)
-                        ->orderByDesc('purchase_date')
+                        ->orderBy('purchase_date')
                         ->first();
                 }
                 if ($purchase) {
@@ -502,7 +502,7 @@ class MobileBookingController extends Controller
             ->where('status', 'active')
             ->where('remaining_sessions', '>=', $persons)
             ->whereNotNull('package_id')
-            ->orderByDesc('purchase_date')
+            ->orderBy('purchase_date')
             ->get();
 
         foreach ($purchases as $purchase) {

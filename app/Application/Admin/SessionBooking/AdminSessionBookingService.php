@@ -186,7 +186,7 @@ final class AdminSessionBookingService
             ->where('status', 'active')
             ->where('remaining_sessions', '>=', $spots)
             ->whereNotNull('package_id')
-            ->orderByDesc('purchase_date')
+            ->orderBy('purchase_date')
             ->get();
 
         foreach ($purchases as $purchase) {

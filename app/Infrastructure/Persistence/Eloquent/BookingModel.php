@@ -119,7 +119,7 @@ class BookingModel extends Model
                     ->where('package_id', $fresh->package_id)
                     ->where('status', 'active')
                     ->where('remaining_sessions', '>=', $spots)
-                    ->orderByDesc('purchase_date')
+                    ->orderBy('purchase_date')
                     ->lockForUpdate()
                     ->first();
 
