@@ -335,6 +335,19 @@ class MobileSessionController extends Controller
         if (! $service) {
             return null;
         }
+
+        // If the service is explicitly categorized as Yoga in the DB, honor that.
+        // This prevents cases like "Mat Pilates" being inferred as Reformer/Pilates
+        // purely from keywords when the business has stored it under Yoga.
+        $category = $service->relationLoaded('category') ? $service->category : null;
+        if ($category) {
+            $name = strtolower((string) ($category->name ?? ''));
+            $slug = strtolower((string) ($category->slug ?? ''));
+            if ($slug === 'yoga' || (str_contains($name, 'yoga') && ! str_contains($name, 'pilates'))) {
+                return 'Yoga';
+            }
+        }
+
         $serviceText = trim(($service->name ?? '') . ' ' . ($service->description ?? ''));
 
         return CategorizeServicesCommand::inferCategoryNameFromText($serviceText) ?? 'Yoga';
