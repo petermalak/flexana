@@ -335,22 +335,6 @@ class MobileSessionController extends Controller
         if (! $service) {
             return null;
         }
-        $category = $service->relationLoaded('category') ? $service->category : null;
-        if ($category) {
-            $name = strtolower((string) ($category->name ?? ''));
-            $slug = strtolower((string) ($category->slug ?? ''));
-            if ($slug === 'yoga' || (str_contains($name, 'yoga') && ! str_contains($name, 'pilates'))) {
-                return 'Yoga';
-            }
-            if (in_array($slug, ['reformer-pilates', 'pilates', 'reformer'], true)
-                || str_contains($name, 'reformer')
-                || (str_contains($name, 'pilates') && ! str_contains($name, 'yoga'))) {
-                return 'Reformer Pilates';
-            }
-        }
-        if (! $service->name) {
-            return null;
-        }
         $serviceText = trim(($service->name ?? '') . ' ' . ($service->description ?? ''));
 
         return CategorizeServicesCommand::inferCategoryNameFromText($serviceText) ?? 'Yoga';
