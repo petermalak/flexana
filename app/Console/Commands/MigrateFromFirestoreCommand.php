@@ -576,20 +576,31 @@ class MigrateFromFirestoreCommand extends Command
     private function parseTimestamp($value): ?Carbon
     {
         if ($value instanceof Carbon) {
-            return $value;
+            return $value->copy()->timezone((string) config('app.timezone'));
         }
         if ($value === null || $value === '') {
             return null;
         }
+        $tz = (string) config('app.timezone');
         if (is_numeric($value)) {
-            return Carbon::createFromTimestamp((int) $value);
+            // Firestore exports sometimes contain epoch milliseconds.
+            $n = (int) $value;
+            if ($n > 100000000000) { // ~ year 5138 in seconds, but common for ms since 1970
+                return Carbon::createFromTimestampMs($n)->timezone($tz);
+            }
+            return Carbon::createFromTimestamp($n)->timezone($tz);
         }
         if (is_array($value) && isset($value['_seconds'])) {
-            return Carbon::createFromTimestamp((int) $value['_seconds']);
+            $seconds = (int) $value['_seconds'];
+            $nanos = (int) ($value['_nanoseconds'] ?? 0);
+            $ms = ($seconds * 1000) + (int) floor($nanos / 1000000);
+            return Carbon::createFromTimestampMs($ms)->timezone($tz);
         }
         if (is_string($value)) {
             try {
-                return Carbon::parse($value);
+                // Export script serializes Firestore timestamps to ISO-8601 (UTC). Normalize into app timezone
+                // so MySQL datetimes match business wall-clock expectations (Africa/Cairo by default).
+                return Carbon::parse($value)->timezone($tz);
             } catch (\Throwable) {
                 return null;
             }
