@@ -92,8 +92,9 @@ class FixUnlimitedPackagePurchasesCommand extends Command
             })
             ->where('status', 'active')
             ->where(function ($q): void {
-                $q->where('remaining_sessions', '<=', 0)
-                    ->orWhere('total_sessions', '<=', 1);
+                // Only fix the exact bad sync shape.
+                $q->where('remaining_sessions', '=', 0)
+                    ->where('total_sessions', '=', 1);
             })
             ->orderBy('id');
 
