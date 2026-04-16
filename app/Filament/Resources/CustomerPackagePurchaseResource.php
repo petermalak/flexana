@@ -97,7 +97,8 @@ class CustomerPackagePurchaseResource extends Resource
                         : '-')
                     ->searchable(query: function ($query, $search) {
                         return $query->whereHas('customer', fn ($q) => $q->where('first_name', 'like', "%{$search}%")
-                            ->orWhere('last_name', 'like', "%{$search}%"));
+                            ->orWhere('last_name', 'like', "%{$search}%")
+                            ->orWhere('phone', 'like', "%{$search}%"));
                     })
                     ->sortable(),
                 Tables\Columns\TextColumn::make('package.title')

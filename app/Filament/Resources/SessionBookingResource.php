@@ -131,9 +131,41 @@ class SessionBookingResource extends Resource
                     ->label('Service')
                     ->sortable()
                     ->toggleable(),
-                Tables\Columns\TextColumn::make('customer.email')
+                Tables\Columns\TextColumn::make('customer.first_name')
                     ->label('Customer')
-                    ->searchable()
+                    ->formatStateUsing(function (BookingModel $record): string {
+                        $customer = $record->customer;
+                        if (! $customer) {
+                            return '-';
+                        }
+
+                        $name = trim(($customer->first_name ?? '') . ' ' . ($customer->last_name ?? ''));
+                        $phone = trim((string) ($customer->phone ?? ''));
+                        $email = trim((string) ($customer->email ?? ''));
+
+                        if ($name !== '' && $phone !== '') {
+                            return "{$name} — {$phone}";
+                        }
+                        if ($name !== '' && $email !== '') {
+                            return "{$name} — {$email}";
+                        }
+
+                        return $name !== '' ? $name : ($phone !== '' ? $phone : ($email !== '' ? $email : (string) $customer->id));
+                    })
+                    ->searchable(query: function ($query, string $search) {
+                        $search = trim($search);
+                        if ($search === '') {
+                            return $query;
+                        }
+
+                        return $query->whereHas('customer', function (Builder $q) use ($search) {
+                            $q->where('first_name', 'like', "%{$search}%")
+                                ->orWhere('last_name', 'like', "%{$search}%")
+                                ->orWhereRaw("concat(first_name, ' ', last_name) like ?", ["%{$search}%"])
+                                ->orWhere('email', 'like', "%{$search}%")
+                                ->orWhere('phone', 'like', "%{$search}%");
+                        });
+                    })
                     ->toggleable(),
                 Tables\Columns\TextColumn::make('party_size')
                     ->label('Spots')

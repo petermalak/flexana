@@ -65,6 +65,7 @@ class CustomerResource extends Resource
                     ->searchable()
                     ->toggleable(),
                 Tables\Columns\TextColumn::make('phone')
+                    ->searchable()
                     ->toggleable(),
                 Tables\Columns\TextColumn::make('timezone')
                     ->toggleable(),
