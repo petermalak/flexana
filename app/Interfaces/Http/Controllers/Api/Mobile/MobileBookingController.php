@@ -607,6 +607,7 @@ class MobileBookingController extends Controller
             . "* Name: {$customerName},\n\n"
             . "* Email: {$customer->email}\n\n"
             . "* Phone: {$customer->phone}\n\n"
+            . "* Spots: " . ((int) ($booking->party_size ?? 1)) . "\n\n"
             . "* Class: " . ($service?->name ?? 'Unknown') . "\n\n"
             . "* Day: {$appointmentDate}\n\n"
             . "* Time: {$appointmentTime}\n\n"
