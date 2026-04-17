@@ -34,10 +34,14 @@ return [
     'smsmisr' => [
         'username' => env('SMSMISR_USERNAME'),
         'password' => env('SMSMISR_PASSWORD'),
-        'sender_id' => env('SMSMISR_SENDER_ID'), // Your activated sender name in SMS Misr
-        // As in their docs: https://smsmisr.com/api/SMS/?environment=2&username=...&...
-        'environment' => env('SMSMISR_ENVIRONMENT', '2'), // e.g. 2 = production (confirm in SMS Misr docs)
-        'language' => env('SMSMISR_LANGUAGE', '1'), // depends on SMS Misr docs (e.g. 1 = Arabic / 2 = English)
+        // SMS Misr expects a *sender token* (Sender IDs), not the display name.
+        // See https://smsmisr.com/API (Bulk SMS API).
+        'sender_id' => env('SMSMISR_SENDER_ID'),
+        // SMS Misr docs: 1 = Live, 2 = Test
+        'environment' => env('SMSMISR_ENVIRONMENT', '1'),
+        // SMS Misr docs: 1=Eng, 2=Arabic, 3=Unicode
+        'language' => env('SMSMISR_LANGUAGE', '1'),
+        // Bulk SMS endpoint base URL (trailing slash recommended): https://smsmisr.com/api/SMS/
         'api_url' => env('SMSMISR_API_URL', 'https://smsmisr.com/api/SMS/'),
     ],
 ];

@@ -27,24 +27,23 @@ SMS_DRIVER=smsmisr
 
 SMSMISR_USERNAME=your_api_username
 SMSMISR_PASSWORD=your_api_password
-SMSMISR_SENDER_ID=YourSenderName
-SMSMISR_ENVIRONMENT=Production
-SMSMISR_API_URL=https://smsmisr.com/api/v2
+SMSMISR_SENDER_ID=your_sender_token
+SMSMISR_ENVIRONMENT=1
+SMSMISR_API_URL=https://smsmisr.com/api/SMS/
 ```
 
-- **SMSMISR_SENDER_ID:** The exact sender name you activated in SMS Misr (e.g. your brand name).
-- **SMSMISR_ENVIRONMENT:** `Production` for real SMS; `Test` if their API provides a test mode.
-- **SMSMISR_API_URL:** Base URL only (no path). The app sends to `{SMSMISR_API_URL}/SendSMS`. If your API docs use a different path, set `SMSMISR_API_URL` to the full base that matches (e.g. `https://smsmisr.com/api/v2` and we append `/SendSMS`).
+- **SMSMISR_SENDER_ID:** **Sender token** from SMS Misr (Sender IDs), not the display name.
+- **SMSMISR_ENVIRONMENT:** SMS Misr API uses numeric values: **`1` = Live**, **`2` = Test**.
+- **SMSMISR_API_URL:** Bulk SMS endpoint base URL. For the official API docs, this is `https://smsmisr.com/api/SMS/`.
 
 ---
 
 ## 3. Request format we send
 
-The backend sends a **POST** request (JSON) like:
+The backend sends a **POST** request (`application/x-www-form-urlencoded`) to:
 
-- **URL:** `{SMSMISR_API_URL}/SendSMS`
-- **Body:**
-  - `Username`, `Password`, `Sender`, `Message`, `Language`, `Environment`, `Mobile` (array of numbers without `+`).
+- **URL:** `SMSMISR_API_URL` (e.g. `https://smsmisr.com/api/SMS/`)
+- **Body fields:** `environment`, `username`, `password`, `sender`, `mobile`, `language`, `message`
 
 If the official API uses different parameter names or endpoint path, we can adjust the code in `App\Application\Auth\SmsVerificationService::sendViaSmsMisr()` and/or add more config keys.
 
@@ -53,5 +52,8 @@ If the official API uses different parameter names or endpoint path, we can adju
 ## 4. Troubleshooting
 
 - **No SMS received:** Check `storage/logs/laravel.log` for `SMS Misr send failed` or `SMS Misr API error`. Fix credentials, sender ID, or URL.
+- **API code `1903`:** Invalid username/password (check `SMSMISR_USERNAME` / `SMSMISR_PASSWORD`).
+- **API code `1904`:** Invalid sender (sender token is wrong / not activated for the account).
+- **API code `1912`:** Invalid environment (must be `1` or `2`).
 - **Wrong endpoint/parameters:** Compare with [SMS Misr API](https://smsmisr.com/API) and update `config/sms.php` and `SmsVerificationService::sendViaSmsMisr()` if needed.
 - **Test without sending:** Use `SMS_DRIVER=log` to only log the OTP (see `SMS verification code` in the log).

@@ -234,8 +234,7 @@ final class SmsVerificationService implements SmsVerificationServiceInterface
 
     /**
      * Send SMS via SMS Misr (Egypt). API docs: https://smsmisr.com/API
-     * POST request with all params in the URL query string (no body),
-     * e.g. https://smsmisr.com/api/SMS/?environment=2&username=...&password=...&language=1&sender=...&mobile=2012...&message=Your+verification+code+is...
+     * POST request with application/x-www-form-urlencoded body.
      * Success response: {"code": "1901", "SMSID": "...", "cost": "..."}.
      */
     private function sendViaSmsMisr(string $to, string $code): bool
@@ -245,8 +244,21 @@ final class SmsVerificationService implements SmsVerificationServiceInterface
         $mobile = str_replace('+', '', $to);
         $message = "Your verification code is: {$code}";
 
+        $environment = config('sms.smsmisr.environment');
+        if (is_string($environment)) {
+            $env = strtolower(trim($environment));
+            // SMS Misr commonly uses numeric environment codes (e.g. 1=test, 2=production).
+            // Accept human-friendly values from .env to avoid subtle misconfiguration.
+            // According to SMS Misr docs: 1 = Live, 2 = Test
+            if ($env === 'production' || $env === 'live') {
+                $environment = '1';
+            } elseif ($env === 'test' || $env === 'testing' || $env === 'sandbox') {
+                $environment = '2';
+            }
+        }
+
         $queryParams = [
-            'environment' => config('sms.smsmisr.environment'),
+            'environment' => $environment,
             'username' => config('sms.smsmisr.username'),
             'password' => config('sms.smsmisr.password'),
             'language' => config('sms.smsmisr.language'),
@@ -255,16 +267,34 @@ final class SmsVerificationService implements SmsVerificationServiceInterface
             'message' => $message,
         ];
 
-        $url = $baseUrl . '?' . http_build_query($queryParams);
+        try {
+            // SMS Misr expects application/x-www-form-urlencoded POST body.
+            $response = Http::connectTimeout(10)
+                ->timeout(30)
+                ->retry(2, 250)
+                ->asForm()
+                ->post($baseUrl . '/', $queryParams);
+        } catch (\Throwable $e) {
+            $sanitizedParams = $queryParams;
+            if (array_key_exists('password', $sanitizedParams)) {
+                $sanitizedParams['password'] = '***';
+            }
+            Log::warning('SMS Misr send exception', [
+                'to' => $to,
+                'message' => $e->getMessage(),
+                'endpoint' => $baseUrl,
+                'query' => $sanitizedParams,
+            ]);
 
-        // POST with no body, all params in query string (matches working curl example)
-        $response = Http::timeout(15)->post($url);
+            return false;
+        }
 
         if (! $response->successful()) {
+            $sanitizedBody = $response->json() ?? $response->body();
             Log::warning('SMS Misr send failed', [
                 'to' => $to,
                 'status' => $response->status(),
-                'body' => $response->json() ?? $response->body(),
+                'body' => $sanitizedBody,
             ]);
 
             return false;
