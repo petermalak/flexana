@@ -322,6 +322,17 @@ final class SmsVerificationService implements SmsVerificationServiceInterface
                 return false;
             }
 
+            // Log success so we can correlate with SMS Misr console reports (SMSID, Cost, etc.)
+            // Do not log credentials; only provider response metadata.
+            Log::info('SMS Misr sent', [
+                'to' => $to,
+                'response' => [
+                    'code' => $responseCode,
+                    'SMSID' => $data['SMSID'] ?? $data['SmsID'] ?? $data['smsid'] ?? null,
+                    'Cost' => $data['Cost'] ?? $data['cost'] ?? null,
+                ],
+            ]);
+
             return true;
         }
 
