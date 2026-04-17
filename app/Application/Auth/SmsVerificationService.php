@@ -27,6 +27,11 @@ final class SmsVerificationService implements SmsVerificationServiceInterface
         }
 
         if ($driver === 'smsmisr' && $this->smsMisrConfigured()) {
+            // Prefer OTP API (template-based) when configured and we have a code to send.
+            if ($code !== '' && $this->smsMisrOtpConfigured()) {
+                return $this->sendViaSmsMisrOtp($phone, $code);
+            }
+
             return $this->sendViaSmsMisr($phone, $code);
         }
 
@@ -232,6 +237,121 @@ final class SmsVerificationService implements SmsVerificationServiceInterface
             && ! empty(config('sms.smsmisr.api_url'));
     }
 
+    private function smsMisrOtpConfigured(): bool
+    {
+        return $this->smsMisrConfigured()
+            && ! empty(config('sms.smsmisr.otp_api_url'))
+            && ! empty(config('sms.smsmisr.otp_template'));
+    }
+
+    /**
+     * Send OTP via SMS Misr OTP API (template-based). API docs: https://smsmisr.com/API
+     * POST request with application/x-www-form-urlencoded body.
+     * Success response: {"code": "4901", "SMSID": "...", "Cost": "..."}.
+     */
+    private function sendViaSmsMisrOtp(string $to, string $code): bool
+    {
+        $baseUrl = rtrim((string) config('sms.smsmisr.otp_api_url'), '/');
+
+        $mobile = str_replace('+', '', $to);
+        $environment = config('sms.smsmisr.environment');
+        if (is_string($environment)) {
+            $env = strtolower(trim($environment));
+            // According to SMS Misr docs: 1 = Live, 2 = Test
+            if ($env === 'production' || $env === 'live') {
+                $environment = '1';
+            } elseif ($env === 'test' || $env === 'testing' || $env === 'sandbox') {
+                $environment = '2';
+            }
+        }
+
+        $queryParams = [
+            'environment' => $environment,
+            'username' => config('sms.smsmisr.username'),
+            'password' => config('sms.smsmisr.password'),
+            'sender' => config('sms.smsmisr.sender_id'),
+            'mobile' => $mobile,
+            'template' => config('sms.smsmisr.otp_template'),
+            'otp' => (string) $code,
+        ];
+
+        try {
+            $response = Http::connectTimeout(10)
+                ->timeout(30)
+                ->retry(2, 250)
+                ->asForm()
+                ->post($baseUrl . '/', $queryParams);
+        } catch (\Throwable $e) {
+            $sanitizedParams = $queryParams;
+            if (array_key_exists('password', $sanitizedParams)) {
+                $sanitizedParams['password'] = '***';
+            }
+            Log::warning('SMS Misr OTP send exception', [
+                'to' => $to,
+                'message' => $e->getMessage(),
+                'endpoint' => $baseUrl,
+                'query' => $sanitizedParams,
+            ]);
+
+            return false;
+        }
+
+        if (! $response->successful()) {
+            $sanitizedBody = $response->json() ?? $response->body();
+            Log::warning('SMS Misr OTP send failed', [
+                'to' => $to,
+                'status' => $response->status(),
+                'body' => $sanitizedBody,
+            ]);
+
+            return false;
+        }
+
+        $successCodes = [4901, '4901'];
+        $data = null;
+        try {
+            $data = $response->json();
+        } catch (\Throwable) {
+            $data = null;
+        }
+
+        if (is_array($data)) {
+            $responseCode = $data['Code'] ?? $data['code'] ?? null;
+            if ($responseCode !== null && ! in_array($responseCode, $successCodes, true)) {
+                Log::warning('SMS Misr OTP API error', [
+                    'to' => $to,
+                    'response' => $data,
+                ]);
+
+                return false;
+            }
+
+            Log::info('SMS Misr OTP sent', [
+                'to' => $to,
+                'response' => [
+                    'code' => $responseCode,
+                    'SMSID' => $data['SMSID'] ?? $data['SmsID'] ?? $data['smsid'] ?? null,
+                    'Cost' => $data['Cost'] ?? $data['cost'] ?? null,
+                ],
+            ]);
+
+            return true;
+        }
+
+        // Some providers may return numeric code as plain body; handle that too.
+        $body = trim($response->body());
+        if ($body !== '' && is_numeric($body) && ! in_array($body, $successCodes, true)) {
+            Log::warning('SMS Misr OTP API error (numeric body)', [
+                'to' => $to,
+                'body' => $body,
+            ]);
+
+            return false;
+        }
+
+        return true;
+    }
+
     /**
      * Send SMS via SMS Misr (Egypt). API docs: https://smsmisr.com/API
      * POST request with application/x-www-form-urlencoded body.
@@ -240,6 +360,18 @@ final class SmsVerificationService implements SmsVerificationServiceInterface
     private function sendViaSmsMisr(string $to, string $code): bool
     {
         $baseUrl = rtrim(config('sms.smsmisr.api_url'), '/');
+
+        // Guardrail: OTP endpoint requires template+otp (different parameters).
+        // If someone mistakenly points SMSMISR_API_URL to /api/OTP/, fail fast with an actionable log.
+        if (str_contains(strtolower($baseUrl), '/api/otp')) {
+            Log::warning('SMS Misr misconfiguration: SMSMISR_API_URL points to OTP endpoint', [
+                'to' => $to,
+                'api_url' => $baseUrl,
+                'hint' => 'Set SMSMISR_API_URL=https://smsmisr.com/api/SMS/ and use SMSMISR_OTP_API_URL + SMSMISR_OTP_TEMPLATE for OTP API. If .env is already correct, clear stale config cache: php artisan config:clear (or optimize:clear), then restart php-fpm/queue workers.',
+            ]);
+
+            return false;
+        }
 
         $mobile = str_replace('+', '', $to);
         $message = "Your verification code is: {$code}";

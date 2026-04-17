@@ -43,5 +43,11 @@ return [
         'language' => env('SMSMISR_LANGUAGE', '1'),
         // Bulk SMS endpoint base URL (trailing slash recommended): https://smsmisr.com/api/SMS/
         'api_url' => env('SMSMISR_API_URL', 'https://smsmisr.com/api/SMS/'),
+
+        // OTP API (template-based, usually better deliverability for verification codes)
+        // Base URL: https://smsmisr.com/api/OTP/
+        // Template token must be created in SMS Misr console.
+        'otp_api_url' => env('SMSMISR_OTP_API_URL', 'https://smsmisr.com/api/OTP/'),
+        'otp_template' => env('SMSMISR_OTP_TEMPLATE'),
     ],
 ];
