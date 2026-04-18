@@ -414,6 +414,23 @@ final class PhoneVerificationService
             ->first();
 
         if (! $row) {
+            // Fallback: fetch latest row and compare in PHP (helps diagnose + avoids MySQL timezone quirks).
+            $latestRow = DB::table('phone_verification_codes')
+                ->whereIn('phone', $variants)
+                ->where('purpose', 'password_reset')
+                ->orderByDesc('created_at')
+                ->first(['phone', 'code', 'created_at', 'expires_at', 'customer_id']);
+
+            if ($latestRow) {
+                $latestCode = (string) ($latestRow->code ?? '');
+                $latestExpiresAt = $latestRow->expires_at ? Carbon::parse($latestRow->expires_at, 'UTC') : null;
+
+                if ($latestCode === $code && $latestExpiresAt && $latestExpiresAt->gt($now)) {
+                    $row = $latestRow;
+                }
+            }
+
+            if (! $row) {
             // Debug: log the latest rows for this phone to diagnose timezone / normalization issues in production.
             $latest = DB::table('phone_verification_codes')
                 ->whereIn('phone', $variants)
@@ -429,6 +446,7 @@ final class PhoneVerificationService
                 'latest_rows' => $latest,
             ]);
             return ['success' => false, 'message' => 'Invalid or expired code.'];
+            }
         }
 
         $customer = Customer::query()->whereIn('phone', $variants)->first();
