@@ -2,6 +2,7 @@
 
 namespace App\Application\Auth;
 
+use App\Models\SmsMessageLog;
 use App\Models\Customer;
 use App\Support\PhoneNumberNormalizer;
 use Illuminate\Support\Carbon;
@@ -66,9 +67,12 @@ final class PhoneVerificationService
         $customer->save();
 
         if ($useTwilioVerify) {
+            $log = $this->createSmsLog($phone, null, 'signup');
             if (! $this->sms->sendCode($phone, '')) {
+                $this->markSmsLogFailed($log, 'Verification code could not be sent.');
                 return ['success' => false, 'message' => 'Verification code could not be sent. Please check your number and try again.'];
             }
+            $this->markSmsLogSuccess($log);
             // Throttle: insert placeholder so we don't spam Twilio (verify uses provider check, not this row)
             DB::table('phone_verification_codes')->insert([
                 'phone' => $phone,
@@ -94,9 +98,12 @@ final class PhoneVerificationService
             'created_at' => Carbon::now(),
         ]);
 
+        $log = $this->createSmsLog($phone, $code, 'signup');
         if (! $this->sms->sendCode($phone, $code)) {
+            $this->markSmsLogFailed($log, 'Verification code could not be sent.');
             return ['success' => false, 'message' => 'Verification code could not be sent. Please check your number and try again.'];
         }
+        $this->markSmsLogSuccess($log);
 
         return ['success' => true, 'message' => 'Verification code sent.', 'code' => $code];
     }
@@ -197,9 +204,12 @@ final class PhoneVerificationService
             'created_at' => Carbon::now(),
         ]);
 
+        $log = $this->createSmsLog($phone, $code, 'phone_change');
         if (! $this->sms->sendCode($phone, $code)) {
+            $this->markSmsLogFailed($log, 'Verification code could not be sent.');
             return ['success' => false, 'message' => 'Verification code could not be sent. Please check the number and try again.'];
         }
+        $this->markSmsLogSuccess($log);
 
         return ['success' => true, 'message' => 'Verification code sent.'];
     }
@@ -285,9 +295,12 @@ final class PhoneVerificationService
         }
 
         if ($useTwilioVerify) {
+            $log = $this->createSmsLog($phone, null, 'password_reset');
             if (! $this->sms->sendCode($phone, '')) {
+                $this->markSmsLogFailed($log, 'Verification code could not be sent.');
                 return ['success' => false, 'message' => 'Verification code could not be sent. Please check your number and try again.'];
             }
+            $this->markSmsLogSuccess($log);
             // Throttle: insert placeholder so we don't spam Twilio
             DB::table('phone_verification_codes')->insert([
                 'phone' => $phone,
@@ -313,9 +326,12 @@ final class PhoneVerificationService
             'created_at' => Carbon::now(),
         ]);
 
+        $log = $this->createSmsLog($phone, $code, 'password_reset');
         if (! $this->sms->sendCode($phone, $code)) {
+            $this->markSmsLogFailed($log, 'Verification code could not be sent.');
             return ['success' => false, 'message' => 'Verification code could not be sent. Please check your number and try again.'];
         }
+        $this->markSmsLogSuccess($log);
 
         $response = ['success' => true, 'message' => 'If that phone number exists, we have sent a password reset code.'];
         if (app()->environment('local', 'testing')) {
@@ -355,6 +371,33 @@ final class PhoneVerificationService
         return $variants === [] ? [$normalizedPhone] : $variants;
     }
 
+    private function createSmsLog(string $msisdn, ?string $code, string $reason): SmsMessageLog
+    {
+        return SmsMessageLog::query()->create([
+            'msisdn' => $msisdn,
+            'verification_code' => $code,
+            'reason' => $reason,
+            'driver' => (string) config('sms.driver', 'log'),
+            'success' => null,
+        ]);
+    }
+
+    private function markSmsLogSuccess(SmsMessageLog $log): void
+    {
+        $log->update([
+            'success' => true,
+            'error_message' => null,
+        ]);
+    }
+
+    private function markSmsLogFailed(SmsMessageLog $log, string $message): void
+    {
+        $log->update([
+            'success' => false,
+            'error_message' => $message,
+        ]);
+    }
+
     /**
      * Verify password reset code. Returns success and customer if valid.
      *
@@ -366,17 +409,18 @@ final class PhoneVerificationService
         if (empty($phone)) {
             return ['success' => false, 'message' => 'Invalid phone number.'];
         }
+        $variants = $this->phoneLookupVariants($phone);
 
         $providerResult = $this->sms->checkVerification($phone, $code);
         if ($providerResult === true) {
-            $customer = Customer::query()->where('phone', $phone)->first();
+            $customer = Customer::query()->whereIn('phone', $variants)->first();
             if (! $customer) {
                 return ['success' => false, 'message' => 'Customer not found.'];
             }
 
             // Delete used code
             DB::table('phone_verification_codes')
-                ->where('phone', $phone)
+                ->whereIn('phone', $variants)
                 ->where('purpose', 'password_reset')
                 ->where('customer_id', $customer->id)
                 ->delete();
@@ -388,7 +432,7 @@ final class PhoneVerificationService
         }
 
         $row = DB::table('phone_verification_codes')
-            ->where('phone', $phone)
+            ->whereIn('phone', $variants)
             ->where('code', $code)
             ->where('purpose', 'password_reset')
             ->where('expires_at', '>', Carbon::now())
@@ -399,14 +443,14 @@ final class PhoneVerificationService
             return ['success' => false, 'message' => 'Invalid or expired code.'];
         }
 
-        $customer = Customer::query()->where('phone', $phone)->first();
+        $customer = Customer::query()->whereIn('phone', $variants)->first();
         if (! $customer) {
             return ['success' => false, 'message' => 'Customer not found.'];
         }
 
         // Delete used code
         DB::table('phone_verification_codes')
-            ->where('phone', $phone)
+            ->whereIn('phone', $variants)
             ->where('code', $code)
             ->where('purpose', 'password_reset')
             ->delete();
