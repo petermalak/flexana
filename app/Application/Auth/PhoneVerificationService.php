@@ -132,7 +132,7 @@ final class PhoneVerificationService
             ->where('code', $code)
             ->where('purpose', 'signup')
             ->whereNull('customer_id')
-            ->where('expires_at', '>', $this->nowUtc())
+            ->whereRaw('expires_at > UTC_TIMESTAMP()')
             ->orderByDesc('created_at')
             ->first();
 
@@ -213,7 +213,7 @@ final class PhoneVerificationService
             ->where('code', $code)
             ->where('purpose', 'phone_change')
             ->where('customer_id', $customerId)
-            ->where('expires_at', '>', $this->nowUtc())
+            ->whereRaw('expires_at > UTC_TIMESTAMP()')
             ->orderByDesc('created_at')
             ->first();
 
@@ -383,7 +383,7 @@ final class PhoneVerificationService
             return ['success' => false, 'message' => 'Invalid phone number.'];
         }
         $variants = $this->phoneLookupVariants($phone);
-        $now = $this->nowUtc();
+        $now = $this->nowUtc(); // used for logging/debug; DB comparison uses UTC_TIMESTAMP() to avoid tz conversion bugs.
 
         $providerResult = $this->sms->checkVerification($phone, $code);
         if ($providerResult === true) {
@@ -409,7 +409,7 @@ final class PhoneVerificationService
             ->whereIn('phone', $variants)
             ->where('code', $code)
             ->where('purpose', 'password_reset')
-            ->where('expires_at', '>', $now)
+            ->whereRaw('expires_at > UTC_TIMESTAMP()')
             ->orderByDesc('created_at')
             ->first();
 
