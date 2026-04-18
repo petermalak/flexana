@@ -152,7 +152,7 @@ class MobileServiceController extends Controller
         // Main service categories for filter UI (id = slug for filtering)
         $mainCategories = [];
         if (!empty($yogaServices)) {
-            $mainCategories[] = ['id' => 'yoga', 'name' => 'Yoga'];
+            $mainCategories[] = ['id' => 'yoga', 'name' => 'Yoga & Mat Pilates'];
         }
         if (!empty($reformerPilatesServices)) {
             $mainCategories[] = ['id' => 'reformer-pilates', 'name' => 'Reformer Pilates'];
