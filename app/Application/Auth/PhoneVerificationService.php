@@ -7,6 +7,7 @@ use App\Models\Customer;
 use App\Support\PhoneNumberNormalizer;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 final class PhoneVerificationService
@@ -444,6 +445,20 @@ final class PhoneVerificationService
             ->first();
 
         if (! $row) {
+            // Debug: log the latest rows for this phone to diagnose timezone / normalization issues in production.
+            $latest = DB::table('phone_verification_codes')
+                ->whereIn('phone', $variants)
+                ->where('purpose', 'password_reset')
+                ->orderByDesc('created_at')
+                ->limit(3)
+                ->get(['phone', 'code', 'created_at', 'expires_at', 'customer_id']);
+            Log::warning('Password reset OTP not found or expired', [
+                'phone' => $phone,
+                'phone_variants' => $variants,
+                'entered_code' => $code,
+                'now_utc' => $now->toDateTimeString(),
+                'latest_rows' => $latest,
+            ]);
             return ['success' => false, 'message' => 'Invalid or expired code.'];
         }
 
