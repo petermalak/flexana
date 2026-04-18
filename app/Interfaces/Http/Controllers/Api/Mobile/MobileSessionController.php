@@ -169,7 +169,7 @@ class MobileSessionController extends Controller
     private function normalizeCategoryFilter(string $category): ?string
     {
         $c = strtolower(trim(str_replace('-', ' ', $category)));
-        if (in_array($c, ['yoga'], true)) {
+        if (in_array($c, ['yoga', 'yoga & mat pilates', 'yoga and mat pilates', 'yoga mat pilates'], true)) {
             return 'Yoga';
         }
         if (in_array($c, ['reformer', 'reformer pilates', 'reform pilates'], true)) {
