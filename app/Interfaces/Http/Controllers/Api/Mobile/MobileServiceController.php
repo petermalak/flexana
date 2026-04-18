@@ -137,7 +137,7 @@ class MobileServiceController extends Controller
 
         if (!empty($yogaServices)) {
             $categories[] = [
-                'category' => 'Yoga',
+                'category' => 'Yoga & Mat Pilates',
                 'services' => $yogaServices,
             ];
         }
