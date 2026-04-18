@@ -263,7 +263,10 @@ final class PhoneVerificationService
             return ['success' => false, 'message' => 'Invalid phone number.'];
         }
 
-        $customer = Customer::query()->where('phone', $phone)->first();
+        $variants = $this->phoneLookupVariants($phone);
+        $customer = Customer::query()
+            ->whereIn('phone', $variants)
+            ->first();
         if (! $customer) {
             // Don't reveal if phone exists or not for security
             return ['success' => true, 'message' => 'If that phone number exists, we have sent a password reset code.'];
@@ -320,6 +323,36 @@ final class PhoneVerificationService
         }
 
         return $response;
+    }
+
+    /**
+     * Customers in production might have legacy phone formats (e.g. "0123..." stored instead of "+20123...").
+     * We look up by multiple variants to avoid "account exists but we never send OTP".
+     *
+     * @return array<int, string>
+     */
+    private function phoneLookupVariants(string $normalizedPhone): array
+    {
+        $p = preg_replace('/\s+/', '', $normalizedPhone) ?? '';
+        $variants = [];
+        if ($p !== '') {
+            $variants[] = $p;
+        }
+
+        // "+2012..." → "012..." (Egypt local)
+        if (str_starts_with($p, '+20') && strlen($p) > 3) {
+            $variants[] = '0' . substr($p, 3);
+        }
+
+        // "+2012..." → "2012..." (no plus)
+        if (str_starts_with($p, '+') && strlen($p) > 1) {
+            $variants[] = substr($p, 1);
+        }
+
+        // De-duplicate & drop empties
+        $variants = array_values(array_unique(array_filter($variants, fn ($v) => is_string($v) && $v !== '')));
+
+        return $variants === [] ? [$normalizedPhone] : $variants;
     }
 
     /**

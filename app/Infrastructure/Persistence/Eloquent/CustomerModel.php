@@ -2,6 +2,7 @@
 
 namespace App\Infrastructure\Persistence\Eloquent;
 
+use App\Support\PhoneNumberNormalizer;
 use Illuminate\Auth\Authenticatable;
 use Illuminate\Auth\Passwords\CanResetPassword;
 use Illuminate\Contracts\Auth\Authenticatable as AuthenticatableContract;
@@ -81,6 +82,11 @@ class CustomerModel extends Model implements AuthenticatableContract, CanResetPa
             $customer->uid = null;
             $customer->firebase_uid = null;
         });
+    }
+
+    public function setPhoneAttribute($value): void
+    {
+        $this->attributes['phone'] = PhoneNumberNormalizer::normalizeNullable(is_string($value) ? $value : null);
     }
 
     public function bookings(): HasMany
