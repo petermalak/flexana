@@ -11,6 +11,17 @@ return [
     */
     'driver' => env('SMS_DRIVER', 'log'),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Temporary compatibility workaround
+    |--------------------------------------------------------------------------
+    | Some mobile builds may incorrectly call POST /api/v1/auth/verify for password
+    | reset (instead of POST /api/v1/auth/reset-password). When enabled, the backend
+    | will treat /auth/verify requests that include password fields as a password
+    | reset request.
+    */
+    'verify_password_reset_workaround' => env('VERIFY_PASSWORD_RESET_WORKAROUND', false),
+
     'twilio' => [
         'account_sid' => env('TWILIO_ACCOUNT_SID'),
         'auth_token' => env('TWILIO_AUTH_TOKEN'),
