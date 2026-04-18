@@ -275,10 +275,11 @@ final class SmsVerificationService implements SmsVerificationServiceInterface
             'otp' => (string) $code,
         ];
 
+        $startedAt = microtime(true);
+
         try {
             $response = Http::connectTimeout(10)
                 ->timeout(30)
-                ->retry(2, 250)
                 ->asForm()
                 ->post($baseUrl . '/', $queryParams);
         } catch (\Throwable $e) {
@@ -291,6 +292,7 @@ final class SmsVerificationService implements SmsVerificationServiceInterface
                 'message' => $e->getMessage(),
                 'endpoint' => $baseUrl,
                 'query' => $sanitizedParams,
+                'duration_ms' => (int) round((microtime(true) - $startedAt) * 1000),
             ]);
 
             return false;
@@ -302,6 +304,7 @@ final class SmsVerificationService implements SmsVerificationServiceInterface
                 'to' => $to,
                 'status' => $response->status(),
                 'body' => $sanitizedBody,
+                'duration_ms' => (int) round((microtime(true) - $startedAt) * 1000),
             ]);
 
             return false;
@@ -321,6 +324,7 @@ final class SmsVerificationService implements SmsVerificationServiceInterface
                 Log::warning('SMS Misr OTP API error', [
                     'to' => $to,
                     'response' => $data,
+                    'duration_ms' => (int) round((microtime(true) - $startedAt) * 1000),
                 ]);
 
                 return false;
@@ -333,6 +337,7 @@ final class SmsVerificationService implements SmsVerificationServiceInterface
                     'SMSID' => $data['SMSID'] ?? $data['SmsID'] ?? $data['smsid'] ?? null,
                     'Cost' => $data['Cost'] ?? $data['cost'] ?? null,
                 ],
+                'duration_ms' => (int) round((microtime(true) - $startedAt) * 1000),
             ]);
 
             return true;
@@ -344,6 +349,19 @@ final class SmsVerificationService implements SmsVerificationServiceInterface
             Log::warning('SMS Misr OTP API error (numeric body)', [
                 'to' => $to,
                 'body' => $body,
+                'duration_ms' => (int) round((microtime(true) - $startedAt) * 1000),
+            ]);
+
+            return false;
+        }
+
+        // For anything else (e.g. unexpected plain-text), treat as failure to avoid false positives
+        // that could hide provider-side rejections while still consuming balance.
+        if ($body !== '' && ! is_numeric($body)) {
+            Log::warning('SMS Misr OTP API unexpected response body', [
+                'to' => $to,
+                'body' => $body,
+                'duration_ms' => (int) round((microtime(true) - $startedAt) * 1000),
             ]);
 
             return false;
@@ -399,11 +417,12 @@ final class SmsVerificationService implements SmsVerificationServiceInterface
             'message' => $message,
         ];
 
+        $startedAt = microtime(true);
+
         try {
             // SMS Misr expects application/x-www-form-urlencoded POST body.
             $response = Http::connectTimeout(10)
                 ->timeout(30)
-                ->retry(2, 250)
                 ->asForm()
                 ->post($baseUrl . '/', $queryParams);
         } catch (\Throwable $e) {
@@ -416,6 +435,7 @@ final class SmsVerificationService implements SmsVerificationServiceInterface
                 'message' => $e->getMessage(),
                 'endpoint' => $baseUrl,
                 'query' => $sanitizedParams,
+                'duration_ms' => (int) round((microtime(true) - $startedAt) * 1000),
             ]);
 
             return false;
@@ -427,6 +447,7 @@ final class SmsVerificationService implements SmsVerificationServiceInterface
                 'to' => $to,
                 'status' => $response->status(),
                 'body' => $sanitizedBody,
+                'duration_ms' => (int) round((microtime(true) - $startedAt) * 1000),
             ]);
 
             return false;
@@ -449,6 +470,7 @@ final class SmsVerificationService implements SmsVerificationServiceInterface
                 Log::warning('SMS Misr API error', [
                     'to' => $to,
                     'response' => $data,
+                    'duration_ms' => (int) round((microtime(true) - $startedAt) * 1000),
                 ]);
 
                 return false;
@@ -463,6 +485,7 @@ final class SmsVerificationService implements SmsVerificationServiceInterface
                     'SMSID' => $data['SMSID'] ?? $data['SmsID'] ?? $data['smsid'] ?? null,
                     'Cost' => $data['Cost'] ?? $data['cost'] ?? null,
                 ],
+                'duration_ms' => (int) round((microtime(true) - $startedAt) * 1000),
             ]);
 
             return true;
@@ -473,12 +496,24 @@ final class SmsVerificationService implements SmsVerificationServiceInterface
             Log::warning('SMS Misr API error (numeric body)', [
                 'to' => $to,
                 'body' => $body,
+                'duration_ms' => (int) round((microtime(true) - $startedAt) * 1000),
             ]);
 
             return false;
         }
 
-        return true; // treat other 2xx responses as success
+        // If we get a non-numeric plain-text body, treat as failure to avoid false-positive "sent".
+        if ($body !== '' && ! is_numeric($body)) {
+            Log::warning('SMS Misr API unexpected response body', [
+                'to' => $to,
+                'body' => $body,
+                'duration_ms' => (int) round((microtime(true) - $startedAt) * 1000),
+            ]);
+
+            return false;
+        }
+
+        return true;
     }
 
     private function normalizeE164(string $phone): string
