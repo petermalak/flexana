@@ -14,7 +14,6 @@ final class PhoneVerificationService
 {
     private const CODE_LENGTH = 6;
     private const CODE_TTL_MINUTES = 10;
-    private const THROTTLE_SECONDS = 60;
 
     public function __construct(
         private readonly SmsVerificationServiceInterface $sms,
@@ -36,15 +35,6 @@ final class PhoneVerificationService
 
         $useTwilioVerify = config('sms.driver') === 'twilio' && ! empty(config('sms.twilio.verify_service_sid'));
         $now = $this->nowUtc();
-
-        $throttle = DB::table('phone_verification_codes')
-            ->where('phone', $phone)
-            ->where('created_at', '>=', $now->copy()->subSeconds(self::THROTTLE_SECONDS))
-            ->exists();
-
-        if ($throttle) {
-            return ['success' => false, 'message' => 'Please wait before requesting another code.'];
-        }
 
         $customer = Customer::query()->where('phone', $phone)->first();
         if (! $customer) {
@@ -184,17 +174,6 @@ final class PhoneVerificationService
             return ['success' => false, 'message' => 'This phone number is already used by another account.'];
         }
 
-        $throttle = DB::table('phone_verification_codes')
-            ->where('phone', $phone)
-            ->where('purpose', 'phone_change')
-            ->where('customer_id', $customerId)
-            ->where('created_at', '>=', $now->copy()->subSeconds(self::THROTTLE_SECONDS))
-            ->exists();
-
-        if ($throttle) {
-            return ['success' => false, 'message' => 'Please wait before requesting another code.'];
-        }
-
         $code = $this->generateCode();
         $expiresAt = $now->copy()->addMinutes(self::CODE_TTL_MINUTES);
 
@@ -287,16 +266,6 @@ final class PhoneVerificationService
         }
 
         $useTwilioVerify = config('sms.driver') === 'twilio' && ! empty(config('sms.twilio.verify_service_sid'));
-
-        $throttle = DB::table('phone_verification_codes')
-            ->where('phone', $phone)
-            ->where('purpose', 'password_reset')
-            ->where('created_at', '>=', $now->copy()->subSeconds(self::THROTTLE_SECONDS))
-            ->exists();
-
-        if ($throttle) {
-            return ['success' => false, 'message' => 'Please wait before requesting another code.'];
-        }
 
         if ($useTwilioVerify) {
             $log = $this->createSmsLog($phone, null, 'password_reset');
