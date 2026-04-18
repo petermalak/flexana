@@ -34,10 +34,11 @@ final class PhoneVerificationService
         }
 
         $useTwilioVerify = config('sms.driver') === 'twilio' && ! empty(config('sms.twilio.verify_service_sid'));
+        $now = $this->nowUtc();
 
         $throttle = DB::table('phone_verification_codes')
             ->where('phone', $phone)
-            ->where('created_at', '>=', Carbon::now()->subSeconds(self::THROTTLE_SECONDS))
+            ->where('created_at', '>=', $now->copy()->subSeconds(self::THROTTLE_SECONDS))
             ->exists();
 
         if ($throttle) {
@@ -79,15 +80,15 @@ final class PhoneVerificationService
                 'code' => '',
                 'purpose' => 'signup',
                 'customer_id' => null,
-                'expires_at' => Carbon::now()->addMinutes(self::CODE_TTL_MINUTES),
-                'created_at' => Carbon::now(),
+                'expires_at' => $now->copy()->addMinutes(self::CODE_TTL_MINUTES),
+                'created_at' => $now,
             ]);
 
             return ['success' => true, 'message' => 'Verification code sent.'];
         }
 
         $code = $this->generateCode();
-        $expiresAt = Carbon::now()->addMinutes(self::CODE_TTL_MINUTES);
+        $expiresAt = $now->copy()->addMinutes(self::CODE_TTL_MINUTES);
 
         DB::table('phone_verification_codes')->insert([
             'phone' => $phone,
@@ -95,7 +96,7 @@ final class PhoneVerificationService
             'purpose' => 'signup',
             'customer_id' => null,
             'expires_at' => $expiresAt,
-            'created_at' => Carbon::now(),
+            'created_at' => $now,
         ]);
 
         $log = $this->createSmsLog($phone, $code, 'signup');
@@ -140,7 +141,7 @@ final class PhoneVerificationService
             ->where('code', $code)
             ->where('purpose', 'signup')
             ->whereNull('customer_id')
-            ->where('expires_at', '>', Carbon::now())
+            ->where('expires_at', '>', $this->nowUtc())
             ->orderByDesc('created_at')
             ->first();
 
@@ -175,6 +176,7 @@ final class PhoneVerificationService
         if (empty($phone)) {
             return ['success' => false, 'message' => 'Invalid phone number.'];
         }
+        $now = $this->nowUtc();
 
         $existing = Customer::query()->where('phone', $phone)->where('id', '!=', $customerId)->exists();
         if ($existing) {
@@ -185,7 +187,7 @@ final class PhoneVerificationService
             ->where('phone', $phone)
             ->where('purpose', 'phone_change')
             ->where('customer_id', $customerId)
-            ->where('created_at', '>=', Carbon::now()->subSeconds(self::THROTTLE_SECONDS))
+            ->where('created_at', '>=', $now->copy()->subSeconds(self::THROTTLE_SECONDS))
             ->exists();
 
         if ($throttle) {
@@ -193,7 +195,7 @@ final class PhoneVerificationService
         }
 
         $code = $this->generateCode();
-        $expiresAt = Carbon::now()->addMinutes(self::CODE_TTL_MINUTES);
+        $expiresAt = $now->copy()->addMinutes(self::CODE_TTL_MINUTES);
 
         DB::table('phone_verification_codes')->insert([
             'phone' => $phone,
@@ -201,7 +203,7 @@ final class PhoneVerificationService
             'purpose' => 'phone_change',
             'customer_id' => $customerId,
             'expires_at' => $expiresAt,
-            'created_at' => Carbon::now(),
+            'created_at' => $now,
         ]);
 
         $log = $this->createSmsLog($phone, $code, 'phone_change');
@@ -231,7 +233,7 @@ final class PhoneVerificationService
             ->where('code', $code)
             ->where('purpose', 'phone_change')
             ->where('customer_id', $customerId)
-            ->where('expires_at', '>', Carbon::now())
+            ->where('expires_at', '>', $this->nowUtc())
             ->orderByDesc('created_at')
             ->first();
 
@@ -272,6 +274,7 @@ final class PhoneVerificationService
         if (empty($phone)) {
             return ['success' => false, 'message' => 'Invalid phone number.'];
         }
+        $now = $this->nowUtc();
 
         $variants = $this->phoneLookupVariants($phone);
         $customer = Customer::query()
@@ -287,7 +290,7 @@ final class PhoneVerificationService
         $throttle = DB::table('phone_verification_codes')
             ->where('phone', $phone)
             ->where('purpose', 'password_reset')
-            ->where('created_at', '>=', Carbon::now()->subSeconds(self::THROTTLE_SECONDS))
+            ->where('created_at', '>=', $now->copy()->subSeconds(self::THROTTLE_SECONDS))
             ->exists();
 
         if ($throttle) {
@@ -307,15 +310,15 @@ final class PhoneVerificationService
                 'code' => '',
                 'purpose' => 'password_reset',
                 'customer_id' => $customer->id,
-                'expires_at' => Carbon::now()->addMinutes(self::CODE_TTL_MINUTES),
-                'created_at' => Carbon::now(),
+                'expires_at' => $now->copy()->addMinutes(self::CODE_TTL_MINUTES),
+                'created_at' => $now,
             ]);
 
             return ['success' => true, 'message' => 'If that phone number exists, we have sent a password reset code.'];
         }
 
         $code = $this->generateCode();
-        $expiresAt = Carbon::now()->addMinutes(self::CODE_TTL_MINUTES);
+        $expiresAt = $now->copy()->addMinutes(self::CODE_TTL_MINUTES);
 
         DB::table('phone_verification_codes')->insert([
             'phone' => $phone,
@@ -323,7 +326,7 @@ final class PhoneVerificationService
             'purpose' => 'password_reset',
             'customer_id' => $customer->id,
             'expires_at' => $expiresAt,
-            'created_at' => Carbon::now(),
+            'created_at' => $now,
         ]);
 
         $log = $this->createSmsLog($phone, $code, 'password_reset');
@@ -410,6 +413,7 @@ final class PhoneVerificationService
             return ['success' => false, 'message' => 'Invalid phone number.'];
         }
         $variants = $this->phoneLookupVariants($phone);
+        $now = $this->nowUtc();
 
         $providerResult = $this->sms->checkVerification($phone, $code);
         if ($providerResult === true) {
@@ -435,7 +439,7 @@ final class PhoneVerificationService
             ->whereIn('phone', $variants)
             ->where('code', $code)
             ->where('purpose', 'password_reset')
-            ->where('expires_at', '>', Carbon::now())
+            ->where('expires_at', '>', $now)
             ->orderByDesc('created_at')
             ->first();
 
@@ -465,6 +469,11 @@ final class PhoneVerificationService
     private function normalizePhone(string $phone): string
     {
         return PhoneNumberNormalizer::normalize($phone);
+    }
+
+    private function nowUtc(): Carbon
+    {
+        return Carbon::now('UTC');
     }
 
     private function generateCode(): string
