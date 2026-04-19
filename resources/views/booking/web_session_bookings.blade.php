@@ -21,6 +21,9 @@
     $text = $hex(request()->query('text'), '#111111');
     $muted = $hex(request()->query('muted'), '#5b5b5b');
     $border = $hex(request()->query('border'), '#efd6d8');
+
+    $paletteParentsRaw = (string) config('booking_embed.palette_parents', '');
+    $paletteParents = array_values(array_filter(array_map('trim', explode(',', $paletteParentsRaw))));
 @endphp
 <html lang="en">
 <head>
@@ -208,6 +211,7 @@
 (() => {
     const sessionsUrl = @json(url('/api/v1/web-sessions'));
     const bookingUrl = @json(url('/api/v1/web-session-bookings'));
+    const paletteParents = @json($paletteParents);
 
     const banner = document.getElementById('banner');
     const sessionsEl = document.getElementById('sessions');
@@ -219,6 +223,55 @@
     const dlgSession = document.getElementById('dlgSession');
 
     let selected = null;
+
+    function normalizeHex6(input) {
+        if (!input) return null;
+        let v = String(input).trim();
+        if (!v) return null;
+        v = v.replace(/^#/, '');
+        if (!/^[0-9a-fA-F]{6}$/.test(v)) return null;
+        return '#' + v.toLowerCase();
+    }
+
+    function applyPaletteFromParent(palette) {
+        if (!palette || typeof palette !== 'object') return;
+
+        const root = document.documentElement;
+        const map = [
+            ['primary', '--flex-primary'],
+            ['primary2', '--flex-primary-2'],
+            ['accent', '--flex-accent'],
+            ['bg', '--flex-bg'],
+            ['card', '--flex-card'],
+            ['text', '--flex-text'],
+            ['muted', '--flex-muted'],
+            ['border', '--flex-border'],
+        ];
+
+        for (const [key, cssVar] of map) {
+            const hex = normalizeHex6(palette[key]);
+            if (!hex) continue;
+            root.style.setProperty(cssVar, hex);
+        }
+    }
+
+    function isAllowedParentOrigin(origin) {
+        if (!origin) return false;
+        if (!Array.isArray(paletteParents) || paletteParents.length === 0) return false;
+        return paletteParents.includes(origin);
+    }
+
+    window.addEventListener('message', (event) => {
+        const data = event && event.data;
+        if (!data || typeof data !== 'object') return;
+        if (data.type !== 'flexana:booking-palette') return;
+
+        if (!isAllowedParentOrigin(event.origin)) {
+            return;
+        }
+
+        applyPaletteFromParent(data.palette || {});
+    });
 
     function showBanner(msg, kind = 'info') {
         banner.style.display = 'block';
