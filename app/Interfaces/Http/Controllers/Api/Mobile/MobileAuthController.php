@@ -170,15 +170,19 @@ class MobileAuthController extends Controller
     public function verify(Request $request): JsonResponse
     {
         // Temporary mobile compatibility: some app builds call /auth/verify for password reset.
-        // If enabled, route such requests to the same flow as /auth/reset-password.
+        // If enabled, route such requests to /auth/reset-password — but never when this is a
+        // signup verify (same body shape: phone, code, password, password_confirmation).
         if (config('sms.verify_password_reset_workaround') === true
             && $request->filled('password')
             && $request->filled('password_confirmation')) {
-            Log::warning('Password reset via /auth/verify workaround', [
-                'phone' => (string) $request->input('phone', ''),
-            ]);
+            $normalizedPhone = PhoneNumberNormalizer::normalize((string) $request->input('phone', ''));
+            if (! $this->verification->hasPendingSignupVerification($normalizedPhone)) {
+                Log::warning('Password reset via /auth/verify workaround', [
+                    'phone' => (string) $request->input('phone', ''),
+                ]);
 
-            return $this->resetPassword($request);
+                return $this->resetPassword($request);
+            }
         }
 
         $validator = Validator::make($request->all(), [

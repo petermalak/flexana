@@ -180,6 +180,29 @@ final class PhoneVerificationService
         return $expiresAt->gt($nowUtc);
     }
 
+    /**
+     * Used by MobileAuthController: when VERIFY_PASSWORD_RESET_WORKAROUND is on, do not route
+     * signup verify (phone + code + password + password_confirmation) to reset-password unless
+     * there is no active signup OTP for this number.
+     */
+    public function hasPendingSignupVerification(string $phone): bool
+    {
+        $phone = $this->normalizePhone($phone);
+        if ($phone === '') {
+            return false;
+        }
+
+        $now = $this->nowUtc();
+        $row = DB::table('phone_verification_codes')
+            ->where('phone', $phone)
+            ->where('purpose', 'signup')
+            ->whereNull('customer_id')
+            ->orderByDesc('created_at')
+            ->first();
+
+        return $row !== null && $this->phoneVerificationRowNotExpired($row, $now);
+    }
+
     private function finishSignupVerification(string $phone): array
     {
         $customer = Customer::query()->where('phone', $phone)->first();
