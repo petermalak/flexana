@@ -21,7 +21,10 @@ use App\Infrastructure\Persistence\Repositories\EventRepository;
 use App\Infrastructure\Persistence\Repositories\PackageRepository;
 use App\Infrastructure\Persistence\Repositories\ServiceRepository;
 use App\Infrastructure\Persistence\Repositories\StaffRepository;
+use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Client\Factory as HttpFactory;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
 
@@ -56,6 +59,12 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        RateLimiter::for('web-sessions', function (Request $request) {
+            $perMinute = (int) config('web_schedule.per_minute', 120);
+
+            return Limit::perMinute(max(1, $perMinute))->by($request->ip());
+        });
+
         // if (app()->environment('production')) {
         //     URL::forceScheme('https');
         // }

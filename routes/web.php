@@ -24,6 +24,12 @@ if ($storagePrefix !== '') {
 // Include authentication routes
 require __DIR__.'/auth.php';
 
+// Public embeddable booking UI for the WordPress website (iframe-friendly).
+Route::middleware(['booking.embed'])->group(function (): void {
+    Route::view('/web-session-bookings', 'booking.web_session_bookings')
+        ->name('booking.web_session_bookings');
+});
+
 // Dashboard route (protected by auth middleware)
 // Redirects to Filament admin panel since Inertia Dashboard component doesn't exist
 Route::middleware(['auth'])->group(function () {

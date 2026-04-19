@@ -18,6 +18,8 @@ use App\Interfaces\Http\Controllers\Api\PackageController;
 use App\Interfaces\Http\Controllers\Api\ServiceController;
 use App\Interfaces\Http\Controllers\Api\StaffController;
 use App\Interfaces\Http\Controllers\Api\WebSessionController;
+use App\Interfaces\Http\Controllers\Api\WebSessionBookingController;
+use App\Http\Middleware\EnsureWebSchedulePublicAccess;
 use Illuminate\Support\Facades\Route;
 
 // Admin / Frontend API (signature auth)
@@ -81,6 +83,15 @@ Route::prefix('v1')
         // Backend OTP: verify code sent via SMS (Twilio/log)
         Route::post('auth/verify', [MobileAuthController::class, 'verify']);
 
+        // Public website schedule (no Bearer token). Mobile GET /api/v1/sessions is unchanged.
+        Route::middleware([
+            EnsureWebSchedulePublicAccess::class,
+            'throttle:web-sessions',
+        ])->group(function (): void {
+            Route::get('web-sessions', [WebSessionController::class, 'index']);
+            Route::post('web-session-bookings', [WebSessionBookingController::class, 'store']);
+        });
+
         // All mobile app endpoints (authenticated)
         // Sanctum middleware does not take a guard name like "sanctum:api".
         // Using "auth:sanctum" authenticates the Bearer token correctly.
@@ -94,8 +105,6 @@ Route::prefix('v1')
             Route::get('instructors/simple', [MobileInstructorController::class, 'simple']);
             Route::get('service/simple', [MobileServiceController::class, 'simple']);
             Route::get('sessions', [MobileSessionController::class, 'index']);
-            // Web schedule (does not change mobile sessions contract)
-            Route::get('web-sessions', [WebSessionController::class, 'index']);
             Route::post('session-bookings', [MobileBookingController::class, 'store']);
             Route::post('cancel-booking', [MobileBookingController::class, 'cancel']);
             // Packages screen (path 'package-offers' to avoid conflict with admin GET /v1/packages)

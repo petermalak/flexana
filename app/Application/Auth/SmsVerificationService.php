@@ -519,6 +519,9 @@ final class SmsVerificationService implements SmsVerificationServiceInterface
     private function normalizeE164(string $phone): string
     {
         $phone = preg_replace('/\s+/', '', $phone);
+        if (str_starts_with($phone, '00')) {
+            $phone = '+' . substr($phone, 2);
+        }
         if (str_starts_with($phone, '0')) {
             $phone = '+20' . substr($phone, 1); // Egyptian local
         }

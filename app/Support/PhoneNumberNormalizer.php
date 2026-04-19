@@ -14,6 +14,10 @@ final class PhoneNumberNormalizer
         if ($phone === '') {
             return '';
         }
+        // Common user input: international prefix "00" (e.g. 0020123...) should normalize to E.164 "+"
+        if (str_starts_with($phone, '00')) {
+            $phone = '+' . substr($phone, 2);
+        }
         if (str_starts_with($phone, '0')) {
             $phone = '+20' . substr($phone, 1);
         }

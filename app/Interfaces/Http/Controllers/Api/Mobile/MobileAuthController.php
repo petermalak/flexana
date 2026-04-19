@@ -9,6 +9,7 @@ use App\Infrastructure\Persistence\Eloquent\CustomerDeviceTokenModel;
 use App\Infrastructure\Persistence\Eloquent\PackageModel;
 use App\Models\Customer;
 use App\Support\ApiDateTime;
+use App\Support\PhoneNumberNormalizer;
 use App\Support\PackagePurchaseExpiry;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -85,11 +86,26 @@ class MobileAuthController extends Controller
      */
     public function signup(Request $request): JsonResponse
     {
+        if ($request->filled('phone')) {
+            $request->merge([
+                'phone' => PhoneNumberNormalizer::normalize((string) $request->input('phone')),
+            ]);
+        }
+
         $validator = Validator::make($request->all(), [
-            'phone' => 'required|string|max:20|unique:customers,phone',
+            'phone' => [
+                'required',
+                'string',
+                'max:20',
+                Rule::unique('customers', 'phone')->whereNull('deleted_at'),
+            ],
             'firstName' => 'nullable|string|max:100',
             'lastName' => 'nullable|string|max:100',
-            'email' => 'nullable|email|unique:customers,email',
+            'email' => [
+                'nullable',
+                'email',
+                Rule::unique('customers', 'email')->whereNull('deleted_at'),
+            ],
             'profileImage' => $this->profileImageValidationRules($request),
         ], [
             'phone.unique' => 'This phone number is already registered. Please log in instead.',
@@ -353,7 +369,13 @@ class MobileAuthController extends Controller
         $validator = Validator::make($request->all(), [
             'firstName' => 'nullable|string|max:100',
             'lastName' => 'nullable|string|max:100',
-            'email' => ['nullable', 'email', Rule::unique('customers', 'email')->ignore($customer->id)],
+            'email' => [
+                'nullable',
+                'email',
+                Rule::unique('customers', 'email')
+                    ->ignore($customer->id)
+                    ->whereNull('deleted_at'),
+            ],
             'phone' => 'nullable|string|max:20',
             'phoneChangeCode' => 'nullable|string|size:6',
             'profileImage' => $this->profileImageValidationRules($request),
@@ -551,7 +573,7 @@ class MobileAuthController extends Controller
 
     private function normalizePhone(string $phone): string
     {
-        return preg_replace('/\s+/', '', $phone);
+        return PhoneNumberNormalizer::normalize($phone);
     }
 
     /**
