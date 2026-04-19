@@ -1,34 +1,135 @@
 <!doctype html>
+@php
+    // Optional theme overrides for embedding in WordPress:
+    // /web-session-bookings?primary=f4d0d2&accent=6a4a4f&bg=fffaf9&text=111111&muted=5b5b5b&card=ffffff
+    $hex = static function (?string $value, string $fallback): string {
+        $v = strtolower(trim((string) $value));
+        $v = ltrim($v, '#');
+        if ($v === '' || ! preg_match('/^[0-9a-f]{6}$/', $v)) {
+            return $fallback;
+        }
+
+        return '#'.$v;
+    };
+
+    $primary = $hex(request()->query('primary'), '#f4d0d2');
+    $primary2 = $hex(request()->query('primary2'), '#f7e1e3');
+    // Default accent is intentionally not pure black (reads softer on blush backgrounds).
+    $accent = $hex(request()->query('accent'), '#3a2a2a');
+    $bg = $hex(request()->query('bg'), '#fffaf9');
+    $card = $hex(request()->query('card'), '#ffffff');
+    $text = $hex(request()->query('text'), '#111111');
+    $muted = $hex(request()->query('muted'), '#5b5b5b');
+    $border = $hex(request()->query('border'), '#efd6d8');
+@endphp
 <html lang="en">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Book a session</title>
     <style>
-        :root { color-scheme: light; }
-        body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; background: #fafafa; color: #111; }
-        header { padding: 16px 18px; border-bottom: 1px solid #e6e6e6; background: #fff; position: sticky; top: 0; z-index: 2; }
-        h1 { font-size: 16px; margin: 0; font-weight: 650; }
+        :root {
+            color-scheme: light;
+            --flex-primary: {{ $primary }};
+            --flex-primary-2: {{ $primary2 }};
+            --flex-accent: {{ $accent }};
+            --flex-bg: {{ $bg }};
+            --flex-card: {{ $card }};
+            --flex-text: {{ $text }};
+            --flex-muted: {{ $muted }};
+            --flex-border: {{ $border }};
+            --flex-shadow: 0 10px 30px rgba(17, 17, 17, 0.06);
+        }
+
+        body {
+            margin: 0;
+            font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+            background: radial-gradient(1200px 500px at 20% 0%, var(--flex-primary-2), var(--flex-bg));
+            color: var(--flex-text);
+        }
+
+        header {
+            padding: 16px 18px;
+            border-bottom: 1px solid var(--flex-border);
+            background: rgba(255, 255, 255, 0.78);
+            backdrop-filter: blur(10px);
+            position: sticky;
+            top: 0;
+            z-index: 2;
+        }
+
+        h1 { font-size: 16px; margin: 0; font-weight: 650; letter-spacing: 0.2px; }
         .wrap { padding: 14px 18px 40px; max-width: 980px; margin: 0 auto; }
         .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: end; margin: 12px 0 16px; }
-        label { font-size: 12px; color: #444; display: block; margin-bottom: 6px; }
+        label { font-size: 12px; color: var(--flex-muted); display: block; margin-bottom: 6px; font-weight: 600; }
         input, select, button { font: inherit; }
-        input, select { padding: 10px 10px; border: 1px solid #d9d9d9; border-radius: 10px; background: #fff; min-width: 200px; }
-        button { padding: 10px 14px; border-radius: 10px; border: 1px solid #111; background: #111; color: #fff; cursor: pointer; }
-        button.secondary { background: #fff; color: #111; }
+        input, select {
+            padding: 10px 10px;
+            border: 1px solid var(--flex-border);
+            border-radius: 12px;
+            background: var(--flex-card);
+            min-width: 200px;
+            outline: none;
+        }
+        input:focus, select:focus {
+            box-shadow: 0 0 0 4px rgba(244, 208, 210, 0.55);
+            border-color: var(--flex-primary);
+        }
+        button {
+            padding: 10px 14px;
+            border-radius: 12px;
+            border: 1px solid rgba(58, 42, 42, 0.35);
+            background: linear-gradient(180deg, #6a4a4f, var(--flex-accent));
+            color: #fff;
+            cursor: pointer;
+        }
+        button.secondary { background: var(--flex-card); color: var(--flex-accent); border-color: var(--flex-border); }
         button:disabled { opacity: .55; cursor: not-allowed; }
-        .muted { color: #666; font-size: 13px; }
-        .card { border: 1px solid #e6e6e6; border-radius: 14px; background: #fff; padding: 14px; margin: 10px 0; }
+        .muted { color: var(--flex-muted); font-size: 13px; }
+        .card {
+            border: 1px solid var(--flex-border);
+            border-radius: 16px;
+            background: var(--flex-card);
+            padding: 14px;
+            margin: 10px 0;
+            box-shadow: var(--flex-shadow);
+        }
         .title { font-weight: 650; margin: 0 0 6px; }
-        .meta { font-size: 13px; color: #444; line-height: 1.35; }
-        .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; border: 1px solid #e6e6e6; background: #fafafa; }
+        .meta { font-size: 13px; color: var(--flex-muted); line-height: 1.35; }
+        .pill {
+            display: inline-block;
+            padding: 2px 10px;
+            border-radius: 999px;
+            font-size: 12px;
+            border: 1px solid var(--flex-border);
+            background: rgba(244, 208, 210, 0.22);
+            color: var(--flex-text);
+        }
         .right { float: right; }
-        .error { border: 1px solid #f3b4b4; background: #fff4f4; color: #7a1212; padding: 10px 12px; border-radius: 12px; margin: 10px 0; white-space: pre-wrap; }
-        dialog { border: 1px solid #e6e6e6; border-radius: 14px; padding: 0; width: min(640px, calc(100vw - 24px)); }
+        .banner {
+            border: 1px solid var(--flex-border);
+            background: rgba(244, 208, 210, 0.18);
+            color: var(--flex-text);
+            padding: 12px 12px;
+            border-radius: 14px;
+            margin: 10px 0;
+            white-space: pre-wrap;
+        }
+        .banner--error {
+            border-color: #f3b4b4;
+            background: #fff4f4;
+            color: #7a1212;
+        }
+        .banner--success {
+            border-color: #b7e7d6;
+            background: #f0fdf9;
+            color: #0f5132;
+        }
+        dialog { border: 1px solid var(--flex-border); border-radius: 16px; padding: 0; width: min(640px, calc(100vw - 24px)); box-shadow: var(--flex-shadow); }
         dialog::backdrop { background: rgba(0,0,0,.35); }
-        .dlg-head { padding: 14px 16px; border-bottom: 1px solid #eee; font-weight: 650; }
+        .dlg-head { padding: 14px 16px; border-bottom: 1px solid var(--flex-border); font-weight: 650; background: rgba(244, 208, 210, 0.12); }
         .dlg-body { padding: 14px 16px 6px; }
-        .dlg-foot { padding: 12px 16px 16px; display: flex; gap: 10px; justify-content: flex-end; }
+        .dlg-foot { padding: 12px 16px 16px; display: flex; gap: 10px; justify-content: flex-end; border-top: 1px solid rgba(239, 214, 216, 0.7); }
         .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
         @media (max-width: 720px) { .grid { grid-template-columns: 1fr; } }
         .field { margin-bottom: 10px; }
@@ -42,7 +143,7 @@
 </header>
 
 <div class="wrap">
-    <div id="banner" class="error" style="display:none;"></div>
+    <div id="banner" class="banner" style="display:none;"></div>
 
     <div class="row">
         <div>
@@ -94,13 +195,6 @@
                     <label for="promo">Promo code (optional)</label>
                     <input id="promo" maxlength="64">
                 </div>
-                <div class="field" style="grid-column: 1 / -1;">
-                    <label for="dropin">Booking type</label>
-                    <select id="dropin">
-                        <option value="true" selected>Drop-in (pay)</option>
-                        <option value="false">Use package (if available)</option>
-                    </select>
-                </div>
             </div>
         </div>
         <div class="dlg-foot">
@@ -126,13 +220,50 @@
 
     let selected = null;
 
-    function showBanner(msg) {
+    function showBanner(msg, kind = 'info') {
         banner.style.display = 'block';
         banner.textContent = msg;
+        banner.classList.remove('banner--error', 'banner--success');
+        if (kind === 'error') banner.classList.add('banner--error');
+        if (kind === 'success') banner.classList.add('banner--success');
     }
     function hideBanner() {
         banner.style.display = 'none';
         banner.textContent = '';
+        banner.classList.remove('banner--error', 'banner--success');
+    }
+
+    function formatApiError(status, json) {
+        const parts = [];
+        parts.push(`Request failed (HTTP ${status}).`);
+
+        if (!json) {
+            parts.push('No JSON body was returned.');
+            return parts.join('\n');
+        }
+
+        if (json.message) {
+            parts.push(`Message: ${json.message}`);
+        }
+
+        if (json.errors) {
+            parts.push('Details:');
+            try {
+                parts.push(JSON.stringify(json.errors, null, 2));
+            } catch {
+                parts.push(String(json.errors));
+            }
+        } else {
+            // Include compact payload for unknown shapes
+            try {
+                const clone = { ...json };
+                parts.push(JSON.stringify(clone, null, 2));
+            } catch {
+                parts.push(String(json));
+            }
+        }
+
+        return parts.join('\n');
     }
 
     function ymd(d) {
@@ -167,7 +298,7 @@
         const json = await res.json().catch(() => null);
 
         if (!res.ok) {
-            showBanner(`Failed to load sessions (${res.status}).\n${JSON.stringify(json, null, 2)}`);
+            showBanner(formatApiError(res.status, json), 'error');
             reloadBtn.disabled = false;
             return;
         }
@@ -218,7 +349,6 @@
         dlgSession.textContent = `${session.service} — ${fmtWhen(session.date)} — ${session.instructor || ''}`;
         document.getElementById('spots').value = '1';
         document.getElementById('promo').value = '';
-        document.getElementById('dropin').value = 'true';
         dlg.showModal();
     }
 
@@ -241,16 +371,20 @@
         const btn = document.getElementById('confirmBook');
         btn.disabled = true;
 
+        const promoRaw = document.getElementById('promo').value.trim();
+        const phoneRaw = document.getElementById('phone').value.trim();
+
         const payload = {
             sessionID: Number(selected.id),
             spots: Number(document.getElementById('spots').value || '1'),
-            promoCode: document.getElementById('promo').value || null,
-            isDropIn: document.getElementById('dropin').value === 'true',
+            ...(promoRaw ? { promoCode: promoRaw } : {}),
+            // Website embed is drop-in only (package bookings are handled in-app / admin flows).
+            isDropIn: true,
             customer: {
                 firstName: document.getElementById('firstName').value.trim(),
                 lastName: document.getElementById('lastName').value.trim(),
                 email: document.getElementById('email').value.trim(),
-                phone: document.getElementById('phone').value.trim() || null,
+                ...(phoneRaw ? { phone: phoneRaw } : {}),
             },
         };
 
@@ -267,12 +401,12 @@
         btn.disabled = false;
 
         if (!res.ok) {
-            showBanner(`Booking failed (${res.status}).\n${JSON.stringify(json, null, 2)}`);
+            showBanner(formatApiError(res.status, json), 'error');
             return;
         }
 
         dlg.close();
-        showBanner(`Success: ${json?.message || 'Booking created.'}\n${JSON.stringify(json?.data ?? {}, null, 2)}`);
+        showBanner(`Success: ${json?.message || 'Booking created.'}\n${JSON.stringify(json?.data ?? {}, null, 2)}`, 'success');
         await loadSessions();
     });
 
