@@ -52,10 +52,9 @@ class MobileAuthController extends Controller
             ], 422);
         }
 
-        $phone = $this->normalizePhone($validator->validated()['phone']);
         $password = $validator->validated()['password'];
 
-        $customer = Customer::query()->where('phone', $phone)->first();
+        $customer = $this->verification->findCustomerForPhoneAuth($validator->validated()['phone']);
         if (! $customer || ! $customer->password || ! Hash::check($password, $customer->password)) {
             return response()->json([
                 'success' => false,

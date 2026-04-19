@@ -410,6 +410,23 @@ final class PhoneVerificationService
         return $variants === [] ? [$normalizedPhone] : $variants;
     }
 
+    /**
+     * Resolve a customer by phone for login. Uses {@see phoneLookupVariants()} so the same
+     * number matches whether the app sends E.164 (+20…) or local 0… form, and whether the DB
+     * still stores a legacy format (password reset already uses this lookup).
+     */
+    public function findCustomerForPhoneAuth(string $phone): ?Customer
+    {
+        $normalized = $this->normalizePhone($phone);
+        if ($normalized === '') {
+            return null;
+        }
+
+        return Customer::query()
+            ->whereIn('phone', $this->phoneLookupVariants($normalized))
+            ->first();
+    }
+
     private function createSmsLog(string $msisdn, ?string $code, string $reason): SmsMessageLog
     {
         return SmsMessageLog::query()->create([
