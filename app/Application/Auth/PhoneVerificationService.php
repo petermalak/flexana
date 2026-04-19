@@ -108,38 +108,80 @@ final class PhoneVerificationService
     public function verifyCode(string $phone, string $code): array
     {
         $phone = $this->normalizePhone($phone);
-        if (empty($phone)) {
+        $code = trim($code);
+        if (empty($phone) || $code === '') {
             return ['success' => false, 'message' => 'Invalid phone number.'];
+        }
+
+        $now = $this->nowUtc();
+
+        // Latest signup OTP row for this phone (Twilio Verify uses an empty DB code placeholder).
+        $latestSignup = DB::table('phone_verification_codes')
+            ->where('phone', $phone)
+            ->where('purpose', 'signup')
+            ->whereNull('customer_id')
+            ->orderByDesc('created_at')
+            ->first();
+
+        // DB-backed OTP (SMS Misr, Twilio programmable SMS, log): must verify here first.
+        // If TWILIO_VERIFY_SERVICE_SID is set, checkVerification() would return false for these
+        // codes and we would never reach the DB path — so provider check must come after this.
+        if ($latestSignup && (string) ($latestSignup->code ?? '') !== '') {
+            if ((string) $latestSignup->code !== $code) {
+                return ['success' => false, 'message' => 'Invalid or expired code.'];
+            }
+            if (! $this->phoneVerificationRowNotExpired($latestSignup, $now)) {
+                return ['success' => false, 'message' => 'Invalid or expired code.'];
+            }
+
+            return $this->finishSignupVerification($phone);
         }
 
         $providerResult = $this->sms->checkVerification($phone, $code);
         if ($providerResult === true) {
-            $customer = Customer::query()->where('phone', $phone)->first();
-            if (! $customer) {
-                return ['success' => false, 'message' => 'Customer not found.'];
-            }
-            $customer->phone_verified_at = Carbon::now();
-            $customer->save();
-
-            return ['success' => true, 'message' => 'Verified.', 'customer' => $customer];
+            return $this->finishSignupVerification($phone);
         }
         if ($providerResult === false) {
             return ['success' => false, 'message' => 'Invalid or expired code.'];
         }
 
+        // Fallback: match any signup row (same as older installs); expiry in PHP avoids MySQL
+        // session timezone vs UTC_TIMESTAMP() mismatches on some hosts.
         $row = DB::table('phone_verification_codes')
             ->where('phone', $phone)
             ->where('code', $code)
             ->where('purpose', 'signup')
             ->whereNull('customer_id')
-            ->whereRaw('expires_at > UTC_TIMESTAMP()')
             ->orderByDesc('created_at')
             ->first();
 
-        if (! $row) {
+        if (! $row || ! $this->phoneVerificationRowNotExpired($row, $now)) {
             return ['success' => false, 'message' => 'Invalid or expired code.'];
         }
 
+        return $this->finishSignupVerification($phone);
+    }
+
+    /**
+     * @param  object{expires_at?: mixed}  $row
+     */
+    private function phoneVerificationRowNotExpired(object $row, Carbon $nowUtc): bool
+    {
+        $raw = $row->expires_at ?? null;
+        if ($raw === null || $raw === '') {
+            return false;
+        }
+        try {
+            $expiresAt = Carbon::parse((string) $raw, 'UTC');
+        } catch (\Throwable) {
+            return false;
+        }
+
+        return $expiresAt->gt($nowUtc);
+    }
+
+    private function finishSignupVerification(string $phone): array
+    {
         $customer = Customer::query()->where('phone', $phone)->first();
         if (! $customer) {
             return ['success' => false, 'message' => 'Customer not found.'];
@@ -150,7 +192,8 @@ final class PhoneVerificationService
 
         DB::table('phone_verification_codes')
             ->where('phone', $phone)
-            ->where('code', $code)
+            ->where('purpose', 'signup')
+            ->whereNull('customer_id')
             ->delete();
 
         return ['success' => true, 'message' => 'Verified.', 'customer' => $customer];
