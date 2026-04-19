@@ -11,6 +11,7 @@ use App\Models\Customer;
 use App\Support\ApiDateTime;
 use App\Support\PhoneNumberNormalizer;
 use App\Support\PackagePurchaseExpiry;
+use Illuminate\Contracts\Validation\Validator as ValidatorContract;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -113,9 +114,13 @@ class MobileAuthController extends Controller
         ]);
 
         if ($validator->fails()) {
+            $message = $this->signupHasDuplicatePhoneOrEmail($validator)
+                ? 'Account details already exists'
+                : 'Validation failed';
+
             return response()->json([
                 'success' => false,
-                'message' => 'Validation failed',
+                'message' => $message,
                 'errors' => $validator->errors(),
             ], 422);
         }
@@ -573,6 +578,22 @@ class MobileAuthController extends Controller
             'success' => true,
             'message' => 'Account deleted.',
         ], 200);
+    }
+
+    /**
+     * Signup: phone or email failed the unique rule (active customer already using them).
+     */
+    private function signupHasDuplicatePhoneOrEmail(ValidatorContract $validator): bool
+    {
+        foreach (['phone', 'email'] as $field) {
+            foreach (array_keys($validator->failed()[$field] ?? []) as $rule) {
+                if (strcasecmp((string) $rule, 'Unique') === 0) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     private function normalizePhone(string $phone): string
