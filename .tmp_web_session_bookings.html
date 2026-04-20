@@ -1,0 +1,552 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Book a session</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            color-scheme: light;
+            --flex-primary: #e0dadf;
+            --flex-primary-2: #eae4e9;
+            --flex-accent: #00a8ff;
+            --flex-bg: #ffffff;
+            --flex-card: #ffffff;
+            --flex-text: #dc3232;
+            --flex-muted: #b40a0a;
+            --flex-border: #e0dadf;
+            --flex-accent-dark: #008fd9;
+            --amelia-link: #1a84ee;
+            --amelia-primary-hover: rgba(45, 85, 91, 0.75);
+            --flex-shadow: 0 1px 3px rgba(53, 64, 82, 0.08);
+        }
+
+        * {
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        html {
+            scroll-behavior: auto;
+        }
+
+        body {
+            margin: 0;
+            font-family: 'Roboto', 'Amelia Roboto', system-ui, -apple-system, Segoe UI, Arial, sans-serif;
+            font-size: 16px;
+            line-height: 1.5;
+            background: var(--flex-bg);
+            color: var(--flex-text);
+        }
+
+        #flexana-booking-wrap,
+        #flexana-booking-wrap h1,
+        #flexana-booking-wrap h2,
+        #flexana-booking-wrap h3,
+        #flexana-booking-wrap p,
+        #flexana-booking-wrap span,
+        #flexana-booking-wrap div,
+        #flexana-booking-wrap label,
+        #flexana-booking-wrap button,
+        #flexana-booking-wrap input,
+        #flexana-booking-wrap select {
+            font-family: 'Roboto', 'Amelia Roboto', system-ui, -apple-system, Segoe UI, Arial, sans-serif;
+        }
+
+        #flexana-booking-wrap h1 {
+            font-size: 24px;
+            line-height: 1.5;
+            font-weight: 400;
+            color: var(--flex-text);
+            margin: 0;
+        }
+
+        header {
+            padding: 20px 32px;
+            border-bottom: 1px solid var(--flex-border);
+            background: var(--flex-card);
+            position: sticky;
+            top: 0;
+            z-index: 2;
+        }
+
+        header .sub {
+            margin: 4px 0 0;
+            font-size: 14px;
+            font-weight: 400;
+            color: var(--flex-muted);
+        }
+
+        .wrap { padding: 24px 32px 48px; max-width: 980px; margin: 0 auto; box-sizing: border-box; }
+        .row { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; margin: 0 0 24px; }
+        .row .field-inline { flex: 0 1 auto; }
+        .row-align-actions {
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            min-height: 72px;
+        }
+        label {
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--flex-text);
+            display: block;
+            margin: 0 0 8px;
+        }
+        input, select, button { font: inherit; }
+        input, select {
+            height: 40px;
+            padding: 0 16px;
+            border: 1px solid var(--flex-border);
+            border-radius: 4px;
+            background: var(--flex-card);
+            color: var(--flex-text);
+            min-width: 200px;
+            outline: 0;
+            box-sizing: border-box;
+            box-shadow: none;
+            transition: border-color 0.2s cubic-bezier(0.645, 0.045, 0.355, 1);
+        }
+        input:focus, select:focus {
+            border-color: var(--flex-primary);
+            box-shadow: none;
+        }
+        .btn {
+            display: inline-block;
+            height: auto;
+            min-height: 40px;
+            padding: 10px 20px;
+            border-radius: 4px;
+            font-size: 16px;
+            font-weight: 400;
+            line-height: 1.5;
+            cursor: pointer;
+            box-sizing: border-box;
+            transition: color 0.2s, background-color 0.2s, border-color 0.2s;
+        }
+        .btn--primary {
+            background-color: var(--flex-primary);
+            border: 1px solid var(--flex-primary);
+            color: #fff;
+        }
+        .btn--primary:hover:not(:disabled),
+        .btn--primary:focus-visible:not(:disabled) {
+            background-color: var(--amelia-primary-hover);
+            border-color: var(--amelia-primary-hover);
+            color: #fff;
+        }
+        .btn--secondary {
+            background: var(--flex-card);
+            border: 1px solid var(--flex-border);
+            color: var(--flex-text);
+        }
+        .btn--secondary:hover:not(:disabled),
+        .btn--secondary:focus-visible:not(:disabled) {
+            color: var(--flex-primary);
+            border-color: rgba(224,218,223,0.1);
+            background-color: rgba(224,218,223,0.1);
+        }
+        button:disabled { opacity: 0.55; cursor: not-allowed; }
+        .muted { color: var(--flex-muted); font-size: 14px; line-height: 1.35; }
+        .card {
+            border: 1px solid var(--flex-border);
+            border-radius: 6px;
+            background: var(--flex-card);
+            padding: 20px 24px;
+            margin: 0 0 16px;
+            box-shadow: var(--flex-shadow);
+        }
+        .title {
+            font-size: 16px;
+            font-weight: 500;
+            line-height: 1.5;
+            color: var(--flex-text);
+            margin: 0 0 8px;
+        }
+        .meta { font-size: 14px; color: var(--flex-text); line-height: 1.6; }
+        .meta strong { font-weight: 500; color: var(--flex-muted); }
+        .pill {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 14px;
+            font-size: 12px;
+            font-weight: 500;
+            line-height: 1.3;
+            border: 1px solid var(--flex-border);
+            background: rgba(224,218,223,0.1);
+            color: var(--flex-primary);
+        }
+        .right { float: right; }
+        .card::after { content: ''; display: table; clear: both; }
+        .banner {
+            border: 1px solid var(--flex-border);
+            background: var(--flex-primary-2);
+            color: var(--flex-text);
+            padding: 12px 16px;
+            border-radius: 6px;
+            margin: 0 0 16px;
+            white-space: pre-wrap;
+            font-size: 14px;
+        }
+        .banner--error {
+            border-color: #f3b4b4;
+            background: #fff4f4;
+            color: #7a1212;
+        }
+        .banner--success {
+            border-color: #b7e7d6;
+            background: #f0fdf9;
+            color: #0f5132;
+        }
+        dialog {
+            border: 1px solid var(--flex-border);
+            border-radius: 6px;
+            padding: 0;
+            width: min(640px, calc(100vw - 24px));
+            box-shadow: 0 8px 24px rgba(53, 64, 82, 0.12);
+            font-family: 'Roboto', system-ui, sans-serif;
+        }
+        dialog::backdrop { background: rgba(0, 0, 0, 0.35); }
+        .dlg-head {
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--flex-border);
+            font-size: 16px;
+            font-weight: 500;
+            color: var(--flex-text);
+            background: var(--flex-card);
+        }
+        .dlg-body { padding: 20px 24px 8px; }
+        .dlg-foot {
+            padding: 16px 24px 20px;
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+            border-top: 1px solid var(--flex-border);
+            background: var(--flex-card);
+        }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        @media (max-width: 720px) { .grid { grid-template-columns: 1fr; } }
+        .field { margin-bottom: 12px; }
+        .field input { width: 100%; box-sizing: border-box; min-width: 0; }
+        .card-actions { margin-top: 16px; display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
+    </style>
+</head>
+<body>
+<div id="flexana-booking-wrap" class="amelia-booking amelia-frontend amelia-app-booking">
+<header>
+    <h1>Book a session</h1>
+    <p class="sub">Powered by Flexana scheduling</p>
+</header>
+
+<div class="wrap">
+    <div id="banner" class="banner" style="display:none;"></div>
+
+    <div class="row">
+        <div>
+            <label for="date">Date</label>
+            <input id="date" type="date">
+        </div>
+        <div>
+            <label for="category">Category</label>
+            <select id="category">
+                <option value="Yoga">Yoga</option>
+                <option value="Reformer Pilates">Reformer Pilates</option>
+            </select>
+        </div>
+        <div class="field-inline row-align-actions">
+            <button id="reload" type="button" class="btn btn--secondary">Refresh</button>
+        </div>
+    </div>
+
+    <div id="sessions"></div>
+</div>
+</div>
+
+<dialog id="bookDlg">
+    <form method="dialog" id="bookForm">
+        <div class="dlg-head">Confirm booking</div>
+        <div class="dlg-body">
+            <div class="muted" id="dlgSession"></div>
+            <div class="grid" style="margin-top: 10px;">
+                <div class="field">
+                    <label for="firstName">First name</label>
+                    <input id="firstName" autocomplete="given-name" required>
+                </div>
+                <div class="field">
+                    <label for="lastName">Last name</label>
+                    <input id="lastName" autocomplete="family-name" required>
+                </div>
+                <div class="field" style="grid-column: 1 / -1;">
+                    <label for="email">Email</label>
+                    <input id="email" type="email" autocomplete="email" required>
+                </div>
+                <div class="field" style="grid-column: 1 / -1;">
+                    <label for="phone">Phone (optional)</label>
+                    <input id="phone" autocomplete="tel">
+                </div>
+                <div class="field">
+                    <label for="spots">Spots</label>
+                    <input id="spots" type="number" min="1" max="20" value="1" required>
+                </div>
+                <div class="field">
+                    <label for="promo">Promo code (optional)</label>
+                    <input id="promo" maxlength="64">
+                </div>
+            </div>
+        </div>
+        <div class="dlg-foot">
+            <button type="submit" class="btn btn--secondary" value="cancel" formnovalidate>Cancel</button>
+            <button type="submit" id="confirmBook" class="btn btn--primary" value="default">Book</button>
+        </div>
+    </form>
+</dialog>
+
+<script>
+(() => {
+    const sessionsUrl = "https:\/\/admin.flexanaegypt.com\/api\/v1\/web-sessions";
+    const bookingUrl = "https:\/\/admin.flexanaegypt.com\/api\/v1\/web-session-bookings";
+    const paymobInitUrl = "https:\/\/admin.flexanaegypt.com\/api\/v1\/web-session-paymob\/init";
+
+    const banner = document.getElementById('banner');
+    const sessionsEl = document.getElementById('sessions');
+    const dateInput = document.getElementById('date');
+    const categorySelect = document.getElementById('category');
+    const reloadBtn = document.getElementById('reload');
+
+    const dlg = document.getElementById('bookDlg');
+    const dlgSession = document.getElementById('dlgSession');
+
+    let selected = null;
+
+    function showBanner(msg, kind = 'info') {
+        banner.style.display = 'block';
+        banner.textContent = msg;
+        banner.classList.remove('banner--error', 'banner--success');
+        if (kind === 'error') banner.classList.add('banner--error');
+        if (kind === 'success') banner.classList.add('banner--success');
+    }
+    function hideBanner() {
+        banner.style.display = 'none';
+        banner.textContent = '';
+        banner.classList.remove('banner--error', 'banner--success');
+    }
+
+    function formatApiError(status, json) {
+        const parts = [];
+        parts.push(`Request failed (HTTP ${status}).`);
+
+        if (!json) {
+            parts.push('No JSON body was returned.');
+            return parts.join('\n');
+        }
+
+        if (json.message) {
+            parts.push(`Message: ${json.message}`);
+        }
+
+        if (json.errors) {
+            parts.push('Details:');
+            try {
+                parts.push(JSON.stringify(json.errors, null, 2));
+            } catch {
+                parts.push(String(json.errors));
+            }
+        } else {
+            // Include compact payload for unknown shapes
+            try {
+                const clone = { ...json };
+                parts.push(JSON.stringify(clone, null, 2));
+            } catch {
+                parts.push(String(json));
+            }
+        }
+
+        return parts.join('\n');
+    }
+
+    function ymd(d) {
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        return `${yyyy}-${mm}-${dd}`;
+    }
+
+    function fmtWhen(iso) {
+        try {
+            const d = new Date(iso);
+            return d.toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+        } catch {
+            return iso;
+        }
+    }
+
+    async function loadSessions() {
+        hideBanner();
+        sessionsEl.innerHTML = '';
+        reloadBtn.disabled = true;
+
+        const params = new URLSearchParams();
+        const date = dateInput.value;
+        const category = categorySelect.value;
+        if (date) params.set('date', date);
+        if (category) params.set('category', category);
+
+        const url = `${sessionsUrl}?${params.toString()}`;
+        const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+        const json = await res.json().catch(() => null);
+
+        if (!res.ok) {
+            showBanner(formatApiError(res.status, json), 'error');
+            reloadBtn.disabled = false;
+            return;
+        }
+
+        const items = Array.isArray(json?.data) ? json.data : [];
+        if (items.length === 0) {
+            sessionsEl.innerHTML = `<div class="muted">No sessions found for this filter.</div>`;
+            reloadBtn.disabled = false;
+            return;
+        }
+
+        for (const s of items) {
+            const card = document.createElement('div');
+            card.className = 'card';
+
+            const canBook = !!s.canBook && !s.isFull;
+            const spots = Number(s.remainingSpots ?? 0);
+            const price = Number(s.price ?? 0);
+
+            card.innerHTML = `
+                <div class="pill right">${s.serviceType || ''}</div>
+                <div class="title">${s.service || 'Session'}</div>
+                <div class="meta">
+                    <div><strong>When:</strong> ${fmtWhen(s.date)}</div>
+                    <div><strong>Instructor:</strong> ${s.instructor || ''}</div>
+                    <div><strong>Location:</strong> ${s.location_name || ''}</div>
+                    <div><strong>Spots left:</strong> ${spots}</div>
+                    <div><strong>Price (drop-in):</strong> ${price.toFixed(2)}</div>
+                </div>
+                <div class="card-actions">
+                    <button type="button" class="bookBtn btn btn--primary" ${canBook ? '' : 'disabled'}>Book</button>
+                </div>
+            `;
+
+            const btn = card.querySelector('.bookBtn');
+            if (btn) {
+                btn.addEventListener('click', () => openDialog(s));
+            }
+
+            sessionsEl.appendChild(card);
+        }
+
+        reloadBtn.disabled = false;
+    }
+
+    function openDialog(session) {
+        selected = session;
+        dlgSession.textContent = `${session.service} — ${fmtWhen(session.date)} — ${session.instructor || ''}`;
+        document.getElementById('spots').value = '1';
+        document.getElementById('promo').value = '';
+        dlg.showModal();
+    }
+
+    document.getElementById('bookForm').addEventListener('submit', async (e) => {
+        // dialog submit closes unless prevented; we handle async ourselves.
+        e.preventDefault();
+
+        if (!selected) {
+            dlg.close();
+            return;
+        }
+
+        const submitter = e.submitter;
+        if (submitter && submitter.getAttribute('formnovalidate') !== null) {
+            dlg.close();
+            return;
+        }
+
+        hideBanner();
+        const btn = document.getElementById('confirmBook');
+        btn.disabled = true;
+
+        const promoRaw = document.getElementById('promo').value.trim();
+        const phoneRaw = document.getElementById('phone').value.trim();
+
+        const payload = {
+            sessionID: Number(selected.id),
+            spots: Number(document.getElementById('spots').value || '1'),
+            ...(promoRaw ? { promoCode: promoRaw } : {}),
+            // Website embed is drop-in only (package bookings are handled in-app / admin flows).
+            isDropIn: true,
+            customer: {
+                firstName: document.getElementById('firstName').value.trim(),
+                lastName: document.getElementById('lastName').value.trim(),
+                email: document.getElementById('email').value.trim(),
+                ...(phoneRaw ? { phone: phoneRaw } : {}),
+            },
+        };
+
+        // Drop-in bookings require payment first (Paymob). After success, user is redirected back here.
+        const initRes = await fetch(paymobInitUrl, {
+            method: 'POST',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(payload),
+        });
+
+        const initJson = await initRes.json().catch(() => null);
+        btn.disabled = false;
+
+        if (!initRes.ok) {
+            showBanner(formatApiError(initRes.status, initJson), 'error');
+            return;
+        }
+
+        const redirectUrl = initJson?.data?.redirectUrl;
+        if (!redirectUrl) {
+            showBanner('Payment initialization failed: missing redirect URL.', 'error');
+            return;
+        }
+
+        dlg.close();
+        // If embedded in WordPress via iframe, break out to top window for payment.
+        // 3DS / card auth often fails inside nested/3rd-party iframes.
+        try {
+            if (window.top && window.top !== window) {
+                window.top.location.href = redirectUrl;
+                return;
+            }
+        } catch (e) {
+            // ignore and fallback to same-frame navigation
+        }
+        window.location.href = redirectUrl;
+    });
+
+    reloadBtn.addEventListener('click', loadSessions);
+    dateInput.addEventListener('change', loadSessions);
+    categorySelect.addEventListener('change', loadSessions);
+
+    // Default: today (browser local calendar). Users can change date.
+    const today = new Date();
+    dateInput.value = ymd(today);
+
+    loadSessions();
+
+    // Show payment status banner after returning from Paymob
+    const qs = new URLSearchParams(window.location.search);
+    const payment = qs.get('payment');
+    const bookingId = qs.get('booking_id');
+    if (payment === 'success') {
+        showBanner(`Payment successful.${bookingId ? ` Booking ID: ${bookingId}` : ''}`, 'success');
+    } else if (payment === 'failed') {
+        showBanner('Payment was declined or cancelled, so no booking was created.\nIf your bank shows a deducted amount, it is usually a temporary hold/pre-authorization and will be reversed automatically (timing depends on the bank). If it is not reversed, please contact support with the transaction details.', 'error');
+    }
+})();
+</script>
+</body>
+</html>

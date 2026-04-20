@@ -497,7 +497,14 @@
         return (string) \Illuminate\Support\Uri::of($base)->join($href);
     };
 
-    $paletteSource = (string) (request()->query('palette_source') ?: (string) config('booking_embed.palette_source_url', ''));
+    // Palette extraction can pick up unwanted colors (e.g. WP admin reds) in production.
+    // Only enable remote palette extraction when explicitly requested via query param.
+    $paletteSource = '';
+    if (request()->has('palette_source')) {
+        $paletteSource = (string) request()->query('palette_source');
+    } elseif (request()->boolean('use_palette_source')) {
+        $paletteSource = (string) config('booking_embed.palette_source_url', '');
+    }
 
     $remotePalette = $defaults;
 
