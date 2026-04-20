@@ -11,7 +11,10 @@ use App\Infrastructure\Persistence\Eloquent\PromoCodeModel;
 use App\Infrastructure\Persistence\Eloquent\ServiceModel;
 use App\Models\Category;
 use App\Models\Customer;
+use App\Support\ApiDateTime;
+use App\Support\InternalNotificationMail;
 use App\Support\PackagePurchaseExpiry;
+use App\Support\PromoEmailText;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -45,7 +48,7 @@ class WebSessionBookingController extends Controller
             'isDropIn' => 'nullable|boolean',
             'customer.firstName' => 'required|string|max:80',
             'customer.lastName' => 'required|string|max:80',
-            'customer.email' => 'required|email:rfc,dns|max:190',
+            'customer.email' => 'required|email:rfc|max:190',
             'customer.phone' => 'nullable|string|max:40',
         ]);
 
@@ -191,13 +194,25 @@ class WebSessionBookingController extends Controller
                 'booking_id' => $booking->id,
                 'promo_code_id' => $promoRecord?->id,
                 'provider' => 'on_site',
-                'status' => 'paid',
+                'status' => $isDropIn ? 'pending' : 'paid',
                 'amount' => $totalPrice,
                 'currency' => 'USD',
-                'paid_at' => now(),
+                'paid_at' => $isDropIn ? null : now(),
             ]);
 
             DB::commit();
+
+            try {
+                $this->sendBookingCreatedEmail(
+                    $booking,
+                    $appointment,
+                    $customer,
+                    $promoRecord,
+                    $isDropIn ? $subtotalBeforePromo : null,
+                );
+            } catch (\Throwable $e) {
+                report($e);
+            }
 
             return response()->json([
                 'success' => true,
@@ -226,6 +241,62 @@ class WebSessionBookingController extends Controller
                 'error' => $message,
             ], 500);
         }
+    }
+
+    private function sendBookingCreatedEmail(
+        BookingModel $booking,
+        AppointmentModel $appointment,
+        Customer $customer,
+        ?PromoCodeModel $promo = null,
+        ?float $subtotalBeforePromo = null,
+    ): void {
+        if (! $customer->email) {
+            return;
+        }
+
+        $service = $appointment->service;
+        $provider = $appointment->provider;
+
+        $customerName = trim(($customer->first_name ?? '') . ' ' . ($customer->last_name ?? ''));
+        $customerName = $customerName !== '' ? $customerName : ($customer->email ?? 'Customer');
+
+        $appointmentDate = ApiDateTime::formatInBusinessTimezone($appointment->booking_start, 'Y-m-d');
+        $appointmentTime = ApiDateTime::formatInBusinessTimezone($appointment->booking_start, 'H:i');
+
+        $promoLines = $promo !== null
+            ? PromoEmailText::appliedSection(
+                $promo,
+                $subtotalBeforePromo ?? (float) $booking->total_amount,
+                (float) $booking->total_amount,
+            )
+            : '';
+
+        $body = "Thank you for booking with Flexana!\n\n"
+            . "Booking Details\n\n"
+            . "* Name: {$customerName},\n\n"
+            . "* Email: {$customer->email}\n\n"
+            . "* Phone: {$customer->phone}\n\n"
+            . "* Spots: " . ((int) ($booking->party_size ?? 1)) . "\n\n"
+            . "* Class: " . ($service?->name ?? 'Unknown') . "\n\n"
+            . "* Day: {$appointmentDate}\n\n"
+            . "* Time: {$appointmentTime}\n\n"
+            . "* Instructor: " . ($provider?->name ?? 'Unknown') . "\n\n"
+            . "* Type: " . ($service?->description ?? '') . "\n\n"
+            . "* Channel: website\n\n"
+            . $promoLines
+            . "If you need to cancel, please do so at least 24 hours in advance via your Flexana account or by contacting us directly.\n\n"
+            . "You can contact us at +20 122 0221100 to reschedule your session or request a refund.\n\n"
+            . "We look forward to seeing you on the mat!\n\n"
+            . "Flexana Team";
+
+        $subject = 'Your Flexana booking confirmation';
+
+        InternalNotificationMail::sendCustomerAndInternalCopy(
+            $body,
+            $subject,
+            $customer->email,
+            $customerName,
+        );
     }
 
     private function sessionCategoryFromService(?ServiceModel $service): ?string
@@ -261,6 +332,7 @@ class WebSessionBookingController extends Controller
         }
         $bizTz = (string) config('app.business_timezone');
         $today = Carbon::now($bizTz)->startOfDay();
+        /** @var \Illuminate\Database\Eloquent\Collection<int, CustomerPackagePurchaseModel> $purchases */
         $purchases = CustomerPackagePurchaseModel::query()
             ->with(['package.services'])
             ->where('customer_id', $customerId)
@@ -271,6 +343,7 @@ class WebSessionBookingController extends Controller
             ->get();
 
         foreach ($purchases as $purchase) {
+            /** @var CustomerPackagePurchaseModel $purchase */
             $package = $purchase->package;
             if (! $package) {
                 continue;

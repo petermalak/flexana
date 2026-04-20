@@ -19,6 +19,7 @@ use App\Interfaces\Http\Controllers\Api\ServiceController;
 use App\Interfaces\Http\Controllers\Api\StaffController;
 use App\Interfaces\Http\Controllers\Api\WebSessionController;
 use App\Interfaces\Http\Controllers\Api\WebSessionBookingController;
+use App\Interfaces\Http\Controllers\Api\WebSessionPaymobController;
 use App\Http\Middleware\EnsureWebSchedulePublicAccess;
 use Illuminate\Support\Facades\Route;
 
@@ -90,6 +91,7 @@ Route::prefix('v1')
         ])->group(function (): void {
             Route::get('web-sessions', [WebSessionController::class, 'index']);
             Route::post('web-session-bookings', [WebSessionBookingController::class, 'store']);
+            Route::post('web-session-paymob/init', [WebSessionPaymobController::class, 'init']);
         });
 
         // All mobile app endpoints (authenticated)

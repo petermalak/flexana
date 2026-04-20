@@ -30,6 +30,18 @@ Route::middleware(['booking.embed'])->group(function (): void {
         ->name('booking.web_session_bookings');
 });
 
+// Paymob return URL (user redirect) – must be web (not /api) so Paymob can redirect a browser.
+Route::get('/paymob/return', [\App\Interfaces\Http\Controllers\Api\WebSessionPaymobController::class, 'return'])
+    ->name('paymob.return');
+
+// Break out of iframe and redirect to WordPress page.
+Route::get('/paymob/finish', [\App\Interfaces\Http\Controllers\Api\WebSessionPaymobController::class, 'finish'])
+    ->name('paymob.finish');
+
+// Paymob server-to-server callback (transaction processed).
+Route::post('/paymob/callback', [\App\Interfaces\Http\Controllers\Api\WebSessionPaymobController::class, 'callback'])
+    ->name('paymob.callback');
+
 // Dashboard route (protected by auth middleware)
 // Redirects to Filament admin panel since Inertia Dashboard component doesn't exist
 Route::middleware(['auth'])->group(function () {
