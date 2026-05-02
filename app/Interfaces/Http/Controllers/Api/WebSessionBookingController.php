@@ -308,6 +308,9 @@ class WebSessionBookingController extends Controller
         if ($category) {
             $name = strtolower((string) ($category->name ?? ''));
             $slug = strtolower((string) ($category->slug ?? ''));
+            if (str_contains($name, 'yoga') && str_contains($name, 'pilates')) {
+                return 'Yoga';
+            }
             if ($slug === 'yoga' || (str_contains($name, 'yoga') && ! str_contains($name, 'pilates'))) {
                 return 'Yoga';
             }

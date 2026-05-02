@@ -274,7 +274,11 @@ class MobileSessionController extends Controller
         foreach ($categories as $cat) {
             $nl = $nameLower($cat);
             $sl = $slugLower($cat);
-            if ($sl === 'yoga' || (str_contains($nl, 'yoga') && ! str_contains($nl, 'pilates'))) {
+            // Settings categories like "Yoga & Mat Pilates" contain both words — they must map to Yoga,
+            // otherwise services under them fall through to name inference ("barre" → Reformer Pilates).
+            if (str_contains($nl, 'yoga') && str_contains($nl, 'pilates')) {
+                $yogaIds[] = $cat->id;
+            } elseif ($sl === 'yoga' || (str_contains($nl, 'yoga') && ! str_contains($nl, 'pilates'))) {
                 $yogaIds[] = $cat->id;
             } elseif (in_array($sl, ['reformer-pilates', 'pilates', 'reformer'], true)
                 || str_contains($nl, 'reformer')
