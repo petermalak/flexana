@@ -66,6 +66,13 @@ class WebSessionBookingController extends Controller
         $promoCode = $data['promoCode'] ?? null;
         $isDropIn = array_key_exists('isDropIn', $data) ? (bool) $data['isDropIn'] : true;
 
+        if ($isDropIn) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Drop-in bookings are only created after successful payment.',
+            ], 400);
+        }
+
         $customerPayload = $data['customer'] ?? [];
         $email = strtolower(trim((string) ($customerPayload['email'] ?? '')));
 
