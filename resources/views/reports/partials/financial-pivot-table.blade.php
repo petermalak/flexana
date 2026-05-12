@@ -1,13 +1,14 @@
+@php $headerClass = $headerClass ?? 'channel-header'; @endphp
 <table>
     <thead>
     <tr>
-        <th>Date</th>
-        <th>Day</th>
+        <th class="{{ $headerClass }}">Date</th>
+        <th class="{{ $headerClass }}">Day</th>
         @foreach ($columns as $col)
-            <th>{{ $col }}</th>
+            <th class="{{ $headerClass }}">{{ $col }}</th>
         @endforeach
-        <th>Total</th>
-        <th>Value</th>
+        <th class="{{ $headerClass }}">Total</th>
+        <th class="{{ $headerClass }}">Value</th>
     </tr>
     </thead>
     <tbody>

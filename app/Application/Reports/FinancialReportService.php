@@ -11,23 +11,6 @@ use Illuminate\Support\Facades\DB;
 class FinancialReportService
 {
     /**
-     * Build a pivot-style report: one row per calendar day, one column per
-     * purchase type (Drop-in + each package title), split by sales channel.
-     *
-     * Returns a structure ready for both the Filament table and Excel/PDF export:
-     *
-     *   [
-     *     'columns'  => ['Drop-in', '5 Sessions', '10 Sessions', ...],
-     *     'channels' => [
-     *       'Application' => [ rows... ],
-     *       'Website'     => [ rows... ],
-     *     ],
-     *     'combined' => [ rows... ],
-     *   ]
-     *
-     * Each row: ['date' => '2026-02-01', 'day' => 'Saturday', 'Drop-in' => 3, '5 Sessions' => 1, ..., '_total' => 12, '_value' => 4200.00]
-     */
-    /**
      * @param  string|null  $category  'yoga', 'reformer', 'drop_in', or null for all
      */
     public function pivotReport(CarbonImmutable $startsAt, CarbonImmutable $endsAt, ?string $category = null): array
@@ -41,8 +24,7 @@ class FinancialReportService
             'website' => 'Website',
         ];
 
-        $period = CarbonPeriod::create($startsAt, $endsAt->endOfDay());
-        $dates = collect($period)->map(fn (Carbon $d) => $d->format('Y-m-d'));
+        $dates = $this->dateRange($startsAt, $endsAt);
 
         $channels = [];
         foreach ($channelMap as $bucket => $label) {
@@ -63,32 +45,45 @@ class FinancialReportService
     }
 
     /**
-     * Raw per-payment detail: one row per (day, channel, purchase label) with qty and value.
+     * Category-split report for the "All" export: separate Yoga / Reformer
+     * pivot tables plus a Shop-wide summary (Qty + Value per day).
+     *
+     * @return array{
+     *     sections: array<string, array{columns: list<string>, rows: list<array>}>,
+     *     shop: list<array{date: string, day: string, qty: int, value: float}>,
+     * }
      */
+    public function categoryExportReport(CarbonImmutable $startsAt, CarbonImmutable $endsAt): array
+    {
+        $raw = $this->rawRowsWithCategory($startsAt, $endsAt);
+        $dates = $this->dateRange($startsAt, $endsAt);
+
+        $categoryLabels = [
+            'Yoga' => 'Yoga',
+            'Reformer Pilates' => 'Reformer',
+        ];
+
+        $sections = [];
+        foreach ($categoryLabels as $catKey => $catLabel) {
+            $subset = $raw->where('service_category', $catKey);
+            $columns = $subset->pluck('purchase_label')->unique()->sort()->values()->all();
+            $rows = $this->buildPivotRows($dates, $columns, $subset);
+            $sections[$catLabel] = [
+                'columns' => $columns,
+                'rows' => $rows,
+            ];
+        }
+
+        return [
+            'sections' => $sections,
+        ];
+    }
+
+    // ─── Raw queries ─────────────────────────────────────────────────
+
     protected function rawRows(CarbonImmutable $startsAt, CarbonImmutable $endsAt, ?string $category = null): Collection
     {
-        $driver = DB::connection()->getDriverName();
-        $dayExpr = match ($driver) {
-            'sqlite' => "strftime('%Y-%m-%d', sub.paid_at)",
-            'pgsql' => "to_char((sub.paid_at AT TIME ZONE 'UTC')::date, 'YYYY-MM-DD')",
-            default => 'DATE(sub.paid_at)',
-        };
-
-        // Subquery: compute channel + label as plain columns so the outer
-        // GROUP BY only references simple column names (MySQL ONLY_FULL_GROUP_BY safe).
-        $sub = DB::table('payments as p')
-            ->join('bookings as b', 'p.booking_id', '=', 'b.id')
-            ->leftJoin('packages as pkg', 'b.package_id', '=', 'pkg.id')
-            ->leftJoin('events as ev', 'b.event_id', '=', 'ev.id')
-            ->leftJoin('services as svc', 'b.service_id', '=', 'svc.id')
-            ->where('p.status', 'paid')
-            ->whereNotNull('p.paid_at')
-            ->where('p.amount', '>', 0)
-            ->whereBetween('p.paid_at', [$startsAt->toDateTimeString(), $endsAt->toDateTimeString()])
-            ->selectRaw('p.paid_at, p.amount')
-            ->selectRaw("CASE WHEN b.channel IN ('mobile','ios','android') THEN 'application' WHEN b.channel = 'web' THEN 'website' ELSE COALESCE(b.channel,'other') END as channel_bucket")
-            ->selectRaw("CASE WHEN b.is_drop_in THEN 'Drop-in' WHEN pkg.title IS NOT NULL THEN pkg.title WHEN ev.name IS NOT NULL THEN ev.name ELSE 'Other' END as purchase_label")
-            ->selectRaw($this->serviceCategoryExpr().' as service_category');
+        $sub = $this->baseSubquery($startsAt, $endsAt);
 
         if ($category === 'yoga') {
             $sub->whereRaw($this->serviceCategoryExpr()." = 'Yoga'");
@@ -97,6 +92,8 @@ class FinancialReportService
         } elseif ($category === 'drop_in') {
             $sub->where('b.is_drop_in', true);
         }
+
+        $dayExpr = $this->dayExpr();
 
         return DB::query()
             ->fromSub($sub, 'sub')
@@ -110,11 +107,53 @@ class FinancialReportService
     }
 
     /**
-     * SQL CASE that resolves each booking to 'Yoga', 'Reformer Pilates', or 'Other'.
-     *
-     * Priority: package.service_type (admin-set) > service name keyword match.
-     * Drop-ins have no package, so we fall through to service-name inference.
+     * Like rawRows but also groups by service_category so the export can
+     * split rows into Yoga / Reformer sections.
      */
+    protected function rawRowsWithCategory(CarbonImmutable $startsAt, CarbonImmutable $endsAt): Collection
+    {
+        $sub = $this->baseSubquery($startsAt, $endsAt);
+        $dayExpr = $this->dayExpr();
+
+        return DB::query()
+            ->fromSub($sub, 'sub')
+            ->selectRaw("{$dayExpr} as day")
+            ->addSelect('sub.channel_bucket', 'sub.purchase_label', 'sub.service_category')
+            ->selectRaw('COUNT(*) as qty')
+            ->selectRaw('SUM(sub.amount) as value')
+            ->groupByRaw("{$dayExpr}, sub.channel_bucket, sub.purchase_label, sub.service_category")
+            ->orderBy('day')
+            ->get();
+    }
+
+    protected function baseSubquery(CarbonImmutable $startsAt, CarbonImmutable $endsAt)
+    {
+        return DB::table('payments as p')
+            ->join('bookings as b', 'p.booking_id', '=', 'b.id')
+            ->leftJoin('packages as pkg', 'b.package_id', '=', 'pkg.id')
+            ->leftJoin('events as ev', 'b.event_id', '=', 'ev.id')
+            ->leftJoin('services as svc', 'b.service_id', '=', 'svc.id')
+            ->where('p.status', 'paid')
+            ->whereNotNull('p.paid_at')
+            ->where('p.amount', '>', 0)
+            ->whereBetween('p.paid_at', [$startsAt->toDateTimeString(), $endsAt->toDateTimeString()])
+            ->selectRaw('p.paid_at, p.amount')
+            ->selectRaw("CASE WHEN b.channel IN ('mobile','ios','android') THEN 'application' WHEN b.channel = 'web' THEN 'website' ELSE COALESCE(b.channel,'other') END as channel_bucket")
+            ->selectRaw("CASE WHEN b.is_drop_in THEN 'Drop-in' WHEN pkg.title IS NOT NULL THEN pkg.title WHEN ev.name IS NOT NULL THEN ev.name ELSE 'Other' END as purchase_label")
+            ->selectRaw($this->serviceCategoryExpr().' as service_category');
+    }
+
+    protected function dayExpr(): string
+    {
+        $driver = DB::connection()->getDriverName();
+
+        return match ($driver) {
+            'sqlite' => "strftime('%Y-%m-%d', sub.paid_at)",
+            'pgsql' => "to_char((sub.paid_at AT TIME ZONE 'UTC')::date, 'YYYY-MM-DD')",
+            default => 'DATE(sub.paid_at)',
+        };
+    }
+
     protected function serviceCategoryExpr(): string
     {
         return <<<'SQL'
@@ -137,12 +176,16 @@ END
 SQL;
     }
 
+    // ─── Pivot builders ──────────────────────────────────────────────
+
+    protected function dateRange(CarbonImmutable $startsAt, CarbonImmutable $endsAt): Collection
+    {
+        $period = CarbonPeriod::create($startsAt, $endsAt->endOfDay());
+
+        return collect($period)->map(fn (Carbon $d) => $d->format('Y-m-d'));
+    }
+
     /**
-     * Pivot raw aggregated rows into one row per calendar day.
-     *
-     * @param  Collection<int, string>  $dates  Every date in the range
-     * @param  list<string>  $columns  Package type column names
-     * @param  Collection  $rawFiltered  Subset of rawRows for a channel
      * @return list<array<string, mixed>>
      */
     protected function buildPivotRows(Collection $dates, array $columns, Collection $rawFiltered): array

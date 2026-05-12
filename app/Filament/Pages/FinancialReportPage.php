@@ -197,10 +197,10 @@ class FinancialReportPage extends Page implements HasTable
     protected function exportExcel(): mixed
     {
         $this->form->validate();
-        $report = $this->getReport();
+        [$report, $categorySplit] = $this->getExportReport();
 
         return Excel::download(
-            new FinancialReportExport($report, $this->getPeriodLabel()),
+            new FinancialReportExport($report, $this->getPeriodLabel(), $categorySplit),
             $this->exportBaseFilename().'.xlsx',
         );
     }
@@ -208,14 +208,37 @@ class FinancialReportPage extends Page implements HasTable
     protected function exportPdf(): mixed
     {
         $this->form->validate();
-        $report = $this->getReport();
+        [$report] = $this->getExportReport();
+        $filename = $this->exportBaseFilename().'.pdf';
 
-        return Pdf::loadView('reports.financial-report-pdf', [
+        $pdf = Pdf::loadView('reports.financial-report-pdf', [
             'report' => $report,
             'periodLabel' => $this->getPeriodLabel(),
-        ])
-            ->setPaper('a4', 'landscape')
-            ->download($this->exportBaseFilename().'.pdf');
+        ])->setPaper('a4', 'landscape');
+
+        return response()->streamDownload(
+            fn () => print($pdf->output()),
+            $filename,
+            ['Content-Type' => 'application/pdf'],
+        );
+    }
+
+    /**
+     * @return array{0: array, 1: bool}
+     */
+    protected function getExportReport(): array
+    {
+        $state = $this->data ?? [];
+        $category = ($state['category'] ?? null) ?: null;
+
+        if ($category === null) {
+            $startsAt = CarbonImmutable::parse($state['starts_at'] ?? now()->startOfMonth()->format('Y-m-d'))->startOfDay();
+            $endsAt = CarbonImmutable::parse($state['ends_at'] ?? now()->format('Y-m-d'))->endOfDay();
+
+            return [app(FinancialReportService::class)->categoryExportReport($startsAt, $endsAt), true];
+        }
+
+        return [$this->getReport(), false];
     }
 
     protected function getPeriodLabel(): string
