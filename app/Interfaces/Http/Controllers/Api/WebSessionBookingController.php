@@ -71,7 +71,7 @@ class WebSessionBookingController extends Controller
                 'success' => false,
                 'message' => 'Drop-in bookings are only created after successful payment.',
             ], 400);
-        }
+        }   
 
         $customerPayload = $data['customer'] ?? [];
         $email = strtolower(trim((string) ($customerPayload['email'] ?? '')));
