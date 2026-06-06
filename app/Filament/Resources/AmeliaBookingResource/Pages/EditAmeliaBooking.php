@@ -4,9 +4,9 @@ namespace App\Filament\Resources\AmeliaBookingResource\Pages;
 
 use App\Filament\Resources\AmeliaBookingResource;
 use Filament\Actions\DeleteAction;
-use Filament\Resources\Pages\EditRecord;
+use App\Filament\Resources\Pages\StaysOnPageEditRecord;
 
-class EditAmeliaBooking extends EditRecord
+class EditAmeliaBooking extends StaysOnPageEditRecord
 {
     protected static string $resource = AmeliaBookingResource::class;
 

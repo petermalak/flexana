@@ -40,6 +40,7 @@ class BookingModel extends Model
         'notes',
         'booked_at',
         'cancelled_at',
+        'class_reminder_sent_at',
     ];
 
     protected $casts = [
@@ -47,6 +48,7 @@ class BookingModel extends Model
         'answers' => 'array',
         'booked_at' => 'datetime',
         'cancelled_at' => 'datetime',
+        'class_reminder_sent_at' => 'datetime',
     ];
 
     protected static function booted(): void

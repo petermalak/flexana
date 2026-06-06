@@ -57,6 +57,8 @@ class AdminPanelProvider extends PanelProvider
                     950 => '#431407',
                 ],
             ])
+            ->resourceEditPageRedirect('edit')
+            ->resourceCreatePageRedirect('index')
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\Filament\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\Filament\Pages')
             ->navigationGroups([

@@ -30,7 +30,7 @@ class TestFirebaseSmsCommand extends Command
         $firstName = $this->option('name');
         $password = $this->option('password');
 
-        $phoneE164 = $this->normalizeE164($phone);
+        $phoneE164 = \App\Support\PhoneNumberNormalizer::normalize($phone);
         $this->info("Phone (E.164): {$phoneE164}");
         $this->newLine();
 
@@ -123,16 +123,4 @@ class TestFirebaseSmsCommand extends Command
         return self::SUCCESS;
     }
 
-    private function normalizeE164(string $phone): string
-    {
-        $phone = preg_replace('/\s+/', '', $phone);
-        if (str_starts_with($phone, '0')) {
-            $phone = '+20' . substr($phone, 1);
-        }
-        if (! str_starts_with($phone, '+')) {
-            $phone = '+' . $phone;
-        }
-
-        return $phone;
-    }
 }

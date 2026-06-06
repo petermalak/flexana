@@ -2,6 +2,7 @@
 
 namespace App\Infrastructure\Persistence\Eloquent;
 
+use App\Domain\Promo\Enums\PromoApplicableType;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -22,6 +23,7 @@ class PromoCodeModel extends Model
         'usage_limit_per_user',
         'used_count',
         'is_active',
+        'applicable_to',
     ];
 
     protected $casts = [
@@ -32,6 +34,11 @@ class PromoCodeModel extends Model
         'usage_limit_per_user' => 'integer',
         'used_count' => 'integer',
         'is_active' => 'boolean',
+        'applicable_to' => PromoApplicableType::class,
+    ];
+
+    protected $attributes = [
+        'applicable_to' => PromoApplicableType::Both->value,
     ];
 
     public function payments(): HasMany
@@ -69,16 +76,43 @@ class PromoCodeModel extends Model
             ->count();
     }
 
+    public static function resolveForCustomer(
+        string $code,
+        int $customerId,
+        PromoApplicableType $context,
+    ): ?self {
+        $promo = static::findByCode($code);
+        if (! $promo) {
+            return null;
+        }
+
+        if ($promo->invalidReasonForCustomer($customerId, $context) !== null) {
+            return null;
+        }
+
+        return $promo;
+    }
+
+    public function isApplicableFor(PromoApplicableType $context): bool
+    {
+        return $this->applicable_to === PromoApplicableType::Both
+            || $this->applicable_to === $context;
+    }
+
     /**
      * Why the code cannot be used for this customer, or null if valid.
      * Per-user usage limit replaces the old global usage_limit / used_count cap.
      *
-     * @return 'inactive'|'not_yet_valid'|'expired'|'usage_limit_reached'|null
+     * @return 'inactive'|'not_yet_valid'|'expired'|'usage_limit_reached'|'wrong_type'|null
      */
-    public function invalidReasonForCustomer(int $customerId): ?string
+    public function invalidReasonForCustomer(?int $customerId = null, ?PromoApplicableType $context = null): ?string
     {
         if (! $this->is_active) {
             return 'inactive';
+        }
+
+        if ($context !== null && ! $this->isApplicableFor($context)) {
+            return 'wrong_type';
         }
 
         $tz = (string) config('promo.calendar_timezone', 'UTC');
@@ -95,18 +129,19 @@ class PromoCodeModel extends Model
                 return 'expired';
             }
         }
-        if ($this->usage_limit_per_user !== null && $this->usage_limit_per_user > 0) {
-            if ($this->redemptionCountForCustomer($customerId) >= $this->usage_limit_per_user) {
-                return 'usage_limit_reached';
-            }
+        if ($customerId !== null
+            && $this->usage_limit_per_user !== null
+            && $this->usage_limit_per_user > 0
+            && $this->redemptionCountForCustomer($customerId) >= $this->usage_limit_per_user) {
+            return 'usage_limit_reached';
         }
 
         return null;
     }
 
-    public function isValidForCustomer(int $customerId): bool
+    public function isValidForCustomer(int $customerId, ?PromoApplicableType $context = null): bool
     {
-        return $this->invalidReasonForCustomer($customerId) === null;
+        return $this->invalidReasonForCustomer($customerId, $context) === null;
     }
 
     /**

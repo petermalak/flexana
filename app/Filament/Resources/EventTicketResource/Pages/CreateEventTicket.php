@@ -3,9 +3,9 @@
 namespace App\Filament\Resources\EventTicketResource\Pages;
 
 use App\Filament\Resources\EventTicketResource;
-use Filament\Resources\Pages\CreateRecord;
+use App\Filament\Resources\Pages\StaysOnPageCreateRecord;
 
-class CreateEventTicket extends CreateRecord
+class CreateEventTicket extends StaysOnPageCreateRecord
 {
     protected static string $resource = EventTicketResource::class;
 }

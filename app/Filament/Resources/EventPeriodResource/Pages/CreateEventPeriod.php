@@ -3,9 +3,9 @@
 namespace App\Filament\Resources\EventPeriodResource\Pages;
 
 use App\Filament\Resources\EventPeriodResource;
-use Filament\Resources\Pages\CreateRecord;
+use App\Filament\Resources\Pages\StaysOnPageCreateRecord;
 
-class CreateEventPeriod extends CreateRecord
+class CreateEventPeriod extends StaysOnPageCreateRecord
 {
     protected static string $resource = EventPeriodResource::class;
 }

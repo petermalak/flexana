@@ -2,11 +2,14 @@
 
 namespace App\Filament\Resources;
 
+use App\Application\Admin\SessionBooking\AdminSessionBookingService;
 use App\Filament\Resources\SessionBookingResource\Pages;
 use App\Infrastructure\Persistence\Eloquent\AppointmentModel;
 use App\Infrastructure\Persistence\Eloquent\BookingModel;
 use App\Infrastructure\Persistence\Eloquent\CustomerModel;
+use Filament\Actions;
 use Filament\Forms;
+use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Tables;
@@ -188,9 +191,44 @@ class SessionBookingResource extends Resource
                     ->dateTime('Y-m-d H:i')
                     ->sortable(),
             ])
+            ->filters([
+                Tables\Filters\SelectFilter::make('status')
+                    ->options([
+                        'pending' => 'Pending',
+                        'confirmed' => 'Confirmed',
+                        'cancelled' => 'Cancelled',
+                        'completed' => 'Completed',
+                        'no_show' => 'No Show',
+                    ]),
+            ])
             ->actions([
-                \Filament\Actions\ViewAction::make(),
-                \Filament\Actions\EditAction::make(),
+                Actions\ViewAction::make(),
+                Actions\EditAction::make(),
+                Actions\Action::make('cancel')
+                    ->label('Cancel')
+                    ->icon('heroicon-o-x-circle')
+                    ->color('danger')
+                    ->visible(fn (BookingModel $record): bool => $record->appointment_id !== null
+                        && in_array($record->status, ['confirmed', 'pending'], true))
+                    ->requiresConfirmation()
+                    ->modalHeading('Cancel session booking')
+                    ->modalDescription('This frees the spots on the session so new customers can book. Package sessions are restored to the customer when applicable.')
+                    ->action(function (BookingModel $record): void {
+                        try {
+                            app(AdminSessionBookingService::class)->cancel($record);
+                            Notification::make()
+                                ->title('Booking cancelled')
+                                ->body('The session is open for new bookings again.')
+                                ->success()
+                                ->send();
+                        } catch (\Throwable $e) {
+                            Notification::make()
+                                ->title('Could not cancel booking')
+                                ->body($e->getMessage())
+                                ->danger()
+                                ->send();
+                        }
+                    }),
             ])
             ->defaultSort('booked_at', 'desc');
     }

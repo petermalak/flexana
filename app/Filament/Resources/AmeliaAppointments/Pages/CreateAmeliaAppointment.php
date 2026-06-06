@@ -7,11 +7,11 @@ use App\Infrastructure\Persistence\Eloquent\AppointmentModel;
 use App\Infrastructure\Persistence\Eloquent\CompanyOffDayModel;
 use App\Infrastructure\Persistence\Eloquent\StaffOffDayModel;
 use Carbon\Carbon;
-use Filament\Resources\Pages\CreateRecord;
+use App\Filament\Resources\Pages\StaysOnPageCreateRecord;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
-class CreateAmeliaAppointment extends CreateRecord
+class CreateAmeliaAppointment extends StaysOnPageCreateRecord
 {
     protected static string $resource = AmeliaAppointmentResource::class;
 

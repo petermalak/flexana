@@ -2,6 +2,8 @@
 
 namespace App\Application\Admin\SessionBooking;
 
+use App\Application\Bookings\CancelSessionBookingService;
+use App\Domain\Promo\Enums\PromoApplicableType;
 use App\Infrastructure\Persistence\Eloquent\AppointmentModel;
 use App\Infrastructure\Persistence\Eloquent\BookingModel;
 use App\Infrastructure\Persistence\Eloquent\CustomerPackagePurchaseModel;
@@ -82,11 +84,13 @@ final class AdminSessionBookingService
             $totalPrice = $subtotalBeforePromo;
 
             if ($promoCode) {
-                $promoRecord = PromoCodeModel::findByCode($promoCode);
-                if ($promoRecord && $promoRecord->isValidForCustomer($customerId)) {
+                $promoRecord = PromoCodeModel::resolveForCustomer(
+                    $promoCode,
+                    $customerId,
+                    PromoApplicableType::DropIns,
+                );
+                if ($promoRecord) {
                     $totalPrice = $totalPrice * (1 - (float) $promoRecord->percent_discount / 100);
-                } else {
-                    $promoRecord = null;
                 }
             }
         }
@@ -155,6 +159,19 @@ final class AdminSessionBookingService
 
             return $booking;
         });
+    }
+
+    /**
+     * Cancel a session booking from the admin panel.
+     * Frees capacity on the session and restores package sessions when applicable.
+     */
+    public function cancel(BookingModel $booking, bool $sendEmail = true): BookingModel
+    {
+        return app(CancelSessionBookingService::class)->cancel(
+            $booking,
+            enforceCancellationDeadline: false,
+            sendEmail: $sendEmail,
+        );
     }
 
     private function sessionCategoryFromService(?ServiceModel $service): ?string

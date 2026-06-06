@@ -2,6 +2,7 @@
 
 namespace App\Interfaces\Http\Controllers\Api\Mobile;
 
+use App\Domain\Promo\Enums\PromoApplicableType;
 use App\Http\Controllers\Controller;
 use App\Infrastructure\Persistence\Eloquent\BookingModel;
 use App\Infrastructure\Persistence\Eloquent\CustomerPackagePurchaseModel;
@@ -161,13 +162,20 @@ class MobilePackageController extends Controller
     private function mapPackageToItem(PackageModel $package): array
     {
         $sessions = (int) ($package->total_sessions ?? 0);
+        $durationDays = (int) ($package->package_duration_days ?? 0);
         $durationMonths = (int) ($package->package_duration ?? 0);
-        if ($durationMonths > 0) {
+        if ($durationDays > 0) {
+            $expirationMonths = 0;
+            $expirationDays = $durationDays;
+        } elseif ($durationMonths > 0) {
             $expirationMonths = $durationMonths;
+            $expirationDays = null;
         } elseif ($package->expiry) {
             $expirationMonths = (int) max(0, Carbon::now()->diffInMonths($package->expiry, false));
+            $expirationDays = null;
         } else {
             $expirationMonths = 0;
+            $expirationDays = null;
         }
 
         return [
@@ -177,9 +185,11 @@ class MobilePackageController extends Controller
             'sessions' => $sessions > 0 ? $sessions : 1,
             'description' => $package->description ?? '',
             'expirationMonths' => $expirationMonths,
+            'expirationDays' => $expirationDays,
             'serviceType' => $this->packageServiceType($package),
             'classFormat' => $package->classType?->name ?? null,
             'packageDuration' => $package->package_duration !== null ? (int) $package->package_duration : null,
+            'packageDurationDays' => $durationDays > 0 ? $durationDays : null,
         ];
     }
 
@@ -298,11 +308,13 @@ class MobilePackageController extends Controller
         $promoRecord = null;
 
         if ($promoCode) {
-            $promoRecord = PromoCodeModel::findByCode($promoCode);
-            if ($promoRecord && $promoRecord->isValidForCustomer((int) $customer->id)) {
+            $promoRecord = PromoCodeModel::resolveForCustomer(
+                $promoCode,
+                (int) $customer->id,
+                PromoApplicableType::Packages,
+            );
+            if ($promoRecord) {
                 $price = $price * (1 - (float) $promoRecord->percent_discount / 100);
-            } else {
-                $promoRecord = null;
             }
         }
 

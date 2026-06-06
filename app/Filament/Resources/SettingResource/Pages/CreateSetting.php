@@ -3,9 +3,9 @@
 namespace App\Filament\Resources\SettingResource\Pages;
 
 use App\Filament\Resources\SettingResource;
-use Filament\Resources\Pages\CreateRecord;
+use App\Filament\Resources\Pages\StaysOnPageCreateRecord;
 
-class CreateSetting extends CreateRecord
+class CreateSetting extends StaysOnPageCreateRecord
 {
     protected static string $resource = SettingResource::class;
 }

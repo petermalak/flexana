@@ -4,9 +4,9 @@ namespace App\Filament\Resources\PromoCodeResource\Pages;
 
 use App\Filament\Resources\PromoCodeResource;
 use Filament\Actions;
-use Filament\Resources\Pages\EditRecord;
+use App\Filament\Resources\Pages\StaysOnPageEditRecord;
 
-class EditPromoCode extends EditRecord
+class EditPromoCode extends StaysOnPageEditRecord
 {
     protected static string $resource = PromoCodeResource::class;
 

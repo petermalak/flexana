@@ -3,9 +3,9 @@
 namespace App\Filament\Resources\AmeliaEventTickets\Pages;
 
 use App\Filament\Resources\AmeliaEventTickets\AmeliaEventTicketResource;
-use Filament\Resources\Pages\CreateRecord;
+use App\Filament\Resources\Pages\StaysOnPageCreateRecord;
 
-class CreateAmeliaEventTicket extends CreateRecord
+class CreateAmeliaEventTicket extends StaysOnPageCreateRecord
 {
     protected static string $resource = AmeliaEventTicketResource::class;
 }

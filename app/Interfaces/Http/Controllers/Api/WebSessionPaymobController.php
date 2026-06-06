@@ -2,6 +2,7 @@
 
 namespace App\Interfaces\Http\Controllers\Api;
 
+use App\Domain\Promo\Enums\PromoApplicableType;
 use App\Http\Controllers\Controller;
 use App\Infrastructure\Persistence\Eloquent\AppointmentModel;
 use App\Infrastructure\Persistence\Eloquent\BookingModel;
@@ -146,8 +147,7 @@ class WebSessionPaymobController extends Controller
 
         if ($promoCode) {
             $promoRecord = PromoCodeModel::findByCode($promoCode);
-            // Customer is not persisted yet; we validate promo "generally" here, and enforce usage at finalize time.
-            if ($promoRecord) {
+            if ($promoRecord && $promoRecord->invalidReasonForCustomer(null, PromoApplicableType::DropIns) === null) {
                 $totalPrice = $totalPrice * (1 - (float) $promoRecord->percent_discount / 100);
             } else {
                 $promoRecord = null;
@@ -517,12 +517,13 @@ class WebSessionPaymobController extends Controller
         $promoRecord = null;
 
         if ($promoCode) {
-            $promoRecord = PromoCodeModel::findByCode($promoCode);
+            $promoRecord = PromoCodeModel::resolveForCustomer(
+                $promoCode,
+                (int) $customer->id,
+                PromoApplicableType::DropIns,
+            );
             // Promo can become invalid between init and finalize (usage limit, etc).
             // We don't block booking creation if the user already paid successfully.
-            if (! ($promoRecord && $promoRecord->isValidForCustomer((int) $customer->id))) {
-                $promoRecord = null;
-            }
         }
 
         DB::beginTransaction();

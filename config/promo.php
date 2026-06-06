@@ -15,4 +15,21 @@ return [
 
     'calendar_timezone' => env('PROMO_CALENDAR_TIMEZONE', config('app.timezone')),
 
+    'applicable_types' => [
+        'both' => 'Both',
+        'packages' => 'Packages only',
+        'drop_ins' => 'Drop-ins only',
+    ],
+
+    'applicable_type_descriptions' => [
+        'both' => 'Works on package purchases and drop-in session bookings.',
+        'packages' => 'Only when a customer buys a package (mobile purchase-package).',
+        'drop_ins' => 'Only when a customer books a drop-in session (mobile, web Paymob, admin).',
+    ],
+
+    'wrong_type_messages' => [
+        'packages' => 'This promo code is only valid for package purchases.',
+        'drop_ins' => 'This promo code is only valid for drop-in bookings.',
+    ],
+
 ];

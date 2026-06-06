@@ -2,12 +2,14 @@
 
 namespace App\Interfaces\Http\Controllers\Api\Mobile;
 
+use App\Domain\Promo\Enums\PromoApplicableType;
 use App\Http\Controllers\Controller;
 use App\Infrastructure\Persistence\Eloquent\PromoCodeModel;
 use App\Support\ApiDateTime;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rule;
 
 class MobilePromoCodeController extends Controller
 {
@@ -19,18 +21,20 @@ class MobilePromoCodeController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'code' => 'required|string|max:64',
+            'context' => ['required', 'string', Rule::in(array_column(PromoApplicableType::cases(), 'value'))],
         ]);
 
         if ($validator->fails()) {
             return response()->json([
                 'valid' => false,
                 'reason' => 'invalid_request',
-                'message' => 'Code is required.',
+                'message' => 'Code and context are required.',
                 'errors' => $validator->errors(),
             ], 422);
         }
 
         $code = $request->input('code');
+        $context = PromoApplicableType::from((string) $request->input('context'));
         $promo = PromoCodeModel::findByCode((string) $code);
 
         if (! $promo) {
@@ -43,7 +47,7 @@ class MobilePromoCodeController extends Controller
 
         /** @var \App\Models\Customer $customer */
         $customer = $request->user();
-        $reason = $promo->invalidReasonForCustomer((int) $customer->id);
+        $reason = $promo->invalidReasonForCustomer((int) $customer->id, $context);
         if ($reason !== null) {
             $payload = [
                 'valid' => false,
@@ -55,6 +59,10 @@ class MobilePromoCodeController extends Controller
                 'inactive' => response()->json([
                     ...$payload,
                     'message' => 'This promo code is not active.',
+                ], 200),
+                'wrong_type' => response()->json([
+                    ...$payload,
+                    'message' => $this->wrongTypeMessage($promo),
                 ], 200),
                 'not_yet_valid' => response()->json([
                     ...$payload,
@@ -86,6 +94,14 @@ class MobilePromoCodeController extends Controller
         ], 200);
     }
 
+    private function wrongTypeMessage(PromoCodeModel $promo): string
+    {
+        $messages = config('promo.wrong_type_messages', []);
+        $type = $promo->applicable_to?->value;
+
+        return (string) ($type !== null ? ($messages[$type] ?? 'This promo code is not valid for this purchase.') : 'This promo code is not valid for this purchase.');
+    }
+
     private function promoCodeDetails(PromoCodeModel $promo, ?int $customerId = null): array
     {
         $usesByYou = $customerId !== null ? $promo->redemptionCountForCustomer($customerId) : null;
@@ -95,6 +111,7 @@ class MobilePromoCodeController extends Controller
             'code' => $promo->code,
             'name' => $promo->name,
             'percent_discount' => (float) $promo->percent_discount,
+            'applicable_to' => $promo->applicable_to?->value,
             'valid_from' => ApiDateTime::toBusinessIso8601($promo->valid_from),
             'valid_from_utc' => ApiDateTime::toUtcIso8601($promo->valid_from),
             'valid_until' => ApiDateTime::toBusinessIso8601($promo->valid_until),

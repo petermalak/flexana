@@ -4,9 +4,9 @@ namespace App\Filament\Resources\AmeliaEventTickets\Pages;
 
 use App\Filament\Resources\AmeliaEventTickets\AmeliaEventTicketResource;
 use Filament\Actions\DeleteAction;
-use Filament\Resources\Pages\EditRecord;
+use App\Filament\Resources\Pages\StaysOnPageEditRecord;
 
-class EditAmeliaEventTicket extends EditRecord
+class EditAmeliaEventTicket extends StaysOnPageEditRecord
 {
     protected static string $resource = AmeliaEventTicketResource::class;
 

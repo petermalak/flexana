@@ -82,7 +82,7 @@ class PackageResource extends Resource
                             ->required(),
                     ])->columns(4),
                 Components\Section::make('Settings')
-                    ->description('Package duration in months (used for purchase expiry when customers buy this package). Legacy fields on the package row may still exist in the database for older purchases.')
+                    ->description('Purchase expiry: 30-day unlimited uses days (not calendar months). Other packages use months.')
                     ->icon(Heroicon::OutlinedCog6Tooth)
                     ->schema([
                         Forms\Components\TextInput::make('sort_order')
@@ -91,12 +91,18 @@ class PackageResource extends Resource
                             ->default(0)
                             ->required()
                             ->helperText('Lower numbers appear first in the mobile app package list.'),
-                        Forms\Components\TextInput::make('package_duration')
-                            ->label('Package Duration (months)')
+                        Forms\Components\TextInput::make('package_duration_days')
+                            ->label('Package duration (days)')
                             ->numeric()
                             ->minValue(1)
-                            ->required()
-                            ->helperText('New purchases: expiry is calculated as purchase date + this many months.'),
+                            ->nullable()
+                            ->helperText('For 30-day unlimited: set to 30. Expiry = purchase date + exactly this many days.'),
+                        Forms\Components\TextInput::make('package_duration')
+                            ->label('Package duration (months)')
+                            ->numeric()
+                            ->minValue(1)
+                            ->nullable()
+                            ->helperText('Used when duration (days) is empty. Expiry = purchase date + calendar months.'),
                         Forms\Components\Select::make('status')
                             ->options([
                                 'active' => 'Active',
@@ -159,8 +165,14 @@ class PackageResource extends Resource
                     ->date()
                     ->sortable()
                     ->toggleable(),
+                Tables\Columns\TextColumn::make('package_duration_days')
+                    ->label('Duration (days)')
+                    ->placeholder('—')
+                    ->sortable()
+                    ->toggleable(),
                 Tables\Columns\TextColumn::make('package_duration')
                     ->label('Duration (months)')
+                    ->placeholder('—')
                     ->sortable()
                     ->toggleable(),
                 Tables\Columns\TextColumn::make('updated_at')

@@ -15,8 +15,8 @@ final class PackagePurchaseExpiry
      *
      * @param  int|null  $ameliaPackageIdFromPurchase  When set (e.g. from customer_package_purchases.amelia_package_id),
      *                                               used if the package row has no duration fields or package is missing.
-     * @param  bool  $expiresByMonthsOnly  New app purchases: only purchase_date + package_duration (months). Legacy rows (false)
-     *                                    keep days, package expiry date, and Amelia id fallbacks.
+     * @param  bool  $expiresByMonthsOnly  New app purchases: purchase_date + package_duration_days (if set) or
+     *                                    package_duration months. Legacy rows (false) also use Amelia id fallbacks.
      */
     public static function expiresAt(
         ?PackageModel $package,
@@ -29,28 +29,15 @@ final class PackagePurchaseExpiry
         }
 
         if ($expiresByMonthsOnly) {
-            if (! $package) {
-                return null;
-            }
-            $months = $package->package_duration ?? null;
-            if ($months !== null && (int) $months > 0) {
-                return $purchaseDate->copy()->addMonths((int) $months);
-            }
-
-            return null;
+            return self::expiresAtFromPackageRules($package, $purchaseDate);
         }
 
         $ameliaId = $package?->amelia_package_id ?? $ameliaPackageIdFromPurchase;
 
         if ($package) {
-            $days = $package->package_duration_days ?? null;
-            if ($days !== null && (int) $days > 0) {
-                return $purchaseDate->copy()->addDays((int) $days);
-            }
-
-            $months = $package->package_duration ?? null;
-            if ($months !== null && (int) $months > 0) {
-                return $purchaseDate->copy()->addMonths((int) $months);
+            $fromRules = self::expiresAtFromPackageRules($package, $purchaseDate);
+            if ($fromRules !== null) {
+                return $fromRules;
             }
 
             if ($package->expiry) {
@@ -64,4 +51,27 @@ final class PackagePurchaseExpiry
 
         return null;
     }
+
+    /**
+     * New app purchases: package_duration_days (e.g. 30-day unlimited) wins over months.
+     */
+    private static function expiresAtFromPackageRules(?PackageModel $package, Carbon $purchaseDate): ?Carbon
+    {
+        if (! $package) {
+            return null;
+        }
+
+        $days = $package->package_duration_days ?? null;
+        if ($days !== null && (int) $days > 0) {
+            return $purchaseDate->copy()->addDays((int) $days);
+        }
+
+        $months = $package->package_duration ?? null;
+        if ($months !== null && (int) $months > 0) {
+            return $purchaseDate->copy()->addMonths((int) $months);
+        }
+
+        return null;
+    }
+
 }

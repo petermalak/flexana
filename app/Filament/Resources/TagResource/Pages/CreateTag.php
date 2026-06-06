@@ -3,9 +3,9 @@
 namespace App\Filament\Resources\TagResource\Pages;
 
 use App\Filament\Resources\TagResource;
-use Filament\Resources\Pages\CreateRecord;
+use App\Filament\Resources\Pages\StaysOnPageCreateRecord;
 
-class CreateTag extends CreateRecord
+class CreateTag extends StaysOnPageCreateRecord
 {
     protected static string $resource = TagResource::class;
 }
