@@ -15,7 +15,6 @@ Artisan::command('packages:repair-amelia-durations {--dry-run : Show changes wit
     ]);
 })->purpose('Alias: fix wrong Yoga/Reformer months from an earlier sync — updates packages and backfills purchase amelia ids (same as packages:sync-amelia-duration-rules).');
 
-Schedule::command('bookings:send-class-reminders')
-    ->dailyAt((string) config('sessions.class_reminder_send_at', '09:00'))
-    ->timezone((string) config('sessions.schedule_timezone', config('app.business_timezone', config('app.timezone'))))
-    ->when(fn (): bool => (bool) config('sessions.class_reminder_enabled', true));
+Schedule::command('bookings:send-class-reminders --automatic')
+    ->everyFiveMinutes()
+    ->timezone((string) config('sessions.schedule_timezone', config('app.business_timezone', config('app.timezone'))));

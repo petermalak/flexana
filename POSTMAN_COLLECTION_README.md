@@ -12,20 +12,24 @@ There are two Postman collections:
 **File:** `Flexana_Mobile_API.postman_collection.json`
 
 - **Base path:** `/api/v1`
-- **Auth:** All data endpoints require `Authorization: Bearer <token>`. Get the token from **Login** or **Signup → Verify** (or **Verify with Firebase Code**).
-- **Variables:** `base_url` (e.g. `http://127.0.0.1:8000`), `bearer_token` (set by Login / Verify / Verify with Firebase Code test scripts).
+- **Auth:** All data endpoints require `Authorization: Bearer <token>`. Get the token from **Login** or **Signup (email OTP) → Verify**.
+- **Variables:** `base_url`, `bearer_token` (auto-set after Login/Verify), `signup_email` (auto-set after Signup).
 
 **Auth flow:**
 
-- **Login** – POST `{ "phone", "password" }` → token + customer.
-- **Signup (main flow):** 1) POST **Signup (Firebase SMS)** – `phone` + one of `playIntegrityToken` (Android), `safetyNetToken` (Android), `iosReceipt`+`iosSecret` (iOS). Returns `sessionInfo`. 2) User enters code from SMS (and optional password). 3) POST **Verify with Firebase Code** – `sessionInfo`, `code`, `phone`, optional `password`, `password_confirmation` → token + customer.
-- **Signup (legacy backend OTP):** POST **Signup (backend OTP)** – `phone` only. Then POST **Verify** – `phone`, `code`, optional password.
-- **Forgot Password** – POST `{ "email" }`. **Reset Password** – POST `{ "email", "token", "password", "password_confirmation" }`.
-- **Get Me**, **Update Me**, **Update Me (with phone change)** (after **Send Phone Change Code**), **Send Phone Change Code**, **Change Password**, **Delete Account**, **Logout**.
+- **Login** – POST `{ "phone", "password", optional "fcmToken", "platform", "deviceId" }` → token + customer. E.164 phone (`+20…`, `+44…`, etc.).
+- **Signup (email OTP):** POST **Signup** – `phone` + `email` → code sent to **email**. POST **Verify** – `email`, `code`, optional `password`, `fcmToken` → `emailVerifiedAt` + token.
+- **Forgot / Reset Password** – SMS OTP to `phone`: **Forgot Password** → **Reset Password** with `phone`, `code`, `password`.
+- **Register FCM Token** – POST `auth/fcm-token` (or pass `fcmToken` on login/verify) for push notifications.
+- **Get Me**, **Update Me**, **Send Phone Change Code** (SMS), **Change Password**, **Delete Account**, **Logout**.
 
-**Folders:** Auth, Home Screen, Schedule Screen (sessions, book, cancel, appointments/history), Packages Screen. **Book Session** accepts `isDropIn`: `true` = drop-in (no package required); `false` = deduct from customer's package. History and create response include `isDropIn`.
+**Folders:** Auth, Home Screen, Schedule Screen, Packages Screen, Promo Code Flow, Push Notifications, Web Schedule (public).
 
-See `docs/MOBILE_DEVELOPER_AUTH_FLOW.md` for the full mobile auth flow and attestation details.
+- **Book Session** – `isDropIn`, `spots`, `promoCode`. Sessions: `remainingSpots`, `isFull`, `canBook`.
+- **Promo** – `promo-codes/verify` with `{ "code", "IsPackage" }` (`true` = package, `false` = drop-in). `wrong_type` when code does not match purchase type.
+- **Packages** – `expirationDays`, `packageDurationDays` on package-offers.
+- **Push** – Server sends class reminder FCM one day before class (`data.type=class_reminder`). See **Push Notifications** folder in collection.
+- **Web (no Bearer)** – `web-sessions`, `web-session-bookings`, `web-session-paymob/init`.
 
 ---
 

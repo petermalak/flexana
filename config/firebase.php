@@ -37,11 +37,16 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Service account (optional)
+    | Service account (FCM push, optional admin tools)
     |--------------------------------------------------------------------------
-    | Path to Firebase service account JSON. If set, the backend can fetch the
-    | user's phone from Firebase after sign-in (so the client need not send phone in verify-firebase).
+    |
+    | Place firebase-service-account.json in storage/app/ on each server (not in git).
+    | Optional FIREBASE_SERVICE_ACCOUNT_JSON: relative to project root, or absolute path.
+    | When unset, defaults to storage/app/firebase-service-account.json.
+    |
     */
-    'service_account_json' => env('FIREBASE_SERVICE_ACCOUNT_JSON', ''),
+    'service_account_json' => \App\Support\FirebaseServiceAccountPath::resolve(
+        env('FIREBASE_SERVICE_ACCOUNT_JSON'),
+    ),
 ];
 

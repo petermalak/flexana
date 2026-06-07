@@ -16,25 +16,41 @@ class MobilePromoCodeController extends Controller
     /**
      * Verify a promo code.
      * Returns whether the code exists, is valid/expired/inactive/limit reached, and details when valid.
+     *
+     * Body: { code, IsPackage } where IsPackage=true checks package promos, false checks drop-in promos.
+     * Legacy: { code, context } with context=packages|drop_ins|both still accepted.
      */
     public function verify(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
             'code' => 'required|string|max:64',
-            'context' => ['required', 'string', Rule::in(array_column(PromoApplicableType::cases(), 'value'))],
+            'IsPackage' => 'nullable|boolean',
+            'isPackage' => 'nullable|boolean',
+            'context' => ['nullable', 'string', Rule::in(array_column(PromoApplicableType::cases(), 'value'))],
         ]);
 
         if ($validator->fails()) {
             return response()->json([
                 'valid' => false,
                 'reason' => 'invalid_request',
-                'message' => 'Code and context are required.',
+                'message' => 'Code and IsPackage are required.',
                 'errors' => $validator->errors(),
             ], 422);
         }
 
+        $context = $this->resolvePromoContext($request);
+        if ($context === null) {
+            return response()->json([
+                'valid' => false,
+                'reason' => 'invalid_request',
+                'message' => 'IsPackage is required (true for package purchase, false for drop-in booking).',
+                'errors' => [
+                    'IsPackage' => ['The IsPackage field is required.'],
+                ],
+            ], 422);
+        }
+
         $code = $request->input('code');
-        $context = PromoApplicableType::from((string) $request->input('context'));
         $promo = PromoCodeModel::findByCode((string) $code);
 
         if (! $promo) {
@@ -92,6 +108,33 @@ class MobilePromoCodeController extends Controller
             'message' => 'Promo code is valid.',
             'promo_code' => $this->promoCodeDetails($promo, (int) $customer->id),
         ], 200);
+    }
+
+    /**
+     * IsPackage=true → package purchase; false → drop-in booking.
+     * Falls back to legacy `context` when IsPackage is omitted.
+     */
+    private function resolvePromoContext(Request $request): ?PromoApplicableType
+    {
+        if ($request->has('IsPackage') || $request->has('isPackage')) {
+            $isPackage = filter_var(
+                $request->input('IsPackage', $request->input('isPackage')),
+                FILTER_VALIDATE_BOOLEAN,
+                FILTER_NULL_ON_FAILURE,
+            );
+
+            if ($isPackage === null) {
+                return null;
+            }
+
+            return $isPackage ? PromoApplicableType::Packages : PromoApplicableType::DropIns;
+        }
+
+        if ($request->filled('context')) {
+            return PromoApplicableType::from((string) $request->input('context'));
+        }
+
+        return null;
     }
 
     private function wrongTypeMessage(PromoCodeModel $promo): string

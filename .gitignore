@@ -17,7 +17,9 @@
 /public/build
 /public/hot
 /public/storage
+/public/flexana
 /storage/*.key
+/storage/app/firebase-service-account.json
 /storage/pail
 /vendor
 Homestead.json
