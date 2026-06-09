@@ -134,7 +134,12 @@ class WebSessionBookingController extends Controller
         $subtotalBeforePromo = null;
 
         if (! $isDropIn) {
-            $purchaseToUse = $this->findValidPurchaseForCategory((int) $customer->id, $sessionCategory, $spots);
+            $purchaseToUse = $this->findValidPurchaseForCategory(
+                (int) $customer->id,
+                $sessionCategory,
+                $spots,
+                Carbon::parse($appointment->booking_start),
+            );
             if (! $purchaseToUse) {
                 return response()->json([
                     'success' => false,
@@ -335,13 +340,16 @@ class WebSessionBookingController extends Controller
         return CategorizeServicesCommand::inferCategoryNameFromText($serviceText) ?? 'Yoga';
     }
 
-    private function findValidPurchaseForCategory(int $customerId, ?string $sessionCategory, int $persons): ?CustomerPackagePurchaseModel
-    {
+    private function findValidPurchaseForCategory(
+        int $customerId,
+        ?string $sessionCategory,
+        int $persons,
+        Carbon $sessionDate,
+    ): ?CustomerPackagePurchaseModel {
         if ($sessionCategory === null) {
             return null;
         }
         $bizTz = (string) config('app.business_timezone');
-        $today = Carbon::now($bizTz)->startOfDay();
         /** @var \Illuminate\Database\Eloquent\Collection<int, CustomerPackagePurchaseModel> $purchases */
         $purchases = CustomerPackagePurchaseModel::query()
             ->with(['package.services'])
@@ -368,7 +376,7 @@ class WebSessionBookingController extends Controller
                 $purchase->amelia_package_id,
                 (bool) $purchase->expires_by_months_only,
             );
-            if ($expiresAt !== null && $expiresAt->copy()->timezone($bizTz)->startOfDay()->lt($today)) {
+            if (! PackagePurchaseExpiry::coversSessionDate($expiresAt, $sessionDate, $bizTz)) {
                 continue;
             }
 

@@ -64,4 +64,19 @@ final class PackagePurchaseExpiry
 
         return null;
     }
+
+    /**
+     * Whether a purchase expiry covers booking a session on the given date (inclusive of expiry day).
+     */
+    public static function coversSessionDate(?Carbon $expiresAt, Carbon $sessionDate, string $businessTimezone): bool
+    {
+        if ($expiresAt === null) {
+            return true;
+        }
+
+        $sessionDay = $sessionDate->copy()->timezone($businessTimezone)->startOfDay();
+        $expiryDay = $expiresAt->copy()->timezone($businessTimezone)->startOfDay();
+
+        return $sessionDay->lte($expiryDay);
+    }
 }

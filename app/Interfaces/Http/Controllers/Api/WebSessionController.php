@@ -122,7 +122,12 @@ class WebSessionController extends Controller
             $willPay = true;
             if ($customerId && $service instanceof ServiceModel) {
                 $sessionCategory = $this->sessionCategoryFromService($service);
-                $validPurchase = $this->findValidPurchaseForCategory((int) $customerId, $sessionCategory, 1);
+                $validPurchase = $this->findValidPurchaseForCategory(
+                    (int) $customerId,
+                    $sessionCategory,
+                    1,
+                    $startInstant,
+                );
                 $willPay = $validPurchase === null;
             }
 
@@ -354,13 +359,16 @@ class WebSessionController extends Controller
      * Prefers most recently purchased. Excludes expired (by package_duration + purchase_date).
      * MUST stay in sync with MobileBookingController::findValidPurchaseForCategory().
      */
-    private function findValidPurchaseForCategory(int $customerId, ?string $sessionCategory, int $persons): ?CustomerPackagePurchaseModel
-    {
+    private function findValidPurchaseForCategory(
+        int $customerId,
+        ?string $sessionCategory,
+        int $persons,
+        Carbon $sessionDate,
+    ): ?CustomerPackagePurchaseModel {
         if ($sessionCategory === null) {
             return null;
         }
         $bizTz = (string) config('app.business_timezone');
-        $today = Carbon::now($bizTz)->startOfDay();
         $purchases = CustomerPackagePurchaseModel::query()
             ->with(['package.services'])
             ->where('customer_id', $customerId)
@@ -385,7 +393,7 @@ class WebSessionController extends Controller
                 $purchase->amelia_package_id,
                 (bool) $purchase->expires_by_months_only,
             );
-            if ($expiresAt !== null && $expiresAt->copy()->timezone($bizTz)->startOfDay()->lt($today)) {
+            if (! PackagePurchaseExpiry::coversSessionDate($expiresAt, $sessionDate, $bizTz)) {
                 continue;
             }
 

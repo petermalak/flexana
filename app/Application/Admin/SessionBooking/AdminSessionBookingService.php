@@ -70,7 +70,12 @@ final class AdminSessionBookingService
         $subtotalBeforePromo = null;
 
         if (! $isDropIn) {
-            $purchaseToUse = $this->findValidPurchaseForCategory($customerId, $sessionCategory, $spots);
+            $purchaseToUse = $this->findValidPurchaseForCategory(
+                $customerId,
+                $sessionCategory,
+                $spots,
+                Carbon::parse($appointment->booking_start),
+            );
             if (! $purchaseToUse) {
                 throw new \RuntimeException('No package with remaining sessions for this category (Yoga/Reformer Pilates). Book as drop-in or purchase a package.');
             }
@@ -172,13 +177,16 @@ final class AdminSessionBookingService
         return 'Yoga';
     }
 
-    private function findValidPurchaseForCategory(int $customerId, ?string $sessionCategory, int $spots): ?CustomerPackagePurchaseModel
-    {
+    private function findValidPurchaseForCategory(
+        int $customerId,
+        ?string $sessionCategory,
+        int $spots,
+        Carbon $sessionDate,
+    ): ?CustomerPackagePurchaseModel {
         if ($sessionCategory === null) {
             return null;
         }
         $bizTz = (string) config('app.business_timezone');
-        $today = Carbon::now($bizTz)->startOfDay();
 
         $purchases = CustomerPackagePurchaseModel::query()
             ->with(['package.services'])
@@ -205,7 +213,7 @@ final class AdminSessionBookingService
                 $purchase->amelia_package_id,
                 (bool) $purchase->expires_by_months_only,
             );
-            if ($expiresAt !== null && $expiresAt->copy()->timezone($bizTz)->startOfDay()->lt($today)) {
+            if (! PackagePurchaseExpiry::coversSessionDate($expiresAt, $sessionDate, $bizTz)) {
                 continue;
             }
 
