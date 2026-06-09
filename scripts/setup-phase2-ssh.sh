@@ -92,7 +92,13 @@ live_app_url="$(grep -E '^APP_URL=' "${LIVE_DIR}/.env" | head -1 | cut -d= -f2- 
 if [[ -z "${live_app_url}" ]]; then
     live_app_url="https://admin-panel-flexana-egypt.com"
 fi
-phase2_app_url="${live_app_url%/}/${GATEWAY_SUBPATH}"
+
+# Override live .env when testing on admin-panel-flexana-egypt.com (e.g. live still on sdhds.net)
+if [[ -n "${PHASE2_BASE_URL:-}" ]]; then
+    live_app_url="${PHASE2_BASE_URL%/}"
+fi
+
+phase2_app_url="${PHASE2_APP_URL:-${live_app_url%/}/${GATEWAY_SUBPATH}}"
 
 set_env() {
     local key="$1"

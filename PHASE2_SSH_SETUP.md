@@ -1,176 +1,187 @@
-# Phase-2 test on production (SSH only, no cPanel)
+# Phase-2 at `https://admin-panel-flexana-egypt.com/phase2`
 
-Run a second copy of Flexana on the **same server** and **same production database**, at a separate URL, without touching the live app flow.
+Test Flexana on the **production database** at a separate URL without changing the live app.
 
-**Test URL:** `https://admin-panel-flexana-egypt.com/phase2`  
-**Live URL:** unchanged (`https://admin-panel-flexana-egypt.com`)
-
----
-
-## Why not `public_html/public/flexana`?
-
-Uploading the **entire Laravel project** under the web root is unsafe and breaks routing. Only `public/` should be web-accessible. The script below keeps the full app in `flexana-phase2/` (private) and adds a small `/phase2` gateway folder.
-
-```
-domains/admin-panel-flexana-egypt/
-├── flexana/                 ← live app (do not change)
-├── flexana-phase2/          ← test app (new)
-└── public_html → flexana/public/
-    ├── index.php            ← live
-    └── phase2/              ← small gateway only (new)
-        ├── index.php        → boots flexana-phase2
-        ├── .htaccess
-        ├── css/, js/, ...
-```
+| | URL |
+|--|-----|
+| **Live** | `https://admin-panel-flexana-egypt.com` |
+| **Phase-2 test** | `https://admin-panel-flexana-egypt.com/phase2` |
+| **Mobile API** | `https://admin-panel-flexana-egypt.com/phase2/api/v1/...` |
 
 ---
 
-## One-command setup (SSH)
+## Step 0 — Fix DNS first (required)
+
+`DNS_PROBE_FINISHED_NXDOMAIN` means the domain **does not exist in DNS yet**. No server/Laravel setup will work until this is fixed.
+
+### A. Register the domain (if you do not own it)
+
+Buy `admin-panel-flexana-egypt.com` at your registrar (Namecheap, GoDaddy, etc.).
+
+### B. Point DNS to your server
+
+1. SSH into **server35** (where `/home/flexanastudios/domains/admin-panel-flexana-egypt/` lives):
 
 ```bash
-# 1. Upload your phase-2 code to the server (or git pull on the branch with your fixes)
+ssh flexanastudios@server35
+curl -4 ifconfig.me
+```
+
+Note the IP (e.g. `203.0.113.10`).
+
+2. At your **domain registrar**, add DNS records:
+
+| Type | Name | Value | TTL |
+|------|------|-------|-----|
+| A | `@` | `<server IP from above>` | 300 |
+| A | `www` | `<same IP>` | 300 |
+
+3. Wait 5–60 minutes, then verify from your PC:
+
+```bash
+nslookup admin-panel-flexana-egypt.com
+```
+
+You should see the server IP — not "Non-existent domain".
+
+4. Confirm the site responds (live app must be deployed first):
+
+```bash
+curl -I https://admin-panel-flexana-egypt.com/up
+```
+
+If DNS works but you get 404/500, complete **Step 1** below before phase-2.
+
+> **No cPanel?** Ask your host to attach `admin-panel-flexana-egypt.com` to the existing account folder `domains/admin-panel-flexana-egypt/` and enable SSL. The folder name suggests the account may already exist — only DNS + SSL may be missing.
+
+---
+
+## Step 1 — Live app on the domain (one time)
+
+Server path: `/home/flexanastudios/domains/admin-panel-flexana-egypt/`
+
+```bash
 cd /home/flexanastudios/domains/admin-panel-flexana-egypt/flexana
 
-# 2. Run the setup script
+# Symlink web root (if not already done)
+cd ..
+rm -rf public_html
+ln -s /home/flexanastudios/domains/admin-panel-flexana-egypt/flexana/public public_html
+ls -la public_html
+
+# Live .env must use the domain root (no /phase2)
+grep APP_URL .env
+# APP_URL=https://admin-panel-flexana-egypt.com
+
+php artisan optimize
+```
+
+Test live: **https://admin-panel-flexana-egypt.com/admin**
+
+---
+
+## Step 2 — Phase-2 setup (SSH, no cPanel)
+
+```bash
+cd /home/flexanastudios/domains/admin-panel-flexana-egypt/flexana
+
 chmod +x scripts/setup-phase2-ssh.sh
+
+# Force phase-2 URL even if live .env still points elsewhere
+PHASE2_BASE_URL=https://admin-panel-flexana-egypt.com \
+PHASE2_APP_URL=https://admin-panel-flexana-egypt.com/phase2 \
 ./scripts/setup-phase2-ssh.sh
 ```
 
-The script will:
+This creates:
 
-1. Copy `flexana/` → `flexana-phase2/` (first run only)
-2. Create `.env` from live (same `DB_*`, separate `APP_KEY`, `APP_URL`, cache prefix)
-3. Disable real email/SMS and class reminders on phase-2
-4. Run `composer install`, `npm run build`, `php artisan optimize`
-5. Create `/phase2` gateway under the live web root
-
----
-
-## Manual setup (if you prefer step by step)
-
-```bash
-DOMAIN=/home/flexanastudios/domains/admin-panel-flexana-egypt
-cd "$DOMAIN"
-
-# App copy
-cp -a flexana flexana-phase2
-cd flexana-phase2
-
-# Env: copy live DB settings, change URL and isolation flags
-cp ../flexana/.env .env
-# Edit .env:
-#   APP_URL=https://admin-panel-flexana-egypt.com/phase2
-#   LIVEWIRE_BASE_PATH=phase2
-#   CACHE_PREFIX=flexana_phase2_cache
-#   MAIL_MAILER=log
-#   SMS_DRIVER=log
-#   SESSIONS_CLASS_REMINDER_ENABLED=false
-
-composer install --no-dev --optimize-autoloader
-npm ci && npm run build
-php artisan key:generate --force
-chmod -R 775 storage bootstrap/cache
-php artisan storage:link
-php artisan optimize
-
-# Gateway (if public_html is symlink to flexana/public)
-GATEWAY="$DOMAIN/flexana/public/phase2"
-mkdir -p "$GATEWAY"
-# Then run scripts/setup-phase2-ssh.sh — it writes index.php + .htaccess for you
+```
+domains/admin-panel-flexana-egypt/
+├── flexana/              ← live (unchanged)
+├── flexana-phase2/       ← test copy
+└── public_html → flexana/public/
+    └── phase2/           ← gateway → flexana-phase2
 ```
 
+Phase-2 `.env` gets:
+
+- `APP_URL=https://admin-panel-flexana-egypt.com/phase2`
+- Same `DB_*` as production
+- `MAIL_MAILER=log`, `SMS_DRIVER=log` (no real emails/SMS)
+- Separate `APP_KEY` and `CACHE_PREFIX`
+
 ---
 
-## Test the package-expiry fix
+## Step 3 — Verify
 
-Point your **test mobile build** (or Postman) at the phase-2 base URL:
+```bash
+curl -I https://admin-panel-flexana-egypt.com/phase2
+curl -I https://admin-panel-flexana-egypt.com/phase2/up
+curl -I https://admin-panel-flexana-egypt.com/phase2/api/v1/sessions
+```
 
-| Check | Request |
-|-------|---------|
-| Session list `willPay` | `GET /phase2/api/v1/sessions` (Bearer token) |
-| Package booking allowed | `POST /phase2/api/v1/bookings` with `isDropIn: false`, session **on or before** package expiry |
-| Package booking blocked | Same, session **after** package expiry → `400` |
+In the browser:
+
+- `https://admin-panel-flexana-egypt.com/phase2/admin` — Filament admin (phase-2)
+- `https://admin-panel-flexana-egypt.com` — live app (unchanged)
+
+Point your **test mobile build** API base to:
+
+`https://admin-panel-flexana-egypt.com/phase2/api/v1`
+
+---
+
+## Test package-expiry fix
 
 ```bash
 BASE="https://admin-panel-flexana-egypt.com/phase2"
-TOKEN="your-test-customer-token"
+TOKEN="test-customer-bearer-token"
 
-curl -s -H "Authorization: Bearer $TOKEN" "$BASE/api/v1/sessions" | head -c 500
+curl -s -H "Authorization: Bearer $TOKEN" "$BASE/api/v1/sessions"
 
 curl -s -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d '{"sessionID":123,"spots":1,"isDropIn":false}' \
   "$BASE/api/v1/bookings"
 ```
 
-Use a **dedicated test customer** — phase-2 writes to the real database.
+Use a **test customer only** — bookings write to the real database.
 
 ---
 
-## What stays safe on live
+## If live is still on another domain (e.g. sdhds.net)
 
-| Item | Live | Phase-2 |
-|------|------|---------|
-| URL | `/` | `/phase2` |
-| Code folder | `flexana/` | `flexana-phase2/` |
-| Mobile app in stores | live URL | only if you change base URL in test build |
-| Cron / reminders | keep on live only | do not schedule on phase-2 |
-| Emails / SMS | normal | logged only |
-| Database | shared | shared |
+You can run phase-2 on `admin-panel-flexana-egypt.com` while live stays on sdhds.net:
 
----
+1. Complete **Step 0** (DNS → server35).
+2. Deploy code to `flexana/` on server35 (can copy DB credentials from sdhds `.env`).
+3. Run Step 2 with `PHASE2_BASE_URL` and `PHASE2_APP_URL` as above.
 
-## Remove mistaken nested upload
-
-If you previously uploaded to `public_html/public/flexana`:
-
-```bash
-rm -rf /home/flexanastudios/domains/admin-panel-flexana-egypt/flexana/public/public/flexana
-# or, if public_html is a real folder:
-# rm -rf /home/flexanastudios/domains/admin-panel-flexana-egypt/public_html/public/flexana
-```
-
-Security check (must return 404):
-
-- `https://admin-panel-flexana-egypt.com/.env`
-- `https://admin-panel-flexana-egypt.com/phase2/../.env`
-
----
-
-## Promote to live after testing
-
-```bash
-cd /home/flexanastudios/domains/admin-panel-flexana-egypt/flexana
-git pull   # or rsync from flexana-phase2
-php artisan optimize:clear && php artisan optimize
-```
-
-Live `/phase2` gateway can stay for future tests or be removed:
-
-```bash
-rm -rf /home/flexanastudios/domains/admin-panel-flexana-egypt/flexana/public/phase2
-```
+Live mobile app keeps using sdhds.net until you switch it.
 
 ---
 
 ## Troubleshooting
 
-**404 on `/phase2`**
+| Problem | Fix |
+|---------|-----|
+| `DNS_PROBE_FINISHED_NXDOMAIN` | Domain not in DNS — complete Step 0 |
+| DNS OK, connection refused | Host has not bound domain to server — contact host |
+| 404 on `/phase2` | Run setup script; check `ls flexana/public/phase2/` |
+| 500 on `/phase2` | `tail -f flexana-phase2/storage/logs/laravel.log` |
+| SSL warning | Enable Let's Encrypt for the domain (host panel or support ticket) |
 
-- Confirm gateway exists: `ls -la flexana/public/phase2/`
-- Confirm `mod_rewrite` is on and `.htaccess` has `RewriteBase /phase2/`
-
-**500 error**
-
-- `tail -f flexana-phase2/storage/logs/laravel.log`
-- Check `flexana-phase2/.env` DB credentials match live
-- `chmod -R 775 flexana-phase2/storage flexana-phase2/bootstrap/cache`
-
-**Admin CSS broken**
-
-- Re-run `npm run build` in `flexana-phase2` and re-run setup script to refresh gateway assets
-
-**Custom subpath** (not `/phase2`):
+Remove bad nested upload if present:
 
 ```bash
-GATEWAY_SUBPATH=staging ./scripts/setup-phase2-ssh.sh
+rm -rf /home/flexanastudios/domains/admin-panel-flexana-egypt/flexana/public/public/flexana
+```
+
+---
+
+## After testing — promote to live
+
+```bash
+cd /home/flexanastudios/domains/admin-panel-flexana-egypt/flexana
+# deploy phase-2 code into live flexana/
+php artisan optimize:clear && php artisan optimize
 ```
