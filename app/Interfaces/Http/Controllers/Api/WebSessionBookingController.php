@@ -13,7 +13,7 @@ use App\Models\Category;
 use App\Models\Customer;
 use App\Support\ApiDateTime;
 use App\Support\InternalNotificationMail;
-use App\Support\PackagePurchaseExpiry;
+use App\Support\ValidPackagePurchaseFinder;
 use App\Support\PromoEmailText;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -134,7 +134,13 @@ class WebSessionBookingController extends Controller
         $subtotalBeforePromo = null;
 
         if (! $isDropIn) {
-            $purchaseToUse = $this->findValidPurchaseForCategory((int) $customer->id, $sessionCategory, $spots);
+            $purchaseToUse = ValidPackagePurchaseFinder::forSession(
+                (int) $customer->id,
+                $sessionCategory,
+                $spots,
+                Carbon::parse($appointment->booking_start),
+                fn ($package) => $this->packageCategory($package),
+            );
             if (! $purchaseToUse) {
                 return response()->json([
                     'success' => false,
@@ -333,49 +339,6 @@ class WebSessionBookingController extends Controller
         $serviceText = trim(($service->name ?? '') . ' ' . ($service->description ?? ''));
 
         return CategorizeServicesCommand::inferCategoryNameFromText($serviceText) ?? 'Yoga';
-    }
-
-    private function findValidPurchaseForCategory(int $customerId, ?string $sessionCategory, int $persons): ?CustomerPackagePurchaseModel
-    {
-        if ($sessionCategory === null) {
-            return null;
-        }
-        $bizTz = (string) config('app.business_timezone');
-        $today = Carbon::now($bizTz)->startOfDay();
-        /** @var \Illuminate\Database\Eloquent\Collection<int, CustomerPackagePurchaseModel> $purchases */
-        $purchases = CustomerPackagePurchaseModel::query()
-            ->with(['package.services'])
-            ->where('customer_id', $customerId)
-            ->where('status', 'active')
-            ->where('remaining_sessions', '>=', $persons)
-            ->whereNotNull('package_id')
-            ->orderByDesc('purchase_date')
-            ->get();
-
-        foreach ($purchases as $purchase) {
-            /** @var CustomerPackagePurchaseModel $purchase */
-            $package = $purchase->package;
-            if (! $package) {
-                continue;
-            }
-            $packageCategory = $this->packageCategory($package);
-            if ($packageCategory !== $sessionCategory) {
-                continue;
-            }
-            $expiresAt = PackagePurchaseExpiry::expiresAt(
-                $package,
-                $purchase->purchase_date,
-                $purchase->amelia_package_id,
-                (bool) $purchase->expires_by_months_only,
-            );
-            if ($expiresAt !== null && $expiresAt->copy()->timezone($bizTz)->startOfDay()->lt($today)) {
-                continue;
-            }
-
-            return $purchase;
-        }
-
-        return null;
     }
 
     private function packageCategory($package): ?string

@@ -10,7 +10,7 @@ use App\Infrastructure\Persistence\Eloquent\CustomerPackagePurchaseModel;
 use App\Infrastructure\Persistence\Eloquent\PaymentModel;
 use App\Infrastructure\Persistence\Eloquent\PromoCodeModel;
 use App\Infrastructure\Persistence\Eloquent\ServiceModel;
-use App\Support\PackagePurchaseExpiry;
+use App\Support\ValidPackagePurchaseFinder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -72,7 +72,13 @@ final class AdminSessionBookingService
         $subtotalBeforePromo = null;
 
         if (! $isDropIn) {
-            $purchaseToUse = $this->findValidPurchaseForCategory($customerId, $sessionCategory, $spots);
+            $purchaseToUse = ValidPackagePurchaseFinder::forSession(
+                $customerId,
+                $sessionCategory,
+                $spots,
+                Carbon::parse($appointment->booking_start),
+                fn ($package) => $this->packageCategory($package),
+            );
             if (! $purchaseToUse) {
                 throw new \RuntimeException('No package with remaining sessions for this category (Yoga/Reformer Pilates). Book as drop-in or purchase a package.');
             }
@@ -187,49 +193,6 @@ final class AdminSessionBookingService
             return 'Yoga';
         }
         return 'Yoga';
-    }
-
-    private function findValidPurchaseForCategory(int $customerId, ?string $sessionCategory, int $spots): ?CustomerPackagePurchaseModel
-    {
-        if ($sessionCategory === null) {
-            return null;
-        }
-        $bizTz = (string) config('app.business_timezone');
-        $today = Carbon::now($bizTz)->startOfDay();
-
-        $purchases = CustomerPackagePurchaseModel::query()
-            ->with(['package.services'])
-            ->where('customer_id', $customerId)
-            ->where('status', 'active')
-            ->where('remaining_sessions', '>=', $spots)
-            ->whereNotNull('package_id')
-            ->orderBy('purchase_date')
-            ->get();
-
-        foreach ($purchases as $purchase) {
-            $package = $purchase->package;
-            if (! $package) {
-                continue;
-            }
-            $packageCategory = $this->packageCategory($package);
-            if ($packageCategory !== $sessionCategory) {
-                continue;
-            }
-
-            $expiresAt = PackagePurchaseExpiry::expiresAt(
-                $package,
-                $purchase->purchase_date,
-                $purchase->amelia_package_id,
-                (bool) $purchase->expires_by_months_only,
-            );
-            if ($expiresAt !== null && $expiresAt->copy()->timezone($bizTz)->startOfDay()->lt($today)) {
-                continue;
-            }
-
-            return $purchase;
-        }
-
-        return null;
     }
 
     private function packageCategory($package): ?string

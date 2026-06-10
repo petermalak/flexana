@@ -13,7 +13,7 @@ use App\Infrastructure\Persistence\Eloquent\PromoCodeModel;
 use App\Infrastructure\Persistence\Eloquent\ServiceModel;
 use App\Models\Customer;
 use App\Support\ApiDateTime;
-use App\Support\PackagePurchaseExpiry;
+use App\Support\ValidPackagePurchaseFinder;
 use App\Support\InternalNotificationMail;
 use App\Support\PromoEmailText;
 use Illuminate\Http\JsonResponse;
@@ -180,7 +180,13 @@ class MobileBookingController extends Controller
         $subtotalBeforePromo = null;
 
         if (! $isDropIn) {
-            $purchaseToUse = $this->findValidPurchaseForCategory($customer->id, $sessionCategory, $spots);
+            $purchaseToUse = ValidPackagePurchaseFinder::forSession(
+                $customer->id,
+                $sessionCategory,
+                $spots,
+                Carbon::parse($appointment->booking_start),
+                fn ($package) => $this->packageCategory($package),
+            );
             if (! $purchaseToUse) {
                 return response()->json([
                     'success' => false,
@@ -406,50 +412,6 @@ class MobileBookingController extends Controller
             return 'Yoga';
         }
         return 'Yoga';
-    }
-
-    /**
-     * Find an active customer package purchase with matching category and enough remaining sessions.
-     * Prefers most recently purchased. Excludes expired (by package_duration + purchase_date).
-     */
-    private function findValidPurchaseForCategory(int $customerId, ?string $sessionCategory, int $persons): ?CustomerPackagePurchaseModel
-    {
-        if ($sessionCategory === null) {
-            return null;
-        }
-        $bizTz = (string) config('app.business_timezone');
-        $today = Carbon::now($bizTz)->startOfDay();
-        $purchases = CustomerPackagePurchaseModel::query()
-            ->with(['package.services'])
-            ->where('customer_id', $customerId)
-            ->where('status', 'active')
-            ->where('remaining_sessions', '>=', $persons)
-            ->whereNotNull('package_id')
-            ->orderBy('purchase_date')
-            ->get();
-
-        foreach ($purchases as $purchase) {
-            $package = $purchase->package;
-            if (! $package) {
-                continue;
-            }
-            $packageCategory = $this->packageCategory($package);
-            if ($packageCategory !== $sessionCategory) {
-                continue;
-            }
-            $expiresAt = PackagePurchaseExpiry::expiresAt(
-                $package,
-                $purchase->purchase_date,
-                $purchase->amelia_package_id,
-                (bool) $purchase->expires_by_months_only,
-            );
-            if ($expiresAt !== null && $expiresAt->copy()->timezone($bizTz)->startOfDay()->lt($today)) {
-                continue;
-            }
-            return $purchase;
-        }
-
-        return null;
     }
 
     /**
