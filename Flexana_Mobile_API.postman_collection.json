@@ -2,7 +2,7 @@
 	"info": {
 		"_postman_id": "flexana-mobile-api-v1",
 		"name": "Flexana Mobile API (v1)",
-		"description": "Flexana mobile app API. Auth: Login (phone+password, E.164). Signup: phone+email -> OTP via email -> verify (email+code). Password reset: SMS OTP (phone). Register FCM token on login/verify to receive class reminder push (one day before session; server job, no client API). Schedule: sessions, book, cancel, history. Promo: verify with IsPackage. Web public: web-sessions, web-session-bookings, paymob. Base: /api/v1.\n\nVariables: base_url, bearer_token (auto-set), signup_email (auto-set after Signup).",
+		"description": "Flexana mobile app API (updated Jun 2026).\n\nAuth: Login with email OR phone + password. Signup: phone+email → OTP via email → verify (email+code). All OTPs (signup, password reset, phone change) are sent by email. Forgot/reset password accepts email OR phone (OTP always goes to account email).\n\nPackage booking: isDropIn=false only allowed when session date is on/before package expiry.\n\nVariables: base_url, bearer_token (auto-set), signup_email, test_email, test_phone.\n\nImport Flexana_Mobile_API.postman_environment.json and pick Local or Production.",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"auth": {
@@ -18,24 +18,78 @@
 	"item": [
 		{
 			"name": "Auth",
-			"description": "Flow: (1) Login (phone, password, optional fcmToken). (2) Signup: phone+email -> email OTP -> Verify (email, code, optional fcmToken) -> token; emailVerifiedAt set. (3) Forgot/Reset password = SMS to phone. (4) Register FCM Token (or pass fcmToken on login/verify) so the server can send class reminder push notifications one day before booked classes. Phone change = SMS OTP. Also: Get Me, Update Me, Change Password, Delete Account, Logout.",
+			"description": "Recommended flows:\n1) Login: email OR phone + password (+ optional fcmToken).\n2) Signup: phone+email → Verify (email+code+password) → token.\n3) Reset password: Forgot (email OR phone) → OTP to email → Reset (same identifier + code + new password).\n4) Phone change: Send Phone Change Code (newPhone) → OTP to account email → Update Me (phone + phoneChangeCode).\n\nAll OTPs are email-only. Use test_email / test_phone collection variables.",
 			"item": [
 				{
-					"name": "Login",
+					"name": "Login (email)",
 					"request": {
 						"auth": { "type": "noauth" },
 						"method": "POST",
-						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Accept", "value": "application/json" }
+						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"phone\": \"+201234567890\",\n    \"password\": \"secret123\",\n    \"fcmToken\": \"dG9rZW4tZnJvbS1maXJlYmFzZS1jbG91ZC1tZXNzYWdpbmc\",\n    \"platform\": \"android\",\n    \"deviceId\": \"unique-device-uuid\"\n}"
+							"raw": "{\n    \"email\": \"{{test_email}}\",\n    \"password\": \"{{test_password}}\",\n    \"fcmToken\": \"dOS6WszpQv2lMxeqHPxUN7:APA91bExampleToken\",\n    \"platform\": \"android\",\n    \"deviceId\": \"BP2A.250605.031.A3\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/v1/auth/login",
 							"host": ["{{base_url}}"],
 							"path": ["api", "v1", "auth", "login"]
 						},
-						"description": "Existing user. Body: phone (required, E.164 e.g. +201234567890 or +447911123456), password (required). Optional: fcmToken, platform (android|ios), deviceId — pass fcmToken so the device receives class reminder push notifications. Returns token + customer. Token auto-saved to bearer_token."
+						"description": "Login with email + password. Send email OR phone (not both required). Optional: fcmToken, platform (android|ios), deviceId. Token auto-saved to bearer_token."
+					},
+					"response": [
+						{
+							"name": "Success",
+							"status": "OK",
+							"code": 200,
+							"header": [{ "key": "Content-Type", "value": "application/json" }],
+							"body": "{\"success\":true,\"message\":\"Logged in.\",\"token\":\"1|abc123xyz\",\"token_type\":\"Bearer\",\"customer\":{\"id\":\"1\",\"email\":\"user@example.com\",\"phone\":\"+201234567890\",\"emailVerifiedAt\":\"2024-01-15T10:00:00.000000Z\"}}"
+						},
+						{
+							"name": "401 Invalid credentials",
+							"status": "Unauthorized",
+							"code": 401,
+							"header": [{ "key": "Content-Type", "value": "application/json" }],
+							"body": "{\"success\":false,\"message\":\"Invalid email or password.\"}"
+						}
+					],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"const res = pm.response.json();",
+									"if (res.token) {",
+									"    pm.collectionVariables.set('bearer_token', res.token);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					]
+				},
+				{
+					"name": "Login (phone)",
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Accept", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"phone\": \"{{test_phone}}\",\n    \"password\": \"{{test_password}}\",\n    \"fcmToken\": \"dG9rZW4tZnJvbS1maXJlYmFzZS1jbG91ZC1tZXNzYWdpbmc\",\n    \"platform\": \"android\",\n    \"deviceId\": \"unique-device-uuid\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/auth/login",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "auth", "login"]
+						},
+						"description": "Login with phone (E.164, e.g. +201234567890) + password. Send email OR phone. Optional: fcmToken, platform, deviceId. Token auto-saved to bearer_token."
 					},
 					"response": [
 						{
@@ -60,7 +114,7 @@
 							"status": "Unauthorized",
 							"code": 401,
 							"header": [{ "key": "Content-Type", "value": "application/json" }],
-							"body": "{\"success\":false,\"message\":\"Invalid phone or password.\"}"
+							"body": "{\"success\":false,\"message\":\"Invalid email or password.\"}"
 						}
 					],
 					"event": [
@@ -86,7 +140,7 @@
 						"header": [{ "key": "Content-Type", "value": "application/json" }],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"phone\": \"+201234567890\",\n    \"email\": \"jane@example.com\",\n    \"firstName\": \"Jane\",\n    \"lastName\": \"Doe\",\n    \"profileImage\": \"data:image/png;base64,iVBORw0KGgo...\"\n}"
+							"raw": "{\n    \"phone\": \"{{test_phone}}\",\n    \"email\": \"{{test_email}}\",\n    \"firstName\": \"Jane\",\n    \"lastName\": \"Doe\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/v1/auth/signup",
@@ -162,21 +216,21 @@
 					]
 				},
 				{
-					"name": "Forgot Password",
+					"name": "Forgot Password (email)",
 					"request": {
 						"auth": { "type": "noauth" },
 						"method": "POST",
 						"header": [{ "key": "Content-Type", "value": "application/json" }],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"phone\": \"+201234567890\"\n}"
+							"raw": "{\n    \"email\": \"{{test_email}}\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/v1/auth/forgot-password",
 							"host": ["{{base_url}}"],
 							"path": ["api", "v1", "auth", "forgot-password"]
 						},
-						"description": "Step 1 of reset flow (phone-based). Body: phone (required). Backend sends a 6-digit OTP code to that phone via SMS. The response is generic (does not reveal if the phone exists). Then call Reset Password with phone + code + new password."
+						"description": "Step 1 of reset flow. Body: email OR phone (one required). OTP is always sent to the account email. Response is generic. In local/testing, check logs for code."
 					},
 					"response": [
 						{
@@ -184,26 +238,87 @@
 							"status": "OK",
 							"code": 200,
 							"header": [{ "key": "Content-Type", "value": "application/json" }],
-							"body": "{\"success\":true,\"message\":\"If that phone number exists, we have sent a password reset code.\"}"
+							"body": "{\"success\":true,\"message\":\"If that account exists, we have sent a password reset code to your email.\"}"
 						}
 					]
 				},
 				{
-					"name": "Reset Password",
+					"name": "Forgot Password (phone)",
 					"request": {
 						"auth": { "type": "noauth" },
 						"method": "POST",
 						"header": [{ "key": "Content-Type", "value": "application/json" }],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"phone\": \"+201234567890\",\n    \"code\": \"123456\",\n    \"password\": \"newsecret123\",\n    \"password_confirmation\": \"newsecret123\"\n}"
+							"raw": "{\n    \"phone\": \"{{test_phone}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/auth/forgot-password",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "auth", "forgot-password"]
+						},
+						"description": "Same as email variant but identify account by phone. OTP is sent to the email on file (not SMS)."
+					},
+					"response": [
+						{
+							"name": "Success",
+							"status": "OK",
+							"code": 200,
+							"header": [{ "key": "Content-Type", "value": "application/json" }],
+							"body": "{\"success\":true,\"message\":\"If that account exists, we have sent a password reset code to your email.\"}"
+						}
+					]
+				},
+				{
+					"name": "Reset Password (email)",
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"{{test_email}}\",\n    \"code\": \"123456\",\n    \"password\": \"newsecret123\",\n    \"password_confirmation\": \"newsecret123\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/v1/auth/reset-password",
 							"host": ["{{base_url}}"],
 							"path": ["api", "v1", "auth", "reset-password"]
 						},
-						"description": "Step 2 of reset flow (phone-based). Body: phone (required), code (6-digit OTP from SMS), password, password_confirmation (min 8 chars). On success user can log in with phone + new password."
+						"description": "Step 2 of reset flow. Body: email OR phone + code (from email) + password + password_confirmation (min 8)."
+					},
+					"response": [
+						{
+							"name": "Success",
+							"status": "OK",
+							"code": 200,
+							"header": [{ "key": "Content-Type", "value": "application/json" }],
+							"body": "{\"success\":true,\"message\":\"Password has been reset successfully.\"}"
+						},
+						{
+							"name": "400 Invalid or expired code",
+							"status": "Bad Request",
+							"code": 400,
+							"header": [{ "key": "Content-Type", "value": "application/json" }],
+							"body": "{\"success\":false,\"message\":\"Invalid or expired code.\"}"
+						}
+					]
+				},
+				{
+					"name": "Reset Password (phone)",
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"phone\": \"{{test_phone}}\",\n    \"code\": \"123456\",\n    \"password\": \"newsecret123\",\n    \"password_confirmation\": \"newsecret123\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/auth/reset-password",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "auth", "reset-password"]
+						},
+						"description": "Reset using phone as identifier. Code was sent to account email. Use same phone here as in Forgot Password (phone)."
 					},
 					"response": [
 						{
@@ -312,7 +427,7 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "v1", "auth", "me"]
 						},
-						"description": "Confirm phone change after calling Send Phone Change Code. Body: phone (new number) + phoneChangeCode (from SMS). Requires Bearer."
+						"description": "Confirm phone change after Send Phone Change Code. Body: phone (new number) + phoneChangeCode (6-digit code from account email). Requires Bearer."
 					},
 					"response": [
 						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"message\":\"Phone updated.\",\"customer\":{\"id\":\"1\",\"phone\":\"+201234567890\"}}" }
@@ -332,10 +447,10 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "v1", "auth", "send-phone-change-code"]
 						},
-						"description": "Send OTP to new phone before changing phone. Then PUT auth/me with phone + phoneChangeCode. Requires Bearer."
+						"description": "Send OTP to the customer's registered email before changing phone. Then PUT auth/me with new phone + phoneChangeCode. Requires Bearer."
 					},
 					"response": [
-						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"message\":\"Verification code sent to the new phone.\"}" }
+						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"message\":\"Verification code sent to your email.\"}" }
 					]
 				},
 				{
@@ -540,13 +655,14 @@
 							"raw": "{\n    \"sessionID\": 1,\n    \"spots\": 1,\n    \"promoCode\": \"SAVE10\",\n    \"isDropIn\": true\n}"
 						},
 						"url": { "raw": "{{base_url}}/api/v1/session-bookings", "host": ["{{base_url}}"], "path": ["api", "v1", "session-bookings"] },
-						"description": "Book one session. Body: sessionID (required), spots (optional, default 1) — number of persons for this booking (1–20); capacity and price multiply by spots. promoCode (optional), isDropIn (optional boolean). isDropIn: true = drop-in (no package required; pay per session; payment_status pending). isDropIn: false = deduct from customer's package (spots sessions from package). Defaults to true if omitted. Response data includes isDropIn, spots. Requires Bearer."
+						"description": "Book one session. Body: sessionID (required), spots (optional, default 1, max 20), promoCode (optional), isDropIn (optional, default true). isDropIn false: uses package only if session date is on/before package expiry (same calendar day allowed). Sessions after expiry must use isDropIn true. Requires Bearer."
 					},
 					"response": [
 						{ "name": "Success (drop-in)", "originalRequest": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\\n    \\\"sessionID\\\": 1,\\n    \\\"spots\\\": 1,\\n    \\\"isDropIn\\\": true\\n}" }, "url": { "raw": "{{base_url}}/api/v1/session-bookings", "host": ["{{base_url}}"], "path": ["api", "v1", "session-bookings"] } }, "status": "Created", "code": 201, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"message\":\"Booking created successfully\",\"data\":{\"id\":\"1\",\"sessionID\":\"1\",\"customerId\":\"1\",\"isDropIn\":true,\"spots\":1}}" },
 						{ "name": "Success (drop-in, multiple persons)", "originalRequest": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\\n    \\\"sessionID\\\": 1,\\n    \\\"spots\\\": 3,\\n    \\\"isDropIn\\\": true\\n}" }, "url": { "raw": "{{base_url}}/api/v1/session-bookings", "host": ["{{base_url}}"], "path": ["api", "v1", "session-bookings"] } }, "status": "Created", "code": 201, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"message\":\"Booking created successfully\",\"data\":{\"id\":\"3\",\"sessionID\":\"1\",\"customerId\":\"1\",\"isDropIn\":true,\"spots\":3}}" },
 						{ "name": "Success (from package)", "originalRequest": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\\n    \\\"sessionID\\\": 1,\\n    \\\"spots\\\": 1,\\n    \\\"isDropIn\\\": false\\n}" }, "url": { "raw": "{{base_url}}/api/v1/session-bookings", "host": ["{{base_url}}"], "path": ["api", "v1", "session-bookings"] } }, "status": "Created", "code": 201, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"message\":\"Booking created successfully\",\"data\":{\"id\":\"2\",\"sessionID\":\"1\",\"customerId\":\"1\",\"isDropIn\":false,\"spots\":1}}" },
 						{ "name": "400 No package (isDropIn false)", "originalRequest": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\\n    \\\"sessionID\\\": 1,\\n    \\\"isDropIn\\\": false\\n}" }, "url": { "raw": "{{base_url}}/api/v1/session-bookings", "host": ["{{base_url}}"], "path": ["api", "v1", "session-bookings"] } }, "status": "Bad Request", "code": 400, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":false,\"message\":\"No package with remaining sessions for this category (Yoga/Reformer Pilates). Book as drop-in or purchase a package.\"}" },
+						{ "name": "400 Package expired before session date", "originalRequest": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\\n    \\\"sessionID\\\": 99,\\n    \\\"spots\\\": 1,\\n    \\\"isDropIn\\\": false\\n}" }, "url": { "raw": "{{base_url}}/api/v1/session-bookings", "host": ["{{base_url}}"], "path": ["api", "v1", "session-bookings"] } }, "status": "Bad Request", "code": 400, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":false,\"message\":\"No package with remaining sessions for this category (Yoga/Reformer Pilates). Book as drop-in or purchase a package.\"}" },
 						{ "name": "400 Session full", "status": "Bad Request", "code": 400, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":false,\"message\":\"Session is full\"}" },
 						{ "name": "404 Session not found", "status": "Not Found", "code": 404, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":false,\"message\":\"Session not found\"}" },
 						{ "name": "422 spots out of range", "status": "Unprocessable Entity", "code": 422, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":false,\"message\":\"Validation failed\",\"errors\":{\"spots\":[\"The spots must not be greater than 20.\"]}}" }
@@ -798,10 +914,13 @@
 		}
 	],
 	"variable": [
-		{ "key": "base_url", "value": "http://127.0.0.1:8000", "type": "string", "description": "Base URL - Change this to switch between localhost and stage. Default: localhost" },
-		{ "key": "base_url_localhost", "value": "http://127.0.0.1:8000", "type": "string", "description": "Localhost development URL" },
-		{ "key": "base_url_stage", "value": "https://sdhds.net/backend/backend/public", "type": "string", "description": "Stage/production URL" },
-		{ "key": "bearer_token", "value": "", "type": "string", "description": "Bearer token for authenticated requests (auto-set after login/verify)" },
-		{ "key": "signup_email", "value": "jane@example.com", "type": "string", "description": "Email used in signup flow (auto-set after Signup)" }
+		{ "key": "base_url", "value": "https://sdhds.net/backend/backend/public", "type": "string", "description": "API base URL (no trailing slash)" },
+		{ "key": "base_url_localhost", "value": "http://127.0.0.1:8000", "type": "string", "description": "Local development" },
+		{ "key": "base_url_production", "value": "https://sdhds.net/backend/backend/public", "type": "string", "description": "Production / stage" },
+		{ "key": "bearer_token", "value": "", "type": "string", "description": "Auto-set after Login or Verify" },
+		{ "key": "signup_email", "value": "jane@example.com", "type": "string", "description": "Auto-set after Signup" },
+		{ "key": "test_email", "value": "feloalaa50@gmail.com", "type": "string", "description": "Test account email for login / reset" },
+		{ "key": "test_phone", "value": "+201234567890", "type": "string", "description": "Test account phone (E.164)" },
+		{ "key": "test_password", "value": "your-password-here", "type": "string", "description": "Test account password" }
 	]
 }

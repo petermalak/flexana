@@ -9,19 +9,27 @@ There are two Postman collections:
 
 ## Flexana Mobile API (v1) — Mobile app
 
-**File:** `Flexana_Mobile_API.postman_collection.json`
+**Files:**
+- `Flexana_Mobile_API.postman_collection.json` — all mobile endpoints with examples
+- `Flexana_Mobile_API.postman_environment.json` — production (`https://sdhds.net/backend/backend/public`)
+- `Flexana_Mobile_API_Local.postman_environment.json` — local (`http://127.0.0.1:8000`)
 
 - **Base path:** `/api/v1`
-- **Auth:** All data endpoints require `Authorization: Bearer <token>`. Get the token from **Login** or **Signup (email OTP) → Verify**.
-- **Variables:** `base_url`, `bearer_token` (auto-set after Login/Verify), `signup_email` (auto-set after Signup).
+- **Auth:** Bearer token on protected routes. Get token from **Login (email)** / **Login (phone)** or **Signup → Verify**.
+- **Variables:** `base_url`, `test_email`, `test_phone`, `test_password`, `bearer_token` (auto-set), `signup_email` (auto-set after Signup).
 
-**Auth flow:**
+**Auth flow (updated — all OTPs by email):**
 
-- **Login** – POST `{ "phone", "password", optional "fcmToken", "platform", "deviceId" }` → token + customer. E.164 phone (`+20…`, `+44…`, etc.).
-- **Signup (email OTP):** POST **Signup** – `phone` + `email` → code sent to **email**. POST **Verify** – `email`, `code`, optional `password`, `fcmToken` → `emailVerifiedAt` + token.
-- **Forgot / Reset Password** – SMS OTP to `phone`: **Forgot Password** → **Reset Password** with `phone`, `code`, `password`.
-- **Register FCM Token** – POST `auth/fcm-token` (or pass `fcmToken` on login/verify) for push notifications.
-- **Get Me**, **Update Me**, **Send Phone Change Code** (SMS), **Change Password**, **Delete Account**, **Logout**.
+| Step | Endpoint | Body |
+|------|----------|------|
+| Login | `POST auth/login` | `email` **or** `phone` + `password` (+ optional `fcmToken`) |
+| Signup | `POST auth/signup` | `phone` + `email` (+ names) → OTP to **email** |
+| Verify | `POST auth/verify` | `email` + `code` (+ `password` for new accounts) |
+| Forgot password | `POST auth/forgot-password` | `email` **or** `phone` → OTP to **account email** |
+| Reset password | `POST auth/reset-password` | same identifier + `code` + `password` |
+| Phone change | `POST auth/send-phone-change-code` then `PUT auth/me` | OTP to **account email**; confirm with `phone` + `phoneChangeCode` |
+
+**Booking:** `isDropIn: false` only works when the session date is on or before the package expiry date.
 
 **Folders:** Auth, Home Screen, Schedule Screen, Packages Screen, Promo Code Flow, Push Notifications, Web Schedule (public).
 
@@ -43,8 +51,12 @@ This collection provides the admin/frontend API, formatted to be compatible with
 
 1. Open Postman
 2. Click **Import** button (top left)
-3. Select `Flexana_API_Collection.postman_collection.json` and/or `Flexana_Mobile_API.postman_collection.json`
-4. The collection(s) will be imported with all endpoints organized by category
+3. Import:
+   - `Flexana_Mobile_API.postman_collection.json`
+   - `Flexana_Mobile_API.postman_environment.json` (production) and/or `Flexana_Mobile_API_Local.postman_environment.json`
+4. Select the environment from the top-right dropdown
+5. Set `test_password` (and `test_email` / `test_phone` if needed) in the environment
+6. Run **Login (email)** — `bearer_token` is saved automatically for other requests
 
 ## 🔧 Setup Environment Variables
 

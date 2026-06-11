@@ -133,6 +133,289 @@ final class EmailVerificationService
         return $row !== null && $this->verificationRowNotExpired($row, $now);
     }
 
+    public function findCustomerByEmail(string $email): ?Customer
+    {
+        $email = $this->normalizeEmail($email);
+        if ($email === '') {
+            return null;
+        }
+
+        return Customer::query()->where('email', $email)->first();
+    }
+
+    /**
+     * @return array{success: bool, message: string, code?: string, email?: string}
+     */
+    public function sendPasswordResetCodeByEmail(string $email): array
+    {
+        $email = $this->normalizeEmail($email);
+        if ($email === '') {
+            return ['success' => false, 'message' => 'Invalid email address.'];
+        }
+
+        $customer = $this->findCustomerByEmail($email);
+        if (! $customer) {
+            return [
+                'success' => true,
+                'message' => 'If that account exists, we have sent a password reset code to your email.',
+            ];
+        }
+
+        return $this->sendPasswordResetCodeForCustomer($customer);
+    }
+
+    /**
+     * @return array{success: bool, message: string, code?: string, email?: string}
+     */
+    public function sendPasswordResetCodeByPhone(string $phone): array
+    {
+        $phone = PhoneNumberNormalizer::normalize($phone);
+        if ($phone === '') {
+            return ['success' => false, 'message' => 'Invalid phone number.'];
+        }
+
+        $customer = Customer::query()
+            ->whereIn('phone', $this->phoneLookupVariants($phone))
+            ->first();
+
+        if (! $customer || ! $customer->email) {
+            return [
+                'success' => true,
+                'message' => 'If that account exists, we have sent a password reset code to your email.',
+            ];
+        }
+
+        return $this->sendPasswordResetCodeForCustomer($customer);
+    }
+
+    /**
+     * @return array{success: bool, message: string, customer?: Customer}
+     */
+    public function verifyPasswordResetCodeByEmail(string $email, string $code): array
+    {
+        $email = $this->normalizeEmail($email);
+        $code = trim($code);
+
+        if ($email === '' || $code === '') {
+            return ['success' => false, 'message' => 'Invalid email address.'];
+        }
+
+        return $this->verifyPurposeCode($email, $code, 'password_reset');
+    }
+
+    /**
+     * @return array{success: bool, message: string, customer?: Customer}
+     */
+    public function verifyPasswordResetCodeByPhone(string $phone, string $code): array
+    {
+        $phone = PhoneNumberNormalizer::normalize($phone);
+        $code = trim($code);
+
+        if ($phone === '' || $code === '') {
+            return ['success' => false, 'message' => 'Invalid phone number.'];
+        }
+
+        $customer = Customer::query()
+            ->whereIn('phone', $this->phoneLookupVariants($phone))
+            ->first();
+
+        if (! $customer || ! $customer->email) {
+            return ['success' => false, 'message' => 'Invalid or expired code.'];
+        }
+
+        return $this->verifyPurposeCode($this->normalizeEmail((string) $customer->email), $code, 'password_reset');
+    }
+
+    /**
+     * @return array{success: bool, message: string, code?: string}
+     */
+    public function sendPhoneChangeCode(int $customerId, string $newPhone): array
+    {
+        $newPhone = PhoneNumberNormalizer::normalize($newPhone);
+        if ($newPhone === '') {
+            return ['success' => false, 'message' => 'Invalid phone number.'];
+        }
+
+        $customer = Customer::query()->find($customerId);
+        if (! $customer || ! $customer->email) {
+            return ['success' => false, 'message' => 'Your account must have an email address to verify phone changes.'];
+        }
+
+        $existing = Customer::query()
+            ->where('phone', $newPhone)
+            ->where('id', '!=', $customerId)
+            ->exists();
+        if ($existing) {
+            return ['success' => false, 'message' => 'This phone number is already used by another account.'];
+        }
+
+        $email = $this->normalizeEmail((string) $customer->email);
+        $now = $this->nowUtc();
+        $code = $this->generateCode();
+        $expiresAt = $now->copy()->addMinutes(self::CODE_TTL_MINUTES);
+
+        DB::table('email_verification_codes')->insert([
+            'email' => $email,
+            'code' => $code,
+            'purpose' => 'phone_change',
+            'customer_id' => $customerId,
+            'target_phone' => $newPhone,
+            'expires_at' => $expiresAt,
+            'created_at' => $now,
+        ]);
+
+        if (! $this->sendCodeEmail($email, $code, $customer->first_name)) {
+            return ['success' => false, 'message' => 'Verification code could not be sent. Please check your email and try again.'];
+        }
+
+        $response = ['success' => true, 'message' => 'Verification code sent to your email.'];
+        if (app()->environment('local', 'testing')) {
+            $response['code'] = $code;
+        }
+
+        return $response;
+    }
+
+    /**
+     * @return array{success: bool, message: string, phone?: string}
+     */
+    public function verifyPhoneChangeCode(string $email, string $code, int $customerId): array
+    {
+        $email = $this->normalizeEmail($email);
+        $code = trim($code);
+
+        if ($email === '' || $code === '') {
+            return ['success' => false, 'message' => 'Invalid email address.'];
+        }
+
+        $now = $this->nowUtc();
+        $row = DB::table('email_verification_codes')
+            ->where('email', $email)
+            ->where('code', $code)
+            ->where('purpose', 'phone_change')
+            ->where('customer_id', $customerId)
+            ->orderByDesc('created_at')
+            ->first();
+
+        if (! $row || ! $this->verificationRowNotExpired($row, $now)) {
+            return ['success' => false, 'message' => 'Invalid or expired code.'];
+        }
+
+        $newPhone = PhoneNumberNormalizer::normalize((string) ($row->target_phone ?? ''));
+        if ($newPhone === '') {
+            return ['success' => false, 'message' => 'Invalid or expired code.'];
+        }
+
+        DB::table('email_verification_codes')
+            ->where('email', $email)
+            ->where('code', $code)
+            ->where('purpose', 'phone_change')
+            ->where('customer_id', $customerId)
+            ->delete();
+
+        return ['success' => true, 'message' => 'Verified.', 'phone' => $newPhone];
+    }
+
+    /**
+     * @return array{success: bool, message: string, code?: string, email?: string}
+     */
+    private function sendPasswordResetCodeForCustomer(Customer $customer): array
+    {
+        $email = $this->normalizeEmail((string) $customer->email);
+        if ($email === '') {
+            return [
+                'success' => true,
+                'message' => 'If that account exists, we have sent a password reset code to your email.',
+            ];
+        }
+
+        $now = $this->nowUtc();
+        $code = $this->generateCode();
+        $expiresAt = $now->copy()->addMinutes(self::CODE_TTL_MINUTES);
+
+        DB::table('email_verification_codes')->insert([
+            'email' => $email,
+            'code' => $code,
+            'purpose' => 'password_reset',
+            'customer_id' => $customer->id,
+            'expires_at' => $expiresAt,
+            'created_at' => $now,
+        ]);
+
+        if (! $this->sendCodeEmail($email, $code, $customer->first_name, 'Your Flexana password reset code')) {
+            return ['success' => false, 'message' => 'Verification code could not be sent. Please check your email and try again.'];
+        }
+
+        $response = [
+            'success' => true,
+            'message' => 'If that account exists, we have sent a password reset code to your email.',
+            'email' => $email,
+        ];
+        if (app()->environment('local', 'testing')) {
+            $response['code'] = $code;
+        }
+
+        return $response;
+    }
+
+    /**
+     * @return array{success: bool, message: string, customer?: Customer}
+     */
+    private function verifyPurposeCode(string $email, string $code, string $purpose): array
+    {
+        $now = $this->nowUtc();
+        $row = DB::table('email_verification_codes')
+            ->where('email', $email)
+            ->where('code', $code)
+            ->where('purpose', $purpose)
+            ->orderByDesc('created_at')
+            ->first();
+
+        if (! $row || ! $this->verificationRowNotExpired($row, $now)) {
+            return ['success' => false, 'message' => 'Invalid or expired code.'];
+        }
+
+        $customer = isset($row->customer_id)
+            ? Customer::query()->find((int) $row->customer_id)
+            : $this->findCustomerByEmail($email);
+
+        if (! $customer) {
+            return ['success' => false, 'message' => 'Customer not found.'];
+        }
+
+        DB::table('email_verification_codes')
+            ->where('email', $email)
+            ->where('code', $code)
+            ->where('purpose', $purpose)
+            ->delete();
+
+        return ['success' => true, 'message' => 'Code verified.', 'customer' => $customer];
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function phoneLookupVariants(string $normalizedPhone): array
+    {
+        $p = preg_replace('/\s+/', '', $normalizedPhone) ?? '';
+        $variants = [];
+        if ($p !== '') {
+            $variants[] = $p;
+        }
+
+        if (str_starts_with($p, '+20') && strlen($p) > 3) {
+            $variants[] = '0' . substr($p, 3);
+        }
+
+        if (str_starts_with($p, '+') && strlen($p) > 1) {
+            $variants[] = substr($p, 1);
+        }
+
+        $variants = array_values(array_unique(array_filter($variants, fn ($v) => is_string($v) && $v !== '')));
+
+        return $variants === [] ? [$normalizedPhone] : $variants;
+    }
+
     private function finishSignupVerification(string $email): array
     {
         $customer = Customer::query()->where('email', $email)->first();
@@ -170,8 +453,12 @@ final class EmailVerificationService
         return $expiresAt->gt($nowUtc);
     }
 
-    private function sendCodeEmail(string $email, string $code, ?string $firstName): bool
-    {
+    private function sendCodeEmail(
+        string $email,
+        string $code,
+        ?string $firstName,
+        string $subject = 'Your Flexana verification code',
+    ): bool {
         $name = trim((string) $firstName);
         $greeting = $name !== '' ? "Hi {$name}," : 'Hi,';
 
@@ -185,17 +472,18 @@ final class EmailVerificationService
             Log::channel('stack')->info('Email verification code', [
                 'email' => $email,
                 'code' => $code,
+                'subject' => $subject,
             ]);
         }
 
         try {
-            Mail::raw($body, function ($message) use ($email, $name): void {
+            Mail::raw($body, function ($message) use ($email, $name, $subject): void {
                 if ($name !== '') {
                     $message->to($email, $name);
                 } else {
                     $message->to($email);
                 }
-                $message->subject('Your Flexana verification code');
+                $message->subject($subject);
             });
 
             return true;
