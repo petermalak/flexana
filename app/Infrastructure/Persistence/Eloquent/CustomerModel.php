@@ -37,6 +37,8 @@ class CustomerModel extends Model implements AuthenticatableContract, CanResetPa
         'email',
         'profile_image',
         'phone',
+        'phone_country_code',
+        'phone_national_number',
         'phone_verified_at',
         'password',
         'email_verified_at',

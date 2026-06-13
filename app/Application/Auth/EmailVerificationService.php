@@ -26,6 +26,8 @@ final class EmailVerificationService
         ?string $firstName = null,
         ?string $lastName = null,
         ?string $profileImagePath = null,
+        ?string $phoneCountryCode = null,
+        ?string $phoneNationalNumber = null,
     ): array {
         $email = $this->normalizeEmail($email);
         $phone = PhoneNumberNormalizer::normalize($phone);
@@ -35,6 +37,14 @@ final class EmailVerificationService
         }
         if ($phone === '') {
             return ['success' => false, 'message' => 'Invalid phone number.'];
+        }
+
+        if ($phoneCountryCode === null || $phoneNationalNumber === null) {
+            $parts = PhoneNumberNormalizer::partsFromE164($phone);
+            if ($parts !== null) {
+                $phoneCountryCode ??= $parts['countryCode'];
+                $phoneNationalNumber ??= $parts['phoneNumber'];
+            }
         }
 
         $now = $this->nowUtc();
@@ -52,6 +62,8 @@ final class EmailVerificationService
         }
 
         $customer->phone = $phone;
+        $customer->phone_country_code = $phoneCountryCode;
+        $customer->phone_national_number = $phoneNationalNumber;
         if ($lastName !== null) {
             $customer->last_name = $lastName;
         }

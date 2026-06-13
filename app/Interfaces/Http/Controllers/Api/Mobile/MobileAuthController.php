@@ -90,20 +90,36 @@ class MobileAuthController extends Controller
 
     /**
      * POST /api/v1/auth/signup
-     * Body: { phone, email [, firstName, lastName, profileImage ] }
+     * Body: { countryCode, phoneNumber, email [, firstName, lastName, profileImage ] }
+     *        OR legacy { phone (E.164), email, ... }
      * Backend OTP: we send a 6-digit code via email, then the app calls POST /auth/verify with email + code.
      * profileImage: base64 encoded image string or multipart/form-data file upload
      */
     public function signup(Request $request): JsonResponse
     {
-        $this->mergeNormalizedPhone($request);
         $this->mergeNormalizedEmail($request);
+
+        $phoneParts = $this->resolveSignupPhoneParts($request);
+        if ($phoneParts === false) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => [
+                    'phone' => ['Invalid phone number. Provide phone (E.164) or countryCode + phoneNumber.'],
+                ],
+            ], 422);
+        }
 
         $validator = Validator::make($request->all(), [
             'phone' => [
-                ...PhoneNumberNormalizer::validationRules(),
+                'required',
+                'string',
+                'max:' . PhoneNumberNormalizer::E164_MAX_LENGTH,
+                new \App\Rules\E164PhoneNumber,
                 Rule::unique('customers', 'phone')->whereNull('deleted_at'),
             ],
+            'countryCode' => PhoneNumberNormalizer::countryCodeValidationRules(),
+            'phoneNumber' => ['nullable', 'string', 'max:15', 'regex:/^0?\d{4,14}$/'],
             'firstName' => 'nullable|string|max:100',
             'lastName' => 'nullable|string|max:100',
             'email' => [
@@ -115,6 +131,8 @@ class MobileAuthController extends Controller
         ], [
             'phone.unique' => 'This phone number is already registered. Please log in instead.',
             'email.unique' => 'This email is already registered.',
+            'countryCode.required_with' => 'Country code is required when phone number is provided.',
+            'phoneNumber.required_with' => 'Phone number is required when country code is provided.',
         ]);
 
         if ($validator->fails()) {
@@ -145,7 +163,9 @@ class MobileAuthController extends Controller
             $data['phone'],
             $data['firstName'] ?? null,
             $data['lastName'] ?? null,
-            $profileImagePath
+            $profileImagePath,
+            $phoneParts['countryCode'] ?? null,
+            $phoneParts['phoneNumber'] ?? null,
         );
 
         if (! $result['success']) {
@@ -155,12 +175,18 @@ class MobileAuthController extends Controller
             ], 400);
         }
 
+        $responsePhone = $this->phoneFieldsForCustomerPhone(
+            $data['phone'],
+            $phoneParts['countryCode'] ?? null,
+            $phoneParts['phoneNumber'] ?? null,
+        );
+
         $response = [
             'success' => true,
             'message' => $result['message'],
             'useLegacyVerify' => true,
             'email' => $data['email'],
-            'phone' => $this->normalizePhone($data['phone']),
+            ...$responsePhone,
         ];
         if (app()->environment('local', 'testing') && isset($result['code'])) {
             $response['code'] = $result['code'];
@@ -440,6 +466,11 @@ class MobileAuthController extends Controller
                 ], 400);
             }
             $customer->phone = $result['phone'];
+            $parts = PhoneNumberNormalizer::partsFromE164($result['phone']);
+            if ($parts !== null) {
+                $customer->phone_country_code = $parts['countryCode'];
+                $customer->phone_national_number = $parts['phoneNumber'];
+            }
             $customer->phone_verified_at = now();
         }
 
@@ -630,6 +661,83 @@ class MobileAuthController extends Controller
             'string',
             'max:' . PhoneNumberNormalizer::E164_MAX_LENGTH,
             new \App\Rules\E164PhoneNumber,
+        ];
+    }
+
+    /**
+     * Signup accepts either legacy `phone` (E.164) or `countryCode` + `phoneNumber`.
+     *
+     * @return array{countryCode: string, phoneNumber: string}|null|false null = use legacy phone only, false = invalid parts
+     */
+    private function resolveSignupPhoneParts(Request $request): array|null|false
+    {
+        $hasParts = $request->filled('countryCode') || $request->filled('phoneNumber');
+        $hasLegacyPhone = $request->filled('phone');
+
+        if ($hasParts && $hasLegacyPhone) {
+            return false;
+        }
+
+        if ($hasParts) {
+            if (! $request->filled('countryCode') || ! $request->filled('phoneNumber')) {
+                return false;
+            }
+
+            $parts = PhoneNumberNormalizer::fromParts(
+                (string) $request->input('countryCode'),
+                (string) $request->input('phoneNumber'),
+            );
+            if ($parts === null) {
+                return false;
+            }
+
+            $request->merge(['phone' => $parts['e164']]);
+
+            return [
+                'countryCode' => $parts['countryCode'],
+                'phoneNumber' => $parts['phoneNumber'],
+            ];
+        }
+
+        if ($hasLegacyPhone) {
+            $this->mergeNormalizedPhone($request);
+            $parts = PhoneNumberNormalizer::partsFromE164((string) $request->input('phone'));
+
+            return $parts;
+        }
+
+        return null;
+    }
+
+    /**
+     * @return array{phone: ?string, countryCode: ?string, phoneNumber: ?string}
+     */
+    private function phoneFieldsForCustomer(Customer $customer): array
+    {
+        return $this->phoneFieldsForCustomerPhone(
+            $customer->phone,
+            $customer->phone_country_code,
+            $customer->phone_national_number,
+        );
+    }
+
+    /**
+     * @return array{phone: ?string, countryCode: ?string, phoneNumber: ?string}
+     */
+    private function phoneFieldsForCustomerPhone(?string $e164, ?string $countryCode, ?string $phoneNumber): array
+    {
+        if ($countryCode === null || $phoneNumber === null) {
+            $parts = PhoneNumberNormalizer::partsFromE164($e164);
+            if ($parts !== null) {
+                $countryCode ??= $parts['countryCode'];
+                $phoneNumber ??= $parts['phoneNumber'];
+            }
+        }
+
+        return [
+            'phone' => $e164,
+            'countryCode' => $countryCode,
+            'phoneNumber' => $phoneNumber,
         ];
     }
 
@@ -908,7 +1016,7 @@ class MobileAuthController extends Controller
             'firstName' => $customer->first_name,
             'lastName' => $customer->last_name,
             'email' => $customer->email,
-            'phone' => $customer->phone,
+            ...$this->phoneFieldsForCustomer($customer),
             'profileImage' => $profileImageUrl,
             'phoneVerifiedAt' => ApiDateTime::toBusinessIso8601($customer->phone_verified_at),
             'phoneVerifiedAtUtc' => ApiDateTime::toUtcIso8601($customer->phone_verified_at),

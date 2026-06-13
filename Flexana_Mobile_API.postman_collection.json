@@ -140,7 +140,7 @@
 						"header": [{ "key": "Content-Type", "value": "application/json" }],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"phone\": \"{{test_phone}}\",\n    \"email\": \"{{test_email}}\",\n    \"firstName\": \"Jane\",\n    \"lastName\": \"Doe\"\n}"
+							"raw": "{\n    \"countryCode\": \"20\",\n    \"phoneNumber\": \"01012345678\",\n    \"email\": \"{{test_email}}\",\n    \"firstName\": \"Jane\",\n    \"lastName\": \"Doe\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/v1/auth/signup",
