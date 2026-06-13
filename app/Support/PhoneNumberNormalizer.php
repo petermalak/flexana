@@ -112,14 +112,15 @@ final class PhoneNumberNormalizer
             ];
         }
 
-        foreach ([3, 2, 1] as $len) {
-            if (strlen($digits) <= $len) {
+        $knownCodes = config('phone.known_country_calling_codes', [$defaultCc]);
+        usort($knownCodes, static fn (string $a, string $b): int => strlen($b) <=> strlen($a));
+
+        foreach ($knownCodes as $cc) {
+            if ($cc === '' || ! str_starts_with($digits, $cc) || strlen($digits) <= strlen($cc)) {
                 continue;
             }
-            $cc = substr($digits, 0, $len);
-            $national = substr($digits, $len);
-            $candidate = '+' . $cc . $national;
-            if ($national !== '' && self::isValidE164($candidate)) {
+            $national = substr($digits, strlen($cc));
+            if ($national !== '' && ('+' . $cc . $national) === $normalized) {
                 return [
                     'countryCode' => $cc,
                     'phoneNumber' => $national,

@@ -404,9 +404,13 @@ class MobileAuthController extends Controller
      */
     public function me(Request $request): JsonResponse
     {
+        /** @var Customer $customer */
+        $customer = $request->user();
+        $customer->refresh();
+
         return response()->json([
             'success' => true,
-            'customer' => $this->customerToArray($request->user()),
+            'customer' => $this->customerToArray($customer),
         ], 200);
     }
 
@@ -714,10 +718,14 @@ class MobileAuthController extends Controller
      */
     private function phoneFieldsForCustomer(Customer $customer): array
     {
+        $e164 = $customer->phone !== null && $customer->phone !== ''
+            ? PhoneNumberNormalizer::normalize((string) $customer->phone)
+            : null;
+
         return $this->phoneFieldsForCustomerPhone(
-            $customer->phone,
-            $customer->phone_country_code,
-            $customer->phone_national_number,
+            $e164 !== '' ? $e164 : null,
+            $this->nullableString($customer->phone_country_code),
+            $this->nullableString($customer->phone_national_number),
         );
     }
 
@@ -726,6 +734,13 @@ class MobileAuthController extends Controller
      */
     private function phoneFieldsForCustomerPhone(?string $e164, ?string $countryCode, ?string $phoneNumber): array
     {
+        if ($e164 !== null && $e164 !== '') {
+            $e164 = PhoneNumberNormalizer::normalize($e164);
+            if ($e164 === '') {
+                $e164 = null;
+            }
+        }
+
         if ($countryCode === null || $phoneNumber === null) {
             $parts = PhoneNumberNormalizer::partsFromE164($e164);
             if ($parts !== null) {
@@ -739,6 +754,17 @@ class MobileAuthController extends Controller
             'countryCode' => $countryCode,
             'phoneNumber' => $phoneNumber,
         ];
+    }
+
+    private function nullableString(mixed $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        $value = trim((string) $value);
+
+        return $value === '' ? null : $value;
     }
 
     private function mergeNormalizedPhone(Request $request, string $field = 'phone'): void
