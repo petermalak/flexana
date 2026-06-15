@@ -18,6 +18,11 @@ class AmeliaAppointmentsTable
                 TextColumn::make('id')->sortable(),
                 TextColumn::make('service.name')->label('Service')->searchable()->sortable(),
                 TextColumn::make('provider.name')->label('Instructor')->searchable()->sortable(),
+                TextColumn::make('branch.name')
+                    ->label('Branch')
+                    ->placeholder('Default')
+                    ->sortable()
+                    ->toggleable(),
                 TextColumn::make('booking_start')
                     ->label('Starts')
                     ->dateTime('M j, Y H:i')

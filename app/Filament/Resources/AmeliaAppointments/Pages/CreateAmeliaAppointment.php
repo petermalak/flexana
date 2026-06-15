@@ -95,6 +95,7 @@ class CreateAmeliaAppointment extends StaysOnPageCreateRecord
                 'provider_id' => $record->provider_id,
                 'package_id' => $record->package_id,
                 'location_id' => $record->location_id,
+                'branch_id' => $record->branch_id,
                 'booking_start' => $occurrenceStart->format('Y-m-d H:i:s'),
                 'booking_end' => $occurrenceEnd->format('Y-m-d H:i:s'),
                 'status' => $record->status,

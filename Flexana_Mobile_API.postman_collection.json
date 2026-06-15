@@ -519,11 +519,19 @@
 					"request": {
 						"method": "GET",
 						"header": [],
-						"url": { "raw": "{{base_url}}/api/v1/banners", "host": ["{{base_url}}"], "path": ["api", "v1", "banners"] },
-						"description": "Response: [{ image, URL }, ...]. Requires Bearer."
+						"url": {
+							"raw": "{{base_url}}/api/v1/banners?category=home",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "banners"],
+							"query": [
+								{ "key": "category", "value": "home", "description": "Optional. home (default) = home carousel banners; popup = home popup banners." }
+							]
+						},
+						"description": "Get active banners for the home screen. Query: category (optional) — home (default) for carousel banners, popup for home popup banners. Response: [{ title, image, URL }, ...]. Requires Bearer."
 					},
 					"response": [
-						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "[{\"image\":\"https://example.com/banner1.jpg\",\"url\":\"https://example.com\"}]" }
+						{ "name": "Success (home carousel)", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "[{\"title\":\"Summer promo\",\"image\":\"https://example.com/banner1.jpg\",\"URL\":\"https://example.com\"}]" },
+						{ "name": "Success (popup)", "originalRequest": { "method": "GET", "header": [], "url": { "raw": "{{base_url}}/api/v1/banners?category=popup", "host": ["{{base_url}}"], "path": ["api", "v1", "banners"], "query": [{ "key": "category", "value": "popup" }] } }, "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "[{\"title\":\"Welcome offer\",\"image\":\"https://example.com/popup-banner.jpg\",\"URL\":\"https://example.com/offer\"}]" }
 					]
 				},
 				{
@@ -536,6 +544,18 @@
 					},
 					"response": [
 						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"data\":[{\"id\":\"1\",\"name\":\"Yoga\",\"slug\":\"yoga\",\"type\":\"service\",\"description\":\"Yoga classes\",\"image\":\"http://127.0.0.1:8000/storage/categories/yoga.jpg\",\"position\":0},{\"id\":\"2\",\"name\":\"Reformer Pilates\",\"slug\":\"reformer-pilates\",\"type\":\"service\",\"description\":\"Reformer Pilates\",\"image\":\"http://127.0.0.1:8000/storage/categories/pilates.jpg\",\"position\":1}]}" }
+					]
+				},
+				{
+					"name": "Get Branches",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/branches", "host": ["{{base_url}}"], "path": ["api", "v1", "branches"] },
+						"description": "Get active studio branches. Response: { data: [{ id, name, address, phone, isDefault }, ...] }. isDefault marks the branch assigned when an appointment has no branch selected. Requires Bearer."
+					},
+					"response": [
+						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"data\":[{\"id\":\"1\",\"name\":\"Main Studio\",\"address\":\"123 Fitness St\",\"phone\":\"+201234567890\",\"isDefault\":true},{\"id\":\"2\",\"name\":\"Downtown Branch\",\"address\":\"456 Center Ave\",\"phone\":\"+201098765432\",\"isDefault\":false}]}" }
 					]
 				},
 				{
@@ -637,12 +657,12 @@
 								{ "key": "page", "value": "1", "description": "Page number" }
 							]
 						},
-						"description": "Paginated sessions (appointments). Filter by date (YYYY-MM-DD), category (Yoga or Reformer Pilates — accepts yoga, reformer, reformer-pilates), instructorID. Response: { data: [{ id, bookingId, instructor, service, serviceType, price, date, dateUtc, isBooked, isFull, remainingSpots, canCancel, canBook, willPay, minutesBeforeCancellation }, ...], meta }. remainingSpots = seats left (confirmed+pending count toward capacity). When a booking is cancelled (app or admin), spots reopen immediately. Requires Bearer."
+						"description": "Paginated sessions (appointments). Filter by date (YYYY-MM-DD), category (Yoga or Reformer Pilates — accepts yoga, reformer, reformer-pilates), instructorID. Response: { data: [{ id, bookingId, branchId, branchName, instructor, service, serviceType, price, date, dateUtc, isBooked, isFull, remainingSpots, canCancel, canBook, willPay, minutesBeforeCancellation }, ...], meta }. branchId/branchName come from the appointment branch (default branch used when none selected). remainingSpots = seats left (confirmed+pending count toward capacity). When a booking is cancelled (app or admin), spots reopen immediately. Requires Bearer."
 					},
 					"response": [
-						{ "name": "Success (all sessions for date)", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"data\":[{\"id\":\"1\",\"bookingId\":null,\"instructor\":\"John\",\"service\":\"Vinyasa-Ladies only\",\"serviceType\":\"Yoga\",\"price\":200,\"date\":\"2024-01-20T10:00:00.000000Z\",\"isBooked\":false,\"isFull\":false,\"remainingSpots\":5,\"canCancel\":false,\"canBook\":true,\"willPay\":false,\"minutesBeforeCancellation\":60},{\"id\":\"2\",\"bookingId\":null,\"instructor\":\"Jane\",\"service\":\"Reformer Pilates - Ladies only L1\",\"serviceType\":\"Reformer Pilates\",\"price\":250,\"date\":\"2024-01-20T14:00:00.000000Z\",\"isBooked\":false,\"isFull\":false,\"remainingSpots\":3,\"canCancel\":false,\"canBook\":true,\"willPay\":true,\"minutesBeforeCancellation\":60}],\"meta\":{\"current_page\":1,\"last_page\":1,\"per_page\":15,\"total\":2}}" },
-						{ "name": "Success (filter category=Yoga)", "originalRequest": { "method": "GET", "header": [], "url": { "raw": "{{base_url}}/api/v1/sessions?date=2024-01-20&category=Yoga&per_page=15&page=1", "host": ["{{base_url}}"], "path": ["api", "v1", "sessions"], "query": [{ "key": "date", "value": "2024-01-20" }, { "key": "category", "value": "Yoga" }, { "key": "per_page", "value": "15" }, { "key": "page", "value": "1" }] } }, "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"data\":[{\"id\":\"1\",\"bookingId\":null,\"instructor\":\"John\",\"service\":\"Vinyasa-Ladies only\",\"serviceType\":\"Yoga\",\"price\":200,\"date\":\"2024-01-20T10:00:00.000000Z\",\"isBooked\":false,\"isFull\":false,\"canCancel\":false,\"canBook\":true,\"willPay\":false,\"minutesBeforeCancellation\":60}],\"meta\":{\"current_page\":1,\"last_page\":1,\"per_page\":15,\"total\":1}}" },
-						{ "name": "Success (filter category=reformer)", "originalRequest": { "method": "GET", "header": [], "url": { "raw": "{{base_url}}/api/v1/sessions?date=2024-01-20&category=reformer&per_page=15&page=1", "host": ["{{base_url}}"], "path": ["api", "v1", "sessions"], "query": [{ "key": "date", "value": "2024-01-20" }, { "key": "category", "value": "reformer" }, { "key": "per_page", "value": "15" }, { "key": "page", "value": "1" }] } }, "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"data\":[{\"id\":\"2\",\"bookingId\":null,\"instructor\":\"Jane\",\"service\":\"Reformer Pilates - Ladies only L1\",\"serviceType\":\"Reformer Pilates\",\"price\":250,\"date\":\"2024-01-20T14:00:00.000000Z\",\"isBooked\":false,\"isFull\":false,\"canCancel\":false,\"canBook\":true,\"willPay\":true,\"minutesBeforeCancellation\":60}],\"meta\":{\"current_page\":1,\"last_page\":1,\"per_page\":15,\"total\":1}}" }
+						{ "name": "Success (all sessions for date)", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"data\":[{\"id\":\"1\",\"bookingId\":null,\"branchId\":\"1\",\"branchName\":\"Main Studio\",\"instructor\":\"John\",\"service\":\"Vinyasa-Ladies only\",\"serviceType\":\"Yoga\",\"price\":200,\"date\":\"2024-01-20T10:00:00.000000Z\",\"isBooked\":false,\"isFull\":false,\"remainingSpots\":5,\"canCancel\":false,\"canBook\":true,\"willPay\":false,\"minutesBeforeCancellation\":60},{\"id\":\"2\",\"bookingId\":null,\"branchId\":\"2\",\"branchName\":\"Downtown Branch\",\"instructor\":\"Jane\",\"service\":\"Reformer Pilates - Ladies only L1\",\"serviceType\":\"Reformer Pilates\",\"price\":250,\"date\":\"2024-01-20T14:00:00.000000Z\",\"isBooked\":false,\"isFull\":false,\"remainingSpots\":3,\"canCancel\":false,\"canBook\":true,\"willPay\":true,\"minutesBeforeCancellation\":60}],\"meta\":{\"current_page\":1,\"last_page\":1,\"per_page\":15,\"total\":2}}" },
+						{ "name": "Success (filter category=Yoga)", "originalRequest": { "method": "GET", "header": [], "url": { "raw": "{{base_url}}/api/v1/sessions?date=2024-01-20&category=Yoga&per_page=15&page=1", "host": ["{{base_url}}"], "path": ["api", "v1", "sessions"], "query": [{ "key": "date", "value": "2024-01-20" }, { "key": "category", "value": "Yoga" }, { "key": "per_page", "value": "15" }, { "key": "page", "value": "1" }] } }, "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"data\":[{\"id\":\"1\",\"bookingId\":null,\"branchId\":\"1\",\"branchName\":\"Main Studio\",\"instructor\":\"John\",\"service\":\"Vinyasa-Ladies only\",\"serviceType\":\"Yoga\",\"price\":200,\"date\":\"2024-01-20T10:00:00.000000Z\",\"isBooked\":false,\"isFull\":false,\"canCancel\":false,\"canBook\":true,\"willPay\":false,\"minutesBeforeCancellation\":60}],\"meta\":{\"current_page\":1,\"last_page\":1,\"per_page\":15,\"total\":1}}" },
+						{ "name": "Success (filter category=reformer)", "originalRequest": { "method": "GET", "header": [], "url": { "raw": "{{base_url}}/api/v1/sessions?date=2024-01-20&category=reformer&per_page=15&page=1", "host": ["{{base_url}}"], "path": ["api", "v1", "sessions"], "query": [{ "key": "date", "value": "2024-01-20" }, { "key": "category", "value": "reformer" }, { "key": "per_page", "value": "15" }, { "key": "page", "value": "1" }] } }, "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"data\":[{\"id\":\"2\",\"bookingId\":null,\"branchId\":\"2\",\"branchName\":\"Downtown Branch\",\"instructor\":\"Jane\",\"service\":\"Reformer Pilates - Ladies only L1\",\"serviceType\":\"Reformer Pilates\",\"price\":250,\"date\":\"2024-01-20T14:00:00.000000Z\",\"isBooked\":false,\"isFull\":false,\"canCancel\":false,\"canBook\":true,\"willPay\":true,\"minutesBeforeCancellation\":60}],\"meta\":{\"current_page\":1,\"last_page\":1,\"per_page\":15,\"total\":1}}" }
 					]
 				},
 				{
@@ -700,7 +720,7 @@
 								{ "key": "page", "value": "1", "description": "Page number" }
 							]
 						},
-						"description": "Paginated list of the authenticated customer's appointments/bookings. Response: { success, data: [{ id, sessionID, serviceName, instructorName, bookedAt, bookedAtUtc, sessionDate, sessionTime, sessionStart, sessionStartUtc, sessionEnd, sessionEndUtc, status, paymentStatus, spots, totalAmount, currency, isDropIn, canCancel, minutesBeforeCancellation }, ...], meta }. spots = number of persons (party size). canCancel = still within cancellation window (confirmed/pending with session). minutesBeforeCancellation from service time_before. Requires Bearer."
+						"description": "Paginated list of the authenticated customer's appointments/bookings. Response: { success, data: [{ id, sessionID, branchId, branchName, serviceName, instructorName, bookedAt, bookedAtUtc, sessionDate, sessionTime, sessionStart, sessionStartUtc, sessionEnd, sessionEndUtc, status, paymentStatus, spots, totalAmount, currency, isDropIn, canCancel, minutesBeforeCancellation }, ...], meta }. branchId/branchName from the session appointment. spots = number of persons (party size). canCancel = still within cancellation window (confirmed/pending with session). minutesBeforeCancellation from service time_before. Requires Bearer."
 					},
 					"response": [
 						{
@@ -709,7 +729,7 @@
 							"status": "OK",
 							"code": 200,
 							"header": [{ "key": "Content-Type", "value": "application/json" }],
-							"body": "{\"success\":true,\"data\":[{\"id\":\"1\",\"sessionID\":\"1\",\"serviceName\":\"Yoga\",\"instructorName\":\"John\",\"bookedAt\":\"2024-01-15T10:00:00.000000Z\",\"bookedAtUtc\":\"2024-01-15T08:00:00.000000Z\",\"sessionDate\":\"2024-01-20\",\"sessionTime\":\"10:00:00\",\"sessionStart\":\"2024-01-20T10:00:00.000000Z\",\"sessionStartUtc\":\"2024-01-20T08:00:00.000000Z\",\"sessionEnd\":\"2024-01-20T11:00:00.000000Z\",\"sessionEndUtc\":\"2024-01-20T09:00:00.000000Z\",\"status\":\"confirmed\",\"paymentStatus\":\"paid\",\"spots\":3,\"totalAmount\":150,\"currency\":\"USD\",\"isDropIn\":true,\"canCancel\":true,\"minutesBeforeCancellation\":60},{\"id\":\"2\",\"sessionID\":\"2\",\"serviceName\":\"Pilates\",\"instructorName\":\"Jane\",\"bookedAt\":\"2024-01-20T14:00:00.000000Z\",\"bookedAtUtc\":\"2024-01-20T12:00:00.000000Z\",\"sessionDate\":\"2024-01-22\",\"sessionTime\":\"14:00:00\",\"sessionStart\":\"2024-01-22T14:00:00.000000Z\",\"sessionStartUtc\":\"2024-01-22T12:00:00.000000Z\",\"sessionEnd\":\"2024-01-22T15:00:00.000000Z\",\"sessionEndUtc\":\"2024-01-22T13:00:00.000000Z\",\"status\":\"confirmed\",\"paymentStatus\":\"paid\",\"spots\":1,\"totalAmount\":75,\"currency\":\"USD\",\"isDropIn\":false,\"canCancel\":false,\"minutesBeforeCancellation\":60}],\"meta\":{\"current_page\":1,\"last_page\":1,\"per_page\":15,\"total\":2}}"
+							"body": "{\"success\":true,\"data\":[{\"id\":\"1\",\"sessionID\":\"1\",\"branchId\":\"1\",\"branchName\":\"Main Studio\",\"serviceName\":\"Yoga\",\"instructorName\":\"John\",\"bookedAt\":\"2024-01-15T10:00:00.000000Z\",\"bookedAtUtc\":\"2024-01-15T08:00:00.000000Z\",\"sessionDate\":\"2024-01-20\",\"sessionTime\":\"10:00:00\",\"sessionStart\":\"2024-01-20T10:00:00.000000Z\",\"sessionStartUtc\":\"2024-01-20T08:00:00.000000Z\",\"sessionEnd\":\"2024-01-20T11:00:00.000000Z\",\"sessionEndUtc\":\"2024-01-20T09:00:00.000000Z\",\"status\":\"confirmed\",\"paymentStatus\":\"paid\",\"spots\":3,\"totalAmount\":150,\"currency\":\"USD\",\"isDropIn\":true,\"canCancel\":true,\"minutesBeforeCancellation\":60},{\"id\":\"2\",\"sessionID\":\"2\",\"branchId\":\"2\",\"branchName\":\"Downtown Branch\",\"serviceName\":\"Pilates\",\"instructorName\":\"Jane\",\"bookedAt\":\"2024-01-20T14:00:00.000000Z\",\"bookedAtUtc\":\"2024-01-20T12:00:00.000000Z\",\"sessionDate\":\"2024-01-22\",\"sessionTime\":\"14:00:00\",\"sessionStart\":\"2024-01-22T14:00:00.000000Z\",\"sessionStartUtc\":\"2024-01-22T12:00:00.000000Z\",\"sessionEnd\":\"2024-01-22T15:00:00.000000Z\",\"sessionEndUtc\":\"2024-01-22T13:00:00.000000Z\",\"status\":\"confirmed\",\"paymentStatus\":\"paid\",\"spots\":1,\"totalAmount\":75,\"currency\":\"USD\",\"isDropIn\":false,\"canCancel\":false,\"minutesBeforeCancellation\":60}],\"meta\":{\"current_page\":1,\"last_page\":1,\"per_page\":15,\"total\":2}}"
 						},
 						{ "name": "Success (empty list)", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"data\":[],\"meta\":{\"current_page\":1,\"last_page\":1,\"per_page\":15,\"total\":0}}" }
 					]

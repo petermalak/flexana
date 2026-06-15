@@ -31,6 +31,17 @@ class AmeliaAppointmentForm
                             ->searchable()
                             ->preload()
                             ->required(),
+                        Forms\Components\Select::make('branch_id')
+                            ->label('Branch')
+                            ->relationship(
+                                'branch',
+                                'name',
+                                fn ($query) => $query->where('is_active', true)->orderBy('sort_order')->orderBy('name'),
+                            )
+                            ->searchable()
+                            ->preload()
+                            ->placeholder('Use default branch')
+                            ->helperText('Leave empty to assign the default branch.'),
                         Forms\Components\DateTimePicker::make('booking_start')
                             ->label('Starts')
                             ->required()

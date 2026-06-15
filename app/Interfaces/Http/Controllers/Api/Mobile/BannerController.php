@@ -5,17 +5,22 @@ namespace App\Interfaces\Http\Controllers\Api\Mobile;
 use App\Http\Controllers\Controller;
 use App\Models\Banner;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class BannerController extends Controller
 {
     /**
      * Get banners for home screen.
-     * Response: [{ "image": string, "URL": string }, ...]
+     * Optional query param: category=home|popup (defaults to home).
+     * Response: [{ "title": string, "image": string, "URL": string }, ...]
      */
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
+        $category = $request->query('category', Banner::CATEGORY_HOME);
+
         $banners = Banner::query()
             ->where('is_active', true)
+            ->where('category', $category)
             ->orderBy('sort_order')
             ->orderByDesc('created_at')
             ->get()

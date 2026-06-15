@@ -2,6 +2,7 @@
 
 namespace App\Infrastructure\Persistence\Eloquent;
 
+use App\Support\BranchSettings;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -25,6 +26,7 @@ class AppointmentModel extends Model
         'provider_id',
         'package_id',
         'location_id',
+        'branch_id',
         'booking_start',
         'booking_end',
         'status',
@@ -41,6 +43,10 @@ class AppointmentModel extends Model
         static::creating(function (self $appointment): void {
             if (empty($appointment->uuid)) {
                 $appointment->uuid = Str::uuid()->toString();
+            }
+
+            if ($appointment->branch_id === null) {
+                $appointment->branch_id = BranchSettings::defaultBranchId();
             }
         });
     }
@@ -63,6 +69,11 @@ class AppointmentModel extends Model
     public function location(): BelongsTo
     {
         return $this->belongsTo(LocationModel::class, 'location_id');
+    }
+
+    public function branch(): BelongsTo
+    {
+        return $this->belongsTo(BranchModel::class, 'branch_id');
     }
 
     public function bookings(): HasMany

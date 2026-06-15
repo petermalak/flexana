@@ -34,7 +34,7 @@ class MobileSessionController extends Controller
         $upcomingCutoff = Carbon::now($scheduleTz);
 
         $query = AppointmentModel::query()
-            ->with(['service.category', 'provider', 'bookings'])
+            ->with(['service.category', 'provider', 'bookings', 'branch'])
             ->where('status', 'approved')
             // Only upcoming sessions — use schedule TZ so SQL + PHP match studio clocks / stored datetimes
             ->where('booking_start', '>', $upcomingCutoff);
@@ -127,6 +127,8 @@ class MobileSessionController extends Controller
             return [
                 'id' => (string) $appointment->id,
                 'bookingId' => $myBooking ? (string) $myBooking->id : null,
+                'branchId' => $appointment->branch_id ? (string) $appointment->branch_id : null,
+                'branchName' => $appointment->branch?->name ?? '',
                 'instructor' => $provider ? $provider->name : '',
                 'service' => $service ? $service->name : '',
                 'serviceType' => $serviceType,

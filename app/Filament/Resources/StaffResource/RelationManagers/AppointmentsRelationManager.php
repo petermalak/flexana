@@ -37,6 +37,16 @@ class AppointmentsRelationManager extends RelationManager
                             ->required(),
                         Forms\Components\Hidden::make('provider_id')
                             ->default(fn () => $this->getOwnerRecord()->id),
+                        Forms\Components\Select::make('branch_id')
+                            ->label('Branch')
+                            ->relationship(
+                                'branch',
+                                'name',
+                                fn ($query) => $query->where('is_active', true)->orderBy('sort_order')->orderBy('name'),
+                            )
+                            ->searchable()
+                            ->preload()
+                            ->placeholder('Use default branch'),
                         Forms\Components\DateTimePicker::make('booking_start')
                             ->label('Starts')
                             ->required(),
@@ -68,6 +78,10 @@ class AppointmentsRelationManager extends RelationManager
                 Tables\Columns\TextColumn::make('service.name')
                     ->label('Service')
                     ->searchable()
+                    ->sortable(),
+                Tables\Columns\TextColumn::make('branch.name')
+                    ->label('Branch')
+                    ->placeholder('Default')
                     ->sortable(),
                 Tables\Columns\TextColumn::make('booking_start')
                     ->label('Starts')
