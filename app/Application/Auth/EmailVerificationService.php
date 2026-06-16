@@ -329,6 +329,94 @@ final class EmailVerificationService
     }
 
     /**
+     * @return array{success: bool, message: string, code?: string}
+     */
+    public function sendEmailChangeCode(int $customerId, string $newEmail): array
+    {
+        $newEmail = $this->normalizeEmail($newEmail);
+        if ($newEmail === '') {
+            return ['success' => false, 'message' => 'Invalid email address.'];
+        }
+
+        $customer = Customer::query()->find($customerId);
+        if (! $customer) {
+            return ['success' => false, 'message' => 'Customer not found.'];
+        }
+
+        $currentEmail = $this->normalizeEmail((string) $customer->email);
+        if ($currentEmail !== '' && $newEmail === $currentEmail) {
+            return ['success' => false, 'message' => 'This is already your email address.'];
+        }
+
+        $existing = Customer::query()
+            ->where('email', $newEmail)
+            ->where('id', '!=', $customerId)
+            ->exists();
+        if ($existing) {
+            return ['success' => false, 'message' => 'This email is already used by another account.'];
+        }
+
+        $now = $this->nowUtc();
+        $code = $this->generateCode();
+        $expiresAt = $now->copy()->addMinutes(self::CODE_TTL_MINUTES);
+
+        DB::table('email_verification_codes')->insert([
+            'email' => $newEmail,
+            'code' => $code,
+            'purpose' => 'email_change',
+            'customer_id' => $customerId,
+            'expires_at' => $expiresAt,
+            'created_at' => $now,
+        ]);
+
+        if (! $this->sendCodeEmail($newEmail, $code, $customer->first_name, 'Your Flexana email change code')) {
+            return ['success' => false, 'message' => 'Verification code could not be sent. Please check your email and try again.'];
+        }
+
+        $response = ['success' => true, 'message' => 'Verification code sent to your new email.'];
+        if (app()->environment('local', 'testing')) {
+            $response['code'] = $code;
+        }
+
+        return $response;
+    }
+
+    /**
+     * @return array{success: bool, message: string, email?: string}
+     */
+    public function verifyEmailChangeCode(string $newEmail, string $code, int $customerId): array
+    {
+        $newEmail = $this->normalizeEmail($newEmail);
+        $code = trim($code);
+
+        if ($newEmail === '' || $code === '') {
+            return ['success' => false, 'message' => 'Invalid email address.'];
+        }
+
+        $now = $this->nowUtc();
+        $row = DB::table('email_verification_codes')
+            ->where('email', $newEmail)
+            ->where('code', $code)
+            ->where('purpose', 'email_change')
+            ->where('customer_id', $customerId)
+            ->orderByDesc('created_at')
+            ->first();
+
+        if (! $row || ! $this->verificationRowNotExpired($row, $now)) {
+            return ['success' => false, 'message' => 'Invalid or expired code.'];
+        }
+
+        DB::table('email_verification_codes')
+            ->where('email', $newEmail)
+            ->where('code', $code)
+            ->where('purpose', 'email_change')
+            ->where('customer_id', $customerId)
+            ->delete();
+
+        return ['success' => true, 'message' => 'Verified.', 'email' => $newEmail];
+    }
+
+    /**
      * @return array{success: bool, message: string, code?: string, email?: string}
      */
     private function sendPasswordResetCodeForCustomer(Customer $customer): array

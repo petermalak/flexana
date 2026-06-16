@@ -121,6 +121,7 @@ Route::prefix('v1')
             Route::get('auth/me', [MobileAuthController::class, 'me']);
             Route::put('auth/me', [MobileAuthController::class, 'updateMe']);
             Route::post('auth/send-phone-change-code', [MobileAuthController::class, 'sendPhoneChangeCode']);
+            Route::post('auth/send-email-change-code', [MobileAuthController::class, 'sendEmailChangeCode']);
             Route::post('auth/change-password', [MobileAuthController::class, 'changePassword']);
             Route::post('auth/fcm-token', [MobileAuthController::class, 'registerFcmToken']);
             Route::delete('auth/delete-account', [MobileAuthController::class, 'deleteAccount']);

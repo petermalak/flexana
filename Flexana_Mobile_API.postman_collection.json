@@ -2,7 +2,7 @@
 	"info": {
 		"_postman_id": "flexana-mobile-api-v1",
 		"name": "Flexana Mobile API (v1)",
-		"description": "Flexana mobile app API (updated Jun 2026).\n\nAuth: Login with email OR phone + password. Signup: phone+email → OTP via email → verify (email+code). All OTPs (signup, password reset, phone change) are sent by email. Forgot/reset password accepts email OR phone (OTP always goes to account email).\n\nPackage booking: isDropIn=false only allowed when session date is on/before package expiry.\n\nVariables: base_url, bearer_token (auto-set), signup_email, test_email, test_phone.\n\nImport Flexana_Mobile_API.postman_environment.json and pick Local or Production.",
+		"description": "Flexana mobile app API (updated Jun 2026).\n\nAuth: Login with email OR phone + password. Signup: phone+email → OTP via email → verify (email+code). All OTPs (signup, password reset, phone change, email change) are sent by email. Forgot/reset password accepts email OR phone (OTP always goes to account email).\n\nPackage booking: isDropIn=false only allowed when session date is on/before package expiry.\n\nVariables: base_url, bearer_token (auto-set), signup_email, test_email, test_phone.\n\nImport Flexana_Mobile_API.postman_environment.json and pick Local or Production.",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"auth": {
@@ -18,7 +18,7 @@
 	"item": [
 		{
 			"name": "Auth",
-			"description": "Recommended flows:\n1) Login: email OR phone + password (+ optional fcmToken).\n2) Signup: phone+email → Verify (email+code+password) → token.\n3) Reset password: Forgot (email OR phone) → OTP to email → Reset (same identifier + code + new password).\n4) Phone change: Send Phone Change Code (newPhone) → OTP to account email → Update Me (phone + phoneChangeCode).\n\nAll OTPs are email-only. Use test_email / test_phone collection variables.",
+			"description": "Recommended flows:\n1) Login: email OR phone + password (+ optional fcmToken).\n2) Signup: phone+email → Verify (email+code+password) → token.\n3) Reset password: Forgot (email OR phone) → OTP to email → Reset (same identifier + code + new password).\n4) Phone change: Send Phone Change Code (newPhone) → OTP to account email → Update Me (phone + phoneChangeCode).\n5) Email change: Send Email Change Code (newEmail) → OTP to new email → Update Me (email + emailChangeCode).\n\nAll OTPs are email-only. Use test_email / test_phone collection variables.",
 			"item": [
 				{
 					"name": "Login (email)",
@@ -383,7 +383,7 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "v1", "auth", "me"]
 						},
-						"description": "Update profile (firstName, lastName, email, profileImage). profileImage: send as multipart/form-data file (key: profileImage) OR base64 string in JSON. Max 5MB, jpeg/png/jpg/gif. To change phone: first call Send Phone Change Code, then PUT with phone + phoneChangeCode. Requires Bearer."
+						"description": "Update profile (firstName, lastName, email, profileImage). profileImage: send as multipart/form-data file (key: profileImage) OR base64 string in JSON. Max 5MB, jpeg/png/jpg/gif. To change phone: first call Send Phone Change Code, then PUT with phone + phoneChangeCode. To change email: first call Send Email Change Code, then PUT with email + emailChangeCode. Requires Bearer."
 					},
 					"response": [
 						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"message\":\"Profile updated.\",\"customer\":{\"id\":\"1\",\"firstName\":\"Jane\",\"lastName\":\"Doe\",\"email\":\"jane@example.com\",\"phone\":\"+201234567890\",\"profileImage\":\"http://127.0.0.1:8000/storage/profiles/profile_123.png\"}}" }
@@ -434,6 +434,26 @@
 					]
 				},
 				{
+					"name": "Update Me (with email change)",
+					"request": {
+						"method": "PUT",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"newemail@example.com\",\n    \"emailChangeCode\": \"123456\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/auth/me",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "auth", "me"]
+						},
+						"description": "Confirm email change after Send Email Change Code. Body: email (new address) + emailChangeCode (6-digit code sent to the new email). Requires Bearer."
+					},
+					"response": [
+						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"message\":\"Profile updated.\",\"customer\":{\"id\":\"1\",\"email\":\"newemail@example.com\"}}" }
+					]
+				},
+				{
 					"name": "Send Phone Change Code",
 					"request": {
 						"method": "POST",
@@ -451,6 +471,26 @@
 					},
 					"response": [
 						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"message\":\"Verification code sent to your email.\"}" }
+					]
+				},
+				{
+					"name": "Send Email Change Code",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"newEmail\": \"newemail@example.com\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/auth/send-email-change-code",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "auth", "send-email-change-code"]
+						},
+						"description": "Send OTP to the new email address before changing email. Then PUT auth/me with new email + emailChangeCode. Requires Bearer."
+					},
+					"response": [
+						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"message\":\"Verification code sent to your new email.\"}" }
 					]
 				},
 				{
@@ -646,18 +686,19 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/api/v1/sessions?date=2024-01-20&category=Yoga&instructorID=1&per_page=15&page=1",
+							"raw": "{{base_url}}/api/v1/sessions?date=2024-01-20&category=Yoga&instructorID=1&branchId=1&per_page=15&page=1",
 							"host": ["{{base_url}}"],
 							"path": ["api", "v1", "sessions"],
 							"query": [
 								{ "key": "date", "value": "2024-01-20", "description": "YYYY-MM-DD (required for day view)" },
 								{ "key": "category", "value": "Yoga", "description": "Optional: Yoga | yoga | Reformer Pilates | reformer | reformer-pilates. Filters by service category_id + keywords (vinyasa, hatha, flow, etc. = Yoga; pilates, barre, reformer = Reformer Pilates)" },
 								{ "key": "instructorID", "value": "1", "description": "Optional provider ID" },
+								{ "key": "branchId", "value": "1", "description": "Optional branch ID. Filters sessions by branch. When branchId equals the default branch, older sessions with no branch may still appear." },
 								{ "key": "per_page", "value": "15", "description": "Default 15, max 50" },
 								{ "key": "page", "value": "1", "description": "Page number" }
 							]
 						},
-						"description": "Paginated sessions (appointments). Filter by date (YYYY-MM-DD), category (Yoga or Reformer Pilates — accepts yoga, reformer, reformer-pilates), instructorID. Response: { data: [{ id, bookingId, branchId, branchName, instructor, service, serviceType, price, date, dateUtc, isBooked, isFull, remainingSpots, canCancel, canBook, willPay, minutesBeforeCancellation }, ...], meta }. branchId/branchName come from the appointment branch (default branch used when none selected). remainingSpots = seats left (confirmed+pending count toward capacity). When a booking is cancelled (app or admin), spots reopen immediately. Requires Bearer."
+						"description": "Paginated sessions (appointments). Filter by date (YYYY-MM-DD), category (Yoga or Reformer Pilates — accepts yoga, reformer, reformer-pilates), instructorID, branchId. Response: { data: [{ id, bookingId, branchId, branchName, instructor, service, serviceType, price, date, dateUtc, isBooked, isFull, remainingSpots, canCancel, canBook, willPay, minutesBeforeCancellation }, ...], meta }. branchId/branchName come from the appointment branch (default branch used when none selected). remainingSpots = seats left (confirmed+pending count toward capacity). When a booking is cancelled (app or admin), spots reopen immediately. Requires Bearer."
 					},
 					"response": [
 						{ "name": "Success (all sessions for date)", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"data\":[{\"id\":\"1\",\"bookingId\":null,\"branchId\":\"1\",\"branchName\":\"Main Studio\",\"instructor\":\"John\",\"service\":\"Vinyasa-Ladies only\",\"serviceType\":\"Yoga\",\"price\":200,\"date\":\"2024-01-20T10:00:00.000000Z\",\"isBooked\":false,\"isFull\":false,\"remainingSpots\":5,\"canCancel\":false,\"canBook\":true,\"willPay\":false,\"minutesBeforeCancellation\":60},{\"id\":\"2\",\"bookingId\":null,\"branchId\":\"2\",\"branchName\":\"Downtown Branch\",\"instructor\":\"Jane\",\"service\":\"Reformer Pilates - Ladies only L1\",\"serviceType\":\"Reformer Pilates\",\"price\":250,\"date\":\"2024-01-20T14:00:00.000000Z\",\"isBooked\":false,\"isFull\":false,\"remainingSpots\":3,\"canCancel\":false,\"canBook\":true,\"willPay\":true,\"minutesBeforeCancellation\":60}],\"meta\":{\"current_page\":1,\"last_page\":1,\"per_page\":15,\"total\":2}}" },

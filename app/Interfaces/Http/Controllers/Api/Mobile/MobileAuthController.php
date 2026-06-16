@@ -417,12 +417,14 @@ class MobileAuthController extends Controller
     /**
      * PUT /api/v1/auth/me
      * To change phone: send new phone + phoneChangeCode (from send-phone-change-code).
+     * To change email: send new email + emailChangeCode (from send-email-change-code).
      * To update profile image: send profileImage (file upload or base64 string).
      */
     public function updateMe(Request $request): JsonResponse
     {
         $customer = $request->user();
         $this->mergeNormalizedPhone($request);
+        $this->mergeNormalizedEmail($request);
 
         $validator = Validator::make($request->all(), [
             'firstName' => 'nullable|string|max:100',
@@ -436,6 +438,7 @@ class MobileAuthController extends Controller
             ],
             'phone' => PhoneNumberNormalizer::validationRules(required: false),
             'phoneChangeCode' => 'nullable|string|size:6',
+            'emailChangeCode' => 'nullable|string|size:6',
             'profileImage' => $this->profileImageValidationRules($request),
         ], [
             'email.unique' => 'This email is already used by another account.',
@@ -478,14 +481,40 @@ class MobileAuthController extends Controller
             $customer->phone_verified_at = now();
         }
 
+        if (isset($data['email'])) {
+            $newEmail = strtolower(trim($data['email']));
+            $currentEmail = strtolower(trim((string) $customer->email));
+
+            if ($newEmail !== $currentEmail) {
+                if (empty($data['emailChangeCode'])) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'To change email, request a code first via POST /auth/send-email-change-code, then send email and emailChangeCode.',
+                    ], 422);
+                }
+
+                $result = $this->emailVerification->verifyEmailChangeCode(
+                    $newEmail,
+                    $data['emailChangeCode'],
+                    (int) $customer->id,
+                );
+                if (! $result['success']) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => $result['message'],
+                    ], 400);
+                }
+
+                $customer->email = $result['email'];
+                $customer->email_verified_at = now();
+            }
+        }
+
         if (isset($data['firstName'])) {
             $customer->first_name = $data['firstName'];
         }
         if (array_key_exists('lastName', $data)) {
             $customer->last_name = $data['lastName'];
-        }
-        if (array_key_exists('email', $data)) {
-            $customer->email = $data['email'];
         }
 
         // Handle image upload if provided
@@ -537,6 +566,46 @@ class MobileAuthController extends Controller
         $result = $this->emailVerification->sendPhoneChangeCode(
             (int) $customer->id,
             $validator->validated()['newPhone'],
+        );
+
+        if (! $result['success']) {
+            return response()->json([
+                'success' => false,
+                'message' => $result['message'],
+            ], 400);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => $result['message'],
+        ], 200);
+    }
+
+    /**
+     * POST /api/v1/auth/send-email-change-code
+     * Body: { newEmail }
+     * Sends OTP to the new email address. Then use PUT auth/me with email + emailChangeCode to confirm.
+     */
+    public function sendEmailChangeCode(Request $request): JsonResponse
+    {
+        $this->mergeNormalizedEmail($request, 'newEmail');
+
+        $validator = Validator::make($request->all(), [
+            'newEmail' => 'required|email',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $customer = $request->user();
+        $result = $this->emailVerification->sendEmailChangeCode(
+            (int) $customer->id,
+            $validator->validated()['newEmail'],
         );
 
         if (! $result['success']) {

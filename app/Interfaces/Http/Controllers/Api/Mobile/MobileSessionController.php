@@ -9,6 +9,7 @@ use App\Infrastructure\Persistence\Eloquent\CustomerPackagePurchaseModel;
 use App\Infrastructure\Persistence\Eloquent\ServiceModel;
 use App\Models\Category;
 use App\Support\ApiDateTime;
+use App\Support\BranchSettings;
 use App\Support\ValidPackagePurchaseFinder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -19,13 +20,14 @@ class MobileSessionController extends Controller
 {
     /**
      * Get sessions (appointments) with optional pagination.
-     * Query params: date, category (Yoga | Reformer Pilates | yoga | reformer | reformer-pilates), instructorID, per_page (default 15), page
+     * Query params: date, category (Yoga | Reformer Pilates | yoga | reformer | reformer-pilates), instructorID, branchId, per_page (default 15), page
      */
     public function index(Request $request): JsonResponse
     {
         $date = $request->query('date');
         $category = $request->query('category');
         $instructorID = $request->query('instructorID');
+        $branchId = $request->query('branchId');
         $requestedPerPage = $request->query('per_page');
         $requestedPage = $request->query('page');
         $shouldPaginate = $requestedPerPage !== null || $requestedPage !== null;
@@ -59,6 +61,22 @@ class MobileSessionController extends Controller
         }
         if ($instructorID) {
             $query->where('provider_id', $instructorID);
+        }
+
+        if ($branchId !== null && $branchId !== '') {
+            $requestedBranchId = (int) $branchId;
+
+            // Backwards compatibility: some historical appointments may still have branch_id = null.
+            // Treat those as default branch when filtering by the current default.
+            $defaultBranchId = BranchSettings::defaultBranchId();
+            if ($defaultBranchId !== null && $requestedBranchId === $defaultBranchId) {
+                $query->where(function ($q) use ($requestedBranchId) {
+                    $q->where('branch_id', $requestedBranchId)
+                        ->orWhereNull('branch_id');
+                });
+            } else {
+                $query->where('branch_id', $requestedBranchId);
+            }
         }
 
         $query->orderBy('booking_start');
