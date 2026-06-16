@@ -420,17 +420,18 @@
 						"header": [{ "key": "Content-Type", "value": "application/json" }],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"phone\": \"+201234567890\",\n    \"phoneChangeCode\": \"123456\"\n}"
+							"raw": "{\n    \"countryCode\": \"20\",\n    \"phoneNumber\": \"01012345678\",\n    \"phoneChangeCode\": \"123456\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/v1/auth/me",
 							"host": ["{{base_url}}"],
 							"path": ["api", "v1", "auth", "me"]
 						},
-						"description": "Confirm phone change after Send Phone Change Code. Body: phone (new number) + phoneChangeCode (6-digit code from account email). Requires Bearer."
+						"description": "Confirm phone change after Send Phone Change Code. Body: phoneChangeCode (required) + either phone (E.164, e.g. +201234567890) OR countryCode + phoneNumber (e.g. 20 + 01012345678). Do not send both formats together. Requires Bearer."
 					},
 					"response": [
-						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"message\":\"Phone updated.\",\"customer\":{\"id\":\"1\",\"phone\":\"+201234567890\"}}" }
+						{ "name": "Success (countryCode + phoneNumber)", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"message\":\"Profile updated.\",\"customer\":{\"id\":\"1\",\"phone\":\"+201012345678\",\"countryCode\":\"20\",\"phoneNumber\":\"1012345678\"}}" },
+						{ "name": "Success (E.164 phone)", "originalRequest": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\\n    \\\"phone\\\": \\\"+201234567890\\\",\\n    \\\"phoneChangeCode\\\": \\\"123456\\\"\\n}" }, "url": { "raw": "{{base_url}}/api/v1/auth/me", "host": ["{{base_url}}"], "path": ["api", "v1", "auth", "me"] } }, "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"message\":\"Profile updated.\",\"customer\":{\"id\":\"1\",\"phone\":\"+201234567890\",\"countryCode\":\"20\",\"phoneNumber\":\"1234567890\"}}" }
 					]
 				},
 				{
@@ -460,17 +461,18 @@
 						"header": [{ "key": "Content-Type", "value": "application/json" }],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"newPhone\": \"+201234567890\"\n}"
+							"raw": "{\n    \"newCountryCode\": \"20\",\n    \"newPhoneNumber\": \"01012345678\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/v1/auth/send-phone-change-code",
 							"host": ["{{base_url}}"],
 							"path": ["api", "v1", "auth", "send-phone-change-code"]
 						},
-						"description": "Send OTP to the customer's registered email before changing phone. Then PUT auth/me with new phone + phoneChangeCode. Requires Bearer."
+						"description": "Send OTP to the customer's registered email before changing phone. Body: either newPhone (E.164) OR newCountryCode + newPhoneNumber. Then PUT auth/me with the same number format + phoneChangeCode. Requires Bearer."
 					},
 					"response": [
-						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"message\":\"Verification code sent to your email.\"}" }
+						{ "name": "Success (newCountryCode + newPhoneNumber)", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"message\":\"Verification code sent to your email.\"}" },
+						{ "name": "Success (newPhone E.164)", "originalRequest": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\\n    \\\"newPhone\\\": \\\"+201234567890\\\"\\n}" }, "url": { "raw": "{{base_url}}/api/v1/auth/send-phone-change-code", "host": ["{{base_url}}"], "path": ["api", "v1", "auth", "send-phone-change-code"] } }, "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"message\":\"Verification code sent to your email.\"}" }
 					]
 				},
 				{
