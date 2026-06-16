@@ -2,7 +2,7 @@
 	"info": {
 		"_postman_id": "flexana-mobile-api-v1",
 		"name": "Flexana Mobile API (v1)",
-		"description": "Flexana mobile app API (updated Jun 2026).\n\nAuth: Login with email OR phone + password. Signup: phone+email → OTP via email → verify (email+code). All OTPs (signup, password reset, phone change, email change) are sent by email. Forgot/reset password accepts email OR phone (OTP always goes to account email).\n\nPackage booking: isDropIn=false only allowed when session date is on/before package expiry.\n\nVariables: base_url, bearer_token (auto-set), signup_email, test_email, test_phone.\n\nImport Flexana_Mobile_API.postman_environment.json and pick Local or Production.",
+		"description": "Flexana mobile app API (updated Jun 2026).\n\nAuth: Login with email OR phone + password. Signup: phone+email → OTP via email → verify (email+code). OTPs for signup, password reset, and email change are sent by email. Forgot/reset password accepts email OR phone (OTP always goes to account email).\n\nProfile: phone updates directly on PUT auth/me; email change requires OTP via send-email-change-code.\n\nPackage booking: isDropIn=false only allowed when session date is on/before package expiry.\n\nVariables: base_url, bearer_token (auto-set), signup_email, test_email, test_phone.\n\nImport Flexana_Mobile_API.postman_environment.json and pick Local or Production.",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"auth": {
@@ -18,7 +18,7 @@
 	"item": [
 		{
 			"name": "Auth",
-			"description": "Recommended flows:\n1) Login: email OR phone + password (+ optional fcmToken).\n2) Signup: phone+email → Verify (email+code+password) → token.\n3) Reset password: Forgot (email OR phone) → OTP to email → Reset (same identifier + code + new password).\n4) Phone change: Send Phone Change Code (newPhone) → OTP to account email → Update Me (phone + phoneChangeCode).\n5) Email change: Send Email Change Code (newEmail) → OTP to new email → Update Me (email + emailChangeCode).\n\nAll OTPs are email-only. Use test_email / test_phone collection variables.",
+			"description": "Recommended flows:\n1) Login: email OR phone + password (+ optional fcmToken).\n2) Signup: phone+email → Verify (email+code+password) → token.\n3) Reset password: Forgot (email OR phone) → OTP to email → Reset (same identifier + code + new password).\n4) Profile phone: PUT auth/me with phone OR countryCode + phoneNumber (no OTP).\n5) Email change: Send Email Change Code (newEmail) → OTP to new email → Update Me (email + emailChangeCode).\n\nUse test_email / test_phone collection variables.",
 			"item": [
 				{
 					"name": "Login (email)",
@@ -383,7 +383,7 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "v1", "auth", "me"]
 						},
-						"description": "Update profile (firstName, lastName, email, profileImage). profileImage: send as multipart/form-data file (key: profileImage) OR base64 string in JSON. Max 5MB, jpeg/png/jpg/gif. To change phone: first call Send Phone Change Code, then PUT with phone + phoneChangeCode. To change email: first call Send Email Change Code, then PUT with email + emailChangeCode. Requires Bearer."
+						"description": "Update profile (firstName, lastName, phone, email, profileImage). Phone: send phone (E.164) OR countryCode + phoneNumber — no OTP required. Email change: first call Send Email Change Code, then PUT with email + emailChangeCode. profileImage: multipart file (profileImage) OR base64 in JSON. Max 5MB, jpeg/png/jpg/gif. Requires Bearer."
 					},
 					"response": [
 						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"message\":\"Profile updated.\",\"customer\":{\"id\":\"1\",\"firstName\":\"Jane\",\"lastName\":\"Doe\",\"email\":\"jane@example.com\",\"phone\":\"+201234567890\",\"profileImage\":\"http://127.0.0.1:8000/storage/profiles/profile_123.png\"}}" }
@@ -414,24 +414,24 @@
 					]
 				},
 				{
-					"name": "Update Me (with phone change)",
+					"name": "Update Me (with phone)",
 					"request": {
 						"method": "PUT",
 						"header": [{ "key": "Content-Type", "value": "application/json" }],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"countryCode\": \"20\",\n    \"phoneNumber\": \"01012345678\",\n    \"phoneChangeCode\": \"123456\"\n}"
+							"raw": "{\n    \"countryCode\": \"20\",\n    \"phoneNumber\": \"01012345678\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/v1/auth/me",
 							"host": ["{{base_url}}"],
 							"path": ["api", "v1", "auth", "me"]
 						},
-						"description": "Confirm phone change after Send Phone Change Code. Body: phoneChangeCode (required) + either phone (E.164, e.g. +201234567890) OR countryCode + phoneNumber (e.g. 20 + 01012345678). Do not send both formats together. Requires Bearer."
+						"description": "Update phone directly (no OTP). Body: either phone (E.164) OR countryCode + phoneNumber. Do not send both formats together. Requires Bearer."
 					},
 					"response": [
 						{ "name": "Success (countryCode + phoneNumber)", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"message\":\"Profile updated.\",\"customer\":{\"id\":\"1\",\"phone\":\"+201012345678\",\"countryCode\":\"20\",\"phoneNumber\":\"1012345678\"}}" },
-						{ "name": "Success (E.164 phone)", "originalRequest": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\\n    \\\"phone\\\": \\\"+201234567890\\\",\\n    \\\"phoneChangeCode\\\": \\\"123456\\\"\\n}" }, "url": { "raw": "{{base_url}}/api/v1/auth/me", "host": ["{{base_url}}"], "path": ["api", "v1", "auth", "me"] } }, "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"message\":\"Profile updated.\",\"customer\":{\"id\":\"1\",\"phone\":\"+201234567890\",\"countryCode\":\"20\",\"phoneNumber\":\"1234567890\"}}" }
+						{ "name": "Success (E.164 phone)", "originalRequest": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\\n    \\\"phone\\\": \\\"+201234567890\\\"\\n}" }, "url": { "raw": "{{base_url}}/api/v1/auth/me", "host": ["{{base_url}}"], "path": ["api", "v1", "auth", "me"] } }, "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"message\":\"Profile updated.\",\"customer\":{\"id\":\"1\",\"phone\":\"+201234567890\",\"countryCode\":\"20\",\"phoneNumber\":\"1234567890\"}}" }
 					]
 				},
 				{
@@ -452,27 +452,6 @@
 					},
 					"response": [
 						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"message\":\"Profile updated.\",\"customer\":{\"id\":\"1\",\"email\":\"newemail@example.com\"}}" }
-					]
-				},
-				{
-					"name": "Send Phone Change Code",
-					"request": {
-						"method": "POST",
-						"header": [{ "key": "Content-Type", "value": "application/json" }],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n    \"newCountryCode\": \"20\",\n    \"newPhoneNumber\": \"01012345678\"\n}"
-						},
-						"url": {
-							"raw": "{{base_url}}/api/v1/auth/send-phone-change-code",
-							"host": ["{{base_url}}"],
-							"path": ["api", "v1", "auth", "send-phone-change-code"]
-						},
-						"description": "Send OTP to the customer's registered email before changing phone. Body: either newPhone (E.164) OR newCountryCode + newPhoneNumber. Then PUT auth/me with the same number format + phoneChangeCode. Requires Bearer."
-					},
-					"response": [
-						{ "name": "Success (newCountryCode + newPhoneNumber)", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"message\":\"Verification code sent to your email.\"}" },
-						{ "name": "Success (newPhone E.164)", "originalRequest": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\\n    \\\"newPhone\\\": \\\"+201234567890\\\"\\n}" }, "url": { "raw": "{{base_url}}/api/v1/auth/send-phone-change-code", "host": ["{{base_url}}"], "path": ["api", "v1", "auth", "send-phone-change-code"] } }, "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"message\":\"Verification code sent to your email.\"}" }
 					]
 				},
 				{

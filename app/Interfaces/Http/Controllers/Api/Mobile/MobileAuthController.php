@@ -416,9 +416,8 @@ class MobileAuthController extends Controller
 
     /**
      * PUT /api/v1/auth/me
-     * To change phone: send new phone + phoneChangeCode (from send-phone-change-code).
-     * Phone accepts E.164 `phone` OR `countryCode` + `phoneNumber` (same as signup).
-     * To change email: send new email + emailChangeCode (from send-email-change-code).
+     * Phone can be updated directly (E.164 `phone` OR `countryCode` + `phoneNumber`).
+     * Email change requires emailChangeCode from send-email-change-code.
      * To update profile image: send profileImage (file upload or base64 string).
      */
     public function updateMe(Request $request): JsonResponse
@@ -446,14 +445,19 @@ class MobileAuthController extends Controller
                     ->ignore($customer->id)
                     ->whereNull('deleted_at'),
             ],
-            'phone' => PhoneNumberNormalizer::validationRules(required: false),
+            'phone' => [
+                ...PhoneNumberNormalizer::validationRules(required: false),
+                Rule::unique('customers', 'phone')
+                    ->ignore($customer->id)
+                    ->whereNull('deleted_at'),
+            ],
             'countryCode' => PhoneNumberNormalizer::countryCodeValidationRules(),
             'phoneNumber' => ['nullable', 'string', 'max:15', 'regex:/^0?\d{4,14}$/'],
-            'phoneChangeCode' => 'nullable|string|size:6',
             'emailChangeCode' => 'nullable|string|size:6',
             'profileImage' => $this->profileImageValidationRules($request),
         ], [
             'email.unique' => 'This email is already used by another account.',
+            'phone.unique' => 'This phone number is already used by another account.',
             'countryCode.required_with' => 'Country code is required when phone number is provided.',
             'phoneNumber.required_with' => 'Phone number is required when country code is provided.',
         ]);
@@ -469,35 +473,23 @@ class MobileAuthController extends Controller
         $data = $validator->validated();
 
         if (isset($data['phone'])) {
-            if (empty($data['phoneChangeCode'])) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'To change phone, request a code first via POST /auth/send-phone-change-code, then send phone and phoneChangeCode.',
-                ], 422);
-            }
-            $result = $this->emailVerification->verifyPhoneChangeCode(
-                (string) $customer->email,
-                $data['phoneChangeCode'],
-                (int) $customer->id
-            );
-            if (! $result['success']) {
-                return response()->json([
-                    'success' => false,
-                    'message' => $result['message'],
-                ], 400);
-            }
-            $customer->phone = $result['phone'];
-            if ($phoneParts !== null) {
-                $customer->phone_country_code = $phoneParts['countryCode'];
-                $customer->phone_national_number = $phoneParts['phoneNumber'];
-            } else {
-                $parts = PhoneNumberNormalizer::partsFromE164($result['phone']);
-                if ($parts !== null) {
-                    $customer->phone_country_code = $parts['countryCode'];
-                    $customer->phone_national_number = $parts['phoneNumber'];
+            $newPhone = $data['phone'];
+            $currentPhone = PhoneNumberNormalizer::normalizeNullable($customer->phone) ?? '';
+
+            if ($newPhone !== $currentPhone) {
+                $customer->phone = $newPhone;
+                if ($phoneParts !== null) {
+                    $customer->phone_country_code = $phoneParts['countryCode'];
+                    $customer->phone_national_number = $phoneParts['phoneNumber'];
+                } else {
+                    $parts = PhoneNumberNormalizer::partsFromE164($newPhone);
+                    if ($parts !== null) {
+                        $customer->phone_country_code = $parts['countryCode'];
+                        $customer->phone_national_number = $parts['phoneNumber'];
+                    }
                 }
+                $customer->phone_verified_at = now();
             }
-            $customer->phone_verified_at = now();
         }
 
         if (isset($data['email'])) {
