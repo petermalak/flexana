@@ -13,6 +13,8 @@ class BranchModel extends Model
     protected $fillable = [
         'name',
         'address',
+        'image_url',
+        'map_url',
         'phone',
         'is_active',
         'is_default',

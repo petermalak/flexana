@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\BranchResource\Pages;
 use App\Models\Branch;
+use App\Rules\GoogleMapsUrl;
 use BackedEnum;
 use Filament\Actions;
 use Filament\Forms;
@@ -37,6 +38,19 @@ class BranchResource extends Resource
                             ->maxLength(255),
                         Forms\Components\Textarea::make('address')
                             ->rows(2),
+                        Forms\Components\FileUpload::make('image_url')
+                            ->label('Image')
+                            ->image()
+                            ->directory('branches')
+                            ->disk('public')
+                            ->visibility('public')
+                            ->helperText('Branch photo shown in the mobile app.'),
+                        Forms\Components\TextInput::make('map_url')
+                            ->label('Google Maps URL')
+                            ->maxLength(2048)
+                            ->url()
+                            ->rules([new GoogleMapsUrl()])
+                            ->helperText('Paste a Google Maps link only (e.g. https://maps.google.com/... or https://maps.app.goo.gl/...).'),
                         Forms\Components\TextInput::make('phone')
                             ->tel()
                             ->maxLength(50),
@@ -66,8 +80,18 @@ class BranchResource extends Resource
                 Tables\Columns\TextColumn::make('name')
                     ->searchable()
                     ->sortable(),
+                Tables\Columns\ImageColumn::make('image_url')
+                    ->label('Image')
+                    ->disk('public')
+                    ->circular(false),
                 Tables\Columns\TextColumn::make('address')
                     ->limit(40)
+                    ->toggleable(),
+                Tables\Columns\TextColumn::make('map_url')
+                    ->label('Map')
+                    ->limit(40)
+                    ->url(fn (Branch $record): ?string => $record->map_url)
+                    ->openUrlInNewTab()
                     ->toggleable(),
                 Tables\Columns\TextColumn::make('phone')
                     ->toggleable(),

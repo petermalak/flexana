@@ -573,10 +573,10 @@
 						"method": "GET",
 						"header": [],
 						"url": { "raw": "{{base_url}}/api/v1/branches", "host": ["{{base_url}}"], "path": ["api", "v1", "branches"] },
-						"description": "Get active studio branches. Response: { data: [{ id, name, address, phone, isDefault }, ...] }. isDefault marks the branch assigned when an appointment has no branch selected. Requires Bearer."
+						"description": "Get active studio branches. Response: [{ name, image, address, mapUrl }, ...]. image is full URL (or null). mapUrl is a Google Maps link. Requires Bearer."
 					},
 					"response": [
-						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"data\":[{\"id\":\"1\",\"name\":\"Main Studio\",\"address\":\"123 Fitness St\",\"phone\":\"+201234567890\",\"isDefault\":true},{\"id\":\"2\",\"name\":\"Downtown Branch\",\"address\":\"456 Center Ave\",\"phone\":\"+201098765432\",\"isDefault\":false}]}" }
+						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "[{\"name\":\"Main Studio\",\"image\":\"https://example.com/serve-storage.php?path=branches%2Fmain.jpg\",\"address\":\"123 Fitness St\",\"mapUrl\":\"https://maps.google.com/?q=123+Fitness+St\"},{\"name\":\"Downtown Branch\",\"image\":\"https://example.com/serve-storage.php?path=branches%2Fdowntown.jpg\",\"address\":\"456 Center Ave\",\"mapUrl\":\"https://maps.app.goo.gl/abc123\"}]" }
 					]
 				},
 				{

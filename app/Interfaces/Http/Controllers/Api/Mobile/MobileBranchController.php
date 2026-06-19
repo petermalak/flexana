@@ -10,6 +10,7 @@ class MobileBranchController extends Controller
 {
     /**
      * Get active branches for the mobile app.
+     * Response: [{ name, image, address, mapUrl }, ...]
      */
     public function index(): JsonResponse
     {
@@ -19,15 +20,27 @@ class MobileBranchController extends Controller
             ->orderBy('name')
             ->get()
             ->map(fn (Branch $branch): array => [
-                'id' => (string) $branch->id,
                 'name' => $branch->name ?? '',
+                'image' => self::fullImageUrl($branch->image_url),
                 'address' => $branch->address ?? '',
-                'phone' => $branch->phone ?? '',
-                'isDefault' => (bool) $branch->is_default,
+                'mapUrl' => $branch->map_url ?? '',
             ])
             ->values()
             ->all();
 
-        return response()->json(['data' => $branches]);
+        return response()->json($branches);
+    }
+
+    private static function fullImageUrl(?string $path): ?string
+    {
+        if ($path === null || $path === '') {
+            return null;
+        }
+
+        if (str_starts_with($path, 'http://') || str_starts_with($path, 'https://')) {
+            return $path;
+        }
+
+        return url('serve-storage.php') . '?path=' . rawurlencode($path);
     }
 }
