@@ -31,6 +31,27 @@ class MobileBranchController extends Controller
         return response()->json($branches);
     }
 
+    /**
+     * Get active branches (id + name only) for filter/dropdown UI.
+     * Response: [{ id, name }, ...]
+     */
+    public function simple(): JsonResponse
+    {
+        $branches = Branch::query()
+            ->where('is_active', true)
+            ->orderBy('sort_order')
+            ->orderBy('name')
+            ->get()
+            ->map(fn (Branch $branch): array => [
+                'id' => (string) $branch->id,
+                'name' => $branch->name ?? '',
+            ])
+            ->values()
+            ->all();
+
+        return response()->json($branches);
+    }
+
     private static function fullImageUrl(?string $path): ?string
     {
         if ($path === null || $path === '') {

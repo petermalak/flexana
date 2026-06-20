@@ -103,6 +103,7 @@ Route::prefix('v1')
             Route::get('banners/simple', [BannerController::class, 'simple']);
             Route::get('banners', [BannerController::class, 'index']);
             Route::get('branches', [MobileBranchController::class, 'index']);
+            Route::get('branches/simple', [MobileBranchController::class, 'simple']);
             Route::get('categories', [MobileCategoryController::class, 'index']);
             Route::get('instructors', [MobileInstructorController::class, 'index']);
             Route::get('service', [MobileServiceController::class, 'index']);
