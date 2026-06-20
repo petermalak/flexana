@@ -600,6 +600,18 @@
 					]
 				},
 				{
+					"name": "Get Branches (Simple)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/branches/simple", "host": ["{{base_url}}"], "path": ["api", "v1", "branches", "simple"] },
+						"description": "Lightweight branch list for filter/dropdown UI. Response: [{ id, name }, ...]. Only active branches. Requires Bearer."
+					},
+					"response": [
+						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "[{\"id\":\"1\",\"name\":\"Main Studio\"},{\"id\":\"2\",\"name\":\"Downtown Branch\"}]" }
+					]
+				},
+				{
 					"name": "Get Instructors (Full)",
 					"request": {
 						"method": "GET",
