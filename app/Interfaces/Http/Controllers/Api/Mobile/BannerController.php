@@ -41,4 +41,29 @@ class BannerController extends Controller
 
         return response()->json($banners);
     }
+
+    /**
+     * Get active banners (id + name only) for filter/dropdown UI.
+     * Optional query param: category=home|popup (defaults to home).
+     * Response: [{ id, name }, ...]
+     */
+    public function simple(Request $request): JsonResponse
+    {
+        $category = $request->query('category', Banner::CATEGORY_HOME);
+
+        $banners = Banner::query()
+            ->where('is_active', true)
+            ->where('category', $category)
+            ->orderBy('sort_order')
+            ->orderByDesc('created_at')
+            ->get()
+            ->map(fn (Banner $banner): array => [
+                'id' => (string) $banner->id,
+                'name' => $banner->title ?? '',
+            ])
+            ->values()
+            ->all();
+
+        return response()->json($banners);
+    }
 }

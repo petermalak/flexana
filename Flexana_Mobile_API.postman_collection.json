@@ -556,6 +556,26 @@
 					]
 				},
 				{
+					"name": "Get Banners (Simple)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/banners/simple?category=home",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "banners", "simple"],
+							"query": [
+								{ "key": "category", "value": "home", "description": "Optional. home (default) = home carousel banners; popup = home popup banners." }
+							]
+						},
+						"description": "Lightweight banner list for filter/dropdown UI. Query: category (optional) — home (default) or popup. Response: [{ id, name }, ...]. name is the banner title. Requires Bearer."
+					},
+					"response": [
+						{ "name": "Success (home carousel)", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "[{\"id\":\"1\",\"name\":\"Summer promo\"},{\"id\":\"2\",\"name\":\"New class launch\"}]" },
+						{ "name": "Success (popup)", "originalRequest": { "method": "GET", "header": [], "url": { "raw": "{{base_url}}/api/v1/banners/simple?category=popup", "host": ["{{base_url}}"], "path": ["api", "v1", "banners", "simple"], "query": [{ "key": "category", "value": "popup" }] } }, "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "[{\"id\":\"3\",\"name\":\"Welcome offer\"}]" }
+					]
+				},
+				{
 					"name": "Get Categories",
 					"request": {
 						"method": "GET",

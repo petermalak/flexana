@@ -100,6 +100,7 @@ Route::prefix('v1')
         // Using "auth:sanctum" authenticates the Bearer token correctly.
         Route::middleware(['auth:sanctum'])->group(function (): void {
             // Home screen
+            Route::get('banners/simple', [BannerController::class, 'simple']);
             Route::get('banners', [BannerController::class, 'index']);
             Route::get('branches', [MobileBranchController::class, 'index']);
             Route::get('categories', [MobileCategoryController::class, 'index']);
