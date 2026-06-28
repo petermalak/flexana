@@ -4,6 +4,7 @@ namespace App\Infrastructure\Persistence\Eloquent;
 
 use App\Support\BranchSettings;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class BranchModel extends Model
@@ -50,5 +51,11 @@ class BranchModel extends Model
     public function appointments(): HasMany
     {
         return $this->hasMany(AppointmentModel::class, 'branch_id');
+    }
+
+    public function services(): BelongsToMany
+    {
+        return $this->belongsToMany(ServiceModel::class, 'branch_service', 'branch_id', 'service_id')
+            ->withTimestamps();
     }
 }

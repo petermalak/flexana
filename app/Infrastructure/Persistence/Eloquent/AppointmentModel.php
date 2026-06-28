@@ -45,7 +45,8 @@ class AppointmentModel extends Model
                 $appointment->uuid = Str::uuid()->toString();
             }
 
-            if ($appointment->branch_id === null) {
+            $branchId = $appointment->branch_id;
+            if ($branchId === null || $branchId === '' || (int) $branchId === 0) {
                 $appointment->branch_id = BranchSettings::defaultBranchId();
             }
         });

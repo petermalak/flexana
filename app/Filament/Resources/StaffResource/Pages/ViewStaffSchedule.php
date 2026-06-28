@@ -6,6 +6,8 @@ use App\Filament\Resources\AmeliaAppointments\AmeliaAppointmentResource;
 use App\Filament\Resources\StaffResource;
 use App\Infrastructure\Persistence\Eloquent\AppointmentModel;
 use App\Infrastructure\Persistence\Eloquent\ServiceModel;
+use App\Models\Branch;
+use App\Support\BranchSettings;
 use Carbon\Carbon;
 use Filament\Actions\Action;
 use Filament\Forms;
@@ -158,6 +160,17 @@ class ViewStaffSchedule extends Page
     {
         $services = $this->getStaffServices();
         return [
+            Forms\Components\Select::make('branch_id')
+                ->label('Branch')
+                ->options(fn () => Branch::query()
+                    ->where('is_active', true)
+                    ->orderBy('sort_order')
+                    ->orderBy('name')
+                    ->pluck('name', 'id')
+                    ->all())
+                ->default(fn () => BranchSettings::defaultBranchId())
+                ->searchable()
+                ->required(),
             Forms\Components\Select::make('service_id')
                 ->label('Service')
                 ->options($services)
@@ -201,7 +214,7 @@ class ViewStaffSchedule extends Page
         foreach ($appointments as $apt) {
             $name = e($apt->service->name ?? '—');
             $time = e($apt->booking_start->format('g:i a') . ' – ' . $apt->booking_end->format('g:i a'));
-            $location = 'Default location';
+            $location = e($apt->branch?->name ?? 'No branch');
             $status = strtolower($apt->status ?? 'approved');
             $statusLabel = e(ucfirst($status));
             $editUrl = AmeliaAppointmentResource::getUrl('edit', ['record' => $apt->getKey()]);
@@ -246,6 +259,18 @@ class ViewStaffSchedule extends Page
         }
 
         $serviceId = (int) $serviceId;
+        $branchId = BranchSettings::resolveBranchId(
+            isset($data['branch_id']) && $data['branch_id'] !== '' ? (int) $data['branch_id'] : null,
+        );
+
+        if ($branchId === null) {
+            Notification::make()
+                ->title('Please select a branch.')
+                ->danger()
+                ->send();
+            return;
+        }
+
         $serviceExists = ServiceModel::query()->whereKey($serviceId)->exists();
         if (! $serviceExists) {
             Notification::make()
@@ -294,6 +319,7 @@ class ViewStaffSchedule extends Page
         AppointmentModel::create([
             'provider_id' => $staff->getKey(),
             'service_id' => $serviceId,
+            'branch_id' => $branchId,
             'booking_start' => $start,
             'booking_end' => $end,
             'status' => 'approved',
@@ -323,6 +349,7 @@ class ViewStaffSchedule extends Page
                 AppointmentModel::create([
                     'provider_id' => $staff->getKey(),
                     'service_id' => $serviceId,
+                    'branch_id' => $branchId,
                     'booking_start' => $currentStart->copy(),
                     'booking_end' => $currentEnd->copy(),
                     'status' => 'approved',
@@ -382,7 +409,7 @@ class ViewStaffSchedule extends Page
         $appointments = AppointmentModel::query()
             ->where('provider_id', $staff->getKey())
             ->whereBetween('booking_start', [$weekStart, $weekEnd])
-            ->with('service')
+            ->with(['service', 'branch'])
             ->orderBy('booking_start')
             ->get();
 

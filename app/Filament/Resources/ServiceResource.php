@@ -69,6 +69,18 @@ class ServiceResource extends Resource
                                             ->searchable()
                                             ->default('visible')
                                             ->required(),
+                                        Forms\Components\Select::make('branches')
+                                            ->label('Branches')
+                                            ->relationship(
+                                                'branches',
+                                                'name',
+                                                fn ($query) => $query->where('is_active', true)->orderBy('sort_order')->orderBy('name'),
+                                            )
+                                            ->multiple()
+                                            ->searchable()
+                                            ->preload()
+                                            ->required()
+                                            ->helperText('Select which branches offer this service.'),
                                     ])->columns(2),
                             ]),
                         Tab::make('Pricing & capacity')
@@ -260,6 +272,11 @@ class ServiceResource extends Resource
                     ->badge()
                     ->color('gray')
                     ->sortable()
+                    ->toggleable(),
+                Tables\Columns\TextColumn::make('branches.name')
+                    ->label('Branches')
+                    ->badge()
+                    ->color('info')
                     ->toggleable(),
                 Tables\Columns\BadgeColumn::make('status')
                     ->colors([

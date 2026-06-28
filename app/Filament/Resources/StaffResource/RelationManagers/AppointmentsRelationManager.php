@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\StaffResource\RelationManagers;
 
 use App\Infrastructure\Persistence\Eloquent\AppointmentModel;
+use App\Support\BranchSettings;
 use Filament\Forms;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Schemas\Components\Section;
@@ -46,7 +47,8 @@ class AppointmentsRelationManager extends RelationManager
                             )
                             ->searchable()
                             ->preload()
-                            ->placeholder('Use default branch'),
+                            ->default(fn () => BranchSettings::defaultBranchId())
+                            ->required(),
                         Forms\Components\DateTimePicker::make('booking_start')
                             ->label('Starts')
                             ->required(),

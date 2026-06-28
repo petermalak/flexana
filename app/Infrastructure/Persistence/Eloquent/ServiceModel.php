@@ -99,5 +99,11 @@ class ServiceModel extends Model
             ->withPivot(['provider_id', 'location_id', 'quantity'])
             ->withTimestamps();
     }
+
+    public function branches(): BelongsToMany
+    {
+        return $this->belongsToMany(BranchModel::class, 'branch_service', 'service_id', 'branch_id')
+            ->withTimestamps();
+    }
 }
 

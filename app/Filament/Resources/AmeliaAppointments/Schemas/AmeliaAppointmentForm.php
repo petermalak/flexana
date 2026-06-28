@@ -5,6 +5,7 @@ namespace App\Filament\Resources\AmeliaAppointments\Schemas;
 use App\Infrastructure\Persistence\Eloquent\AppointmentModel;
 use App\Infrastructure\Persistence\Eloquent\CompanyOffDayModel;
 use App\Infrastructure\Persistence\Eloquent\StaffOffDayModel;
+use App\Support\BranchSettings;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 use Filament\Forms;
@@ -40,8 +41,9 @@ class AmeliaAppointmentForm
                             )
                             ->searchable()
                             ->preload()
-                            ->placeholder('Use default branch')
-                            ->helperText('Leave empty to assign the default branch.'),
+                            ->default(fn () => BranchSettings::defaultBranchId())
+                            ->required()
+                            ->helperText('Each session runs at one branch. Many appointments can share the same branch.'),
                         Forms\Components\DateTimePicker::make('booking_start')
                             ->label('Starts')
                             ->required()
