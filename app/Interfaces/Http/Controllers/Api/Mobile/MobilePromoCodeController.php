@@ -27,6 +27,8 @@ class MobilePromoCodeController extends Controller
             'IsPackage' => 'nullable|boolean',
             'isPackage' => 'nullable|boolean',
             'context' => ['nullable', 'string', Rule::in(array_column(PromoApplicableType::cases(), 'value'))],
+            'sessionID' => 'nullable|integer|exists:appointments,id',
+            'appointmentId' => 'nullable|integer|exists:appointments,id',
         ]);
 
         if ($validator->fails()) {
@@ -63,7 +65,8 @@ class MobilePromoCodeController extends Controller
 
         /** @var \App\Models\Customer $customer */
         $customer = $request->user();
-        $reason = $promo->invalidReasonForCustomer((int) $customer->id, $context);
+        $appointmentId = $this->resolveAppointmentId($request);
+        $reason = $promo->invalidReasonForCustomer((int) $customer->id, $context, $appointmentId);
         if ($reason !== null) {
             $payload = [
                 'valid' => false,
@@ -79,6 +82,10 @@ class MobilePromoCodeController extends Controller
                 'wrong_type' => response()->json([
                     ...$payload,
                     'message' => $this->wrongTypeMessage($promo),
+                ], 200),
+                'wrong_appointment' => response()->json([
+                    ...$payload,
+                    'message' => (string) config('promo.wrong_appointment_message', 'This promo code is not valid for the selected session.'),
                 ], 200),
                 'not_yet_valid' => response()->json([
                     ...$payload,
@@ -137,6 +144,17 @@ class MobilePromoCodeController extends Controller
         return null;
     }
 
+    private function resolveAppointmentId(Request $request): ?int
+    {
+        $raw = $request->input('sessionID', $request->input('appointmentId'));
+
+        if ($raw === null || $raw === '') {
+            return null;
+        }
+
+        return (int) $raw;
+    }
+
     private function wrongTypeMessage(PromoCodeModel $promo): string
     {
         $messages = config('promo.wrong_type_messages', []);
@@ -148,6 +166,7 @@ class MobilePromoCodeController extends Controller
     private function promoCodeDetails(PromoCodeModel $promo, ?int $customerId = null): array
     {
         $usesByYou = $customerId !== null ? $promo->redemptionCountForCustomer($customerId) : null;
+        $restrictedToAppointments = $promo->isRestrictedToAppointments();
 
         return [
             'id' => $promo->id,
@@ -155,6 +174,12 @@ class MobilePromoCodeController extends Controller
             'name' => $promo->name,
             'percent_discount' => (float) $promo->percent_discount,
             'applicable_to' => $promo->applicable_to?->value,
+            'restricted_to_appointments' => $restrictedToAppointments,
+            'allowed_appointment_ids' => $restrictedToAppointments
+                ? ($promo->relationLoaded('appointments')
+                    ? $promo->appointments->pluck('id')->map(fn ($id) => (int) $id)->values()->all()
+                    : $promo->appointments()->pluck('appointments.id')->map(fn ($id) => (int) $id)->values()->all())
+                : [],
             'valid_from' => ApiDateTime::toBusinessIso8601($promo->valid_from),
             'valid_from_utc' => ApiDateTime::toUtcIso8601($promo->valid_from),
             'valid_until' => ApiDateTime::toBusinessIso8601($promo->valid_until),

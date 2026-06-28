@@ -207,6 +207,7 @@ class MobileBookingController extends Controller
                     $promoCode,
                     (int) $customer->id,
                     PromoApplicableType::DropIns,
+                    $sessionID,
                 );
                 if ($promoRecord) {
                     $totalPrice = $totalPrice * (1 - (float) $promoRecord->percent_discount / 100);

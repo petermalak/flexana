@@ -147,7 +147,10 @@ class WebSessionPaymobController extends Controller
 
         if ($promoCode) {
             $promoRecord = PromoCodeModel::findByCode($promoCode);
-            if ($promoRecord && $promoRecord->invalidReasonForCustomer(null, PromoApplicableType::DropIns) === null) {
+            if (
+                $promoRecord
+                && $promoRecord->invalidReasonForCustomer(null, PromoApplicableType::DropIns, $sessionID) === null
+            ) {
                 $totalPrice = $totalPrice * (1 - (float) $promoRecord->percent_discount / 100);
             } else {
                 $promoRecord = null;
@@ -521,6 +524,7 @@ class WebSessionPaymobController extends Controller
                 $promoCode,
                 (int) $customer->id,
                 PromoApplicableType::DropIns,
+                (int) $appointment->id,
             );
             // Promo can become invalid between init and finalize (usage limit, etc).
             // We don't block booking creation if the user already paid successfully.

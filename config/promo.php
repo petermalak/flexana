@@ -32,4 +32,6 @@ return [
         'drop_ins' => 'This promo code is only valid for drop-in bookings.',
     ],
 
+    'wrong_appointment_message' => 'This promo code is not valid for the selected session.',
+
 ];

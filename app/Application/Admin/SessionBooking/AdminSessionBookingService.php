@@ -94,6 +94,7 @@ final class AdminSessionBookingService
                     $promoCode,
                     $customerId,
                     PromoApplicableType::DropIns,
+                    (int) $appointment->id,
                 );
                 if ($promoRecord) {
                     $totalPrice = $totalPrice * (1 - (float) $promoRecord->percent_discount / 100);

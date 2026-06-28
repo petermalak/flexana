@@ -4,11 +4,13 @@ namespace App\Filament\Resources;
 
 use App\Domain\Promo\Enums\PromoApplicableType;
 use App\Filament\Resources\PromoCodeResource\Pages;
+use App\Infrastructure\Persistence\Eloquent\AppointmentModel;
 use App\Models\PromoCode;
 use Filament\Forms;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Schemas\Components;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables;
 use Filament\Tables\Table;
@@ -67,6 +69,33 @@ class PromoCodeResource extends Resource
                             ))
                             ->live(),
                     ]),
+                Components\Section::make('Session restrictions')
+                    ->description('Optional. Limit this code to specific upcoming drop-in sessions.')
+                    ->icon(Heroicon::OutlinedCalendarDays)
+                    ->schema([
+                        Forms\Components\Select::make('appointments')
+                            ->label('Allowed appointments')
+                            ->relationship(
+                                'appointments',
+                                modifyQueryUsing: fn ($query) => $query
+                                    ->with(['service', 'provider'])
+                                    ->where('status', 'approved')
+                                    ->where('booking_start', '>=', now())
+                                    ->orderBy('booking_start'),
+                            )
+                            ->getOptionLabelFromRecordUsing(
+                                fn (AppointmentModel $record): string => $record->adminSelectLabel(),
+                            )
+                            ->multiple()
+                            ->searchable()
+                            ->preload()
+                            ->helperText('Leave empty to allow any session. Select one or more appointments to restrict where this code works.'),
+                    ])
+                    ->visible(fn (Get $get): bool => in_array(
+                        $get('applicable_to'),
+                        [PromoApplicableType::DropIns->value, PromoApplicableType::Both->value],
+                        true,
+                    )),
                 Components\Section::make('Validity')
                     ->schema([
                         Forms\Components\DateTimePicker::make('valid_from')
@@ -106,6 +135,11 @@ class PromoCodeResource extends Resource
                     ->options(static::applicableTypeOptions())
                     ->selectablePlaceholder(false)
                     ->sortable(),
+                Tables\Columns\TextColumn::make('appointments_count')
+                    ->label('Sessions')
+                    ->counts('appointments')
+                    ->formatStateUsing(fn (int $state): string => $state > 0 ? "{$state} session(s)" : 'Any')
+                    ->toggleable(),
                 Tables\Columns\TextColumn::make('used_count')
                     ->label('Total uses')
                     ->sortable(),

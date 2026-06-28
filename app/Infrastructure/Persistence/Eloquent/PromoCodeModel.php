@@ -5,6 +5,7 @@ namespace App\Infrastructure\Persistence\Eloquent;
 use App\Domain\Promo\Enums\PromoApplicableType;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -51,6 +52,34 @@ class PromoCodeModel extends Model
         return $this->hasMany(PromoCodeRedemptionModel::class, 'promo_code_id');
     }
 
+    public function appointments(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            AppointmentModel::class,
+            'appointment_promo_code',
+            'promo_code_id',
+            'appointment_id',
+        )->withTimestamps();
+    }
+
+    public function isRestrictedToAppointments(): bool
+    {
+        if ($this->relationLoaded('appointments')) {
+            return $this->appointments->isNotEmpty();
+        }
+
+        return $this->appointments()->exists();
+    }
+
+    public function appliesToAppointment(?int $appointmentId): bool
+    {
+        if ($appointmentId === null || ! $this->isRestrictedToAppointments()) {
+            return true;
+        }
+
+        return $this->appointments()->whereKey($appointmentId)->exists();
+    }
+
     /**
      * Find promo by code (trimmed, case-insensitive) so mobile input matches DB.
      */
@@ -80,13 +109,14 @@ class PromoCodeModel extends Model
         string $code,
         int $customerId,
         PromoApplicableType $context,
+        ?int $appointmentId = null,
     ): ?self {
         $promo = static::findByCode($code);
         if (! $promo) {
             return null;
         }
 
-        if ($promo->invalidReasonForCustomer($customerId, $context) !== null) {
+        if ($promo->invalidReasonForCustomer($customerId, $context, $appointmentId) !== null) {
             return null;
         }
 
@@ -103,16 +133,27 @@ class PromoCodeModel extends Model
      * Why the code cannot be used for this customer, or null if valid.
      * Per-user usage limit replaces the old global usage_limit / used_count cap.
      *
-     * @return 'inactive'|'not_yet_valid'|'expired'|'usage_limit_reached'|'wrong_type'|null
+     * @return 'inactive'|'not_yet_valid'|'expired'|'usage_limit_reached'|'wrong_type'|'wrong_appointment'|null
      */
-    public function invalidReasonForCustomer(?int $customerId = null, ?PromoApplicableType $context = null): ?string
-    {
+    public function invalidReasonForCustomer(
+        ?int $customerId = null,
+        ?PromoApplicableType $context = null,
+        ?int $appointmentId = null,
+    ): ?string {
         if (! $this->is_active) {
             return 'inactive';
         }
 
         if ($context !== null && ! $this->isApplicableFor($context)) {
             return 'wrong_type';
+        }
+
+        if (
+            $appointmentId !== null
+            && $context !== PromoApplicableType::Packages
+            && ! $this->appliesToAppointment($appointmentId)
+        ) {
+            return 'wrong_appointment';
         }
 
         $tz = (string) config('promo.calendar_timezone', 'UTC');
@@ -139,9 +180,12 @@ class PromoCodeModel extends Model
         return null;
     }
 
-    public function isValidForCustomer(int $customerId, ?PromoApplicableType $context = null): bool
-    {
-        return $this->invalidReasonForCustomer($customerId, $context) === null;
+    public function isValidForCustomer(
+        int $customerId,
+        ?PromoApplicableType $context = null,
+        ?int $appointmentId = null,
+    ): bool {
+        return $this->invalidReasonForCustomer($customerId, $context, $appointmentId) === null;
     }
 
     /**

@@ -6,6 +6,7 @@ use App\Support\BranchSettings;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Str;
 
@@ -80,6 +81,29 @@ class AppointmentModel extends Model
     public function bookings(): HasMany
     {
         return $this->hasMany(BookingModel::class, 'appointment_id');
+    }
+
+    public function promoCodes(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            PromoCodeModel::class,
+            'appointment_promo_code',
+            'appointment_id',
+            'promo_code_id',
+        )->withTimestamps();
+    }
+
+    public function adminSelectLabel(): string
+    {
+        $serviceName = $this->relationLoaded('service')
+            ? ($this->service?->name ?? 'Service')
+            : ($this->service()->value('name') ?? 'Service');
+        $providerName = $this->relationLoaded('provider')
+            ? ($this->provider?->name ?? 'Instructor')
+            : ($this->provider()->value('name') ?? 'Instructor');
+        $starts = $this->booking_start?->format('M j, Y H:i') ?? '—';
+
+        return "{$starts} — {$serviceName} ({$providerName})";
     }
 
     /**

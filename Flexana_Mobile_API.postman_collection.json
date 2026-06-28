@@ -834,7 +834,7 @@
 		},
 		{
 			"name": "Promo Code Flow",
-			"description": "Promo codes apply a percentage discount. Each code has applicable_to: both | packages | drop_ins (set in Admin → Promo Codes). Always verify with IsPackage before applying: true = package purchase, false = drop-in booking. POST /api/v1/promo-codes/verify returns reason wrong_type when the code does not match. Then pass promoCode on session-bookings (drop-in only) or purchase-package. Invalid/expired/wrong-type codes are ignored at checkout (full price).",
+			"description": "Promo codes apply a percentage discount. Each code has applicable_to: both | packages | drop_ins (set in Admin → Promo Codes). Drop-in codes can optionally be restricted to specific appointments in admin. Always verify with IsPackage before applying: true = package purchase, false = drop-in booking. For drop-ins, pass sessionID when verifying if the code is session-restricted. POST /api/v1/promo-codes/verify returns reason wrong_type or wrong_appointment when the code does not match. Then pass promoCode on session-bookings (drop-in only) or purchase-package. Invalid/expired/wrong-type codes are ignored at checkout (full price).",
 			"item": [
 				{
 					"name": "Verify Promo Code (drop-in)",
@@ -843,10 +843,10 @@
 						"header": [{ "key": "Content-Type", "value": "application/json" }],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"code\": \"SAVE20\",\n    \"IsPackage\": false\n}"
+							"raw": "{\n    \"code\": \"SAVE20\",\n    \"IsPackage\": false,\n    \"sessionID\": 1\n}"
 						},
 						"url": { "raw": "{{base_url}}/api/v1/promo-codes/verify", "host": ["{{base_url}}"], "path": ["api", "v1", "promo-codes", "verify"] },
-						"description": "Validate a promo for drop-in session booking. Body: code (required), IsPackage=false (required). Legacy: context=drop_ins also accepted. Returns valid, reason (not_found | inactive | wrong_type | not_yet_valid | expired | usage_limit_reached), message, promo_code (includes applicable_to). Requires Bearer."
+						"description": "Validate a promo for drop-in session booking. Body: code (required), IsPackage=false (required), sessionID (optional but required when the promo is restricted to specific appointments). Legacy: context=drop_ins also accepted. Returns valid, reason (not_found | inactive | wrong_type | wrong_appointment | not_yet_valid | expired | usage_limit_reached), message, promo_code (includes applicable_to, restricted_to_appointments, allowed_appointment_ids). Requires Bearer."
 					},
 					"response": [
 						{ "name": "Valid", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"valid\":true,\"message\":\"Promo code is valid.\",\"promo_code\":{\"id\":1,\"code\":\"SAVE20\",\"name\":\"Summer Sale\",\"percent_discount\":20,\"applicable_to\":\"drop_ins\",\"valid_from\":null,\"valid_until\":\"2025-12-31T23:59:59+00:00\",\"usage_limit_per_user\":1,\"uses_by_you\":0,\"used_count_total\":42,\"is_active\":true}}" },
