@@ -107,6 +107,11 @@ class User extends Authenticatable implements FilamentUser
      */
     public function canAccessPanel(Panel $panel): bool
     {
-        return $this->isSuperAdmin() || $this->isBranchAdmin();
+        if ($this->isSuperAdmin() || $this->isBranchAdmin()) {
+            return true;
+        }
+
+        // Existing admin users created before Spatie roles were introduced.
+        return $this->roles()->doesntExist();
     }
 }
