@@ -39,7 +39,7 @@ class ViewStaffSchedule extends Page
 
     /**
      * Ensure mounted action has a 'data' key so Livewire can bind form fields
-     * (mountedActions.0.data.service_id, repeat_weekly, weekly_occurrence_count, etc.).
+     * (mountedActions.0.data.branch_id, service_id, repeat_weekly, weekly_occurrence_count, etc.).
      */
     public function mountAction(string $name, array $arguments = [], array $context = []): mixed
     {
@@ -49,7 +49,10 @@ class ViewStaffSchedule extends Page
             $index = array_key_last($this->mountedActions);
             $current = $this->mountedActions[$index]['data'] ?? [];
 
+            $defaultBranchId = BranchContext::scopedBranchId() ?? BranchSettings::defaultBranchId();
+
             $defaults = [
+                'branch_id' => $defaultBranchId !== null ? (string) $defaultBranchId : null,
                 'service_id' => null,
                 'start_time' => '16:00',
                 'end_time' => '17:00',
@@ -117,8 +120,19 @@ class ViewStaffSchedule extends Page
                         ->label('Add')
                         ->icon('heroicon-o-plus')
                         ->form(fn () => $this->getAddAppointmentFormSchema())
-                        ->mountUsing(function () use ($dateKey) {
+                        ->mountUsing(function (Action $action) use ($dateKey): void {
                             $this->addForDate = $dateKey;
+
+                            $defaultBranchId = BranchContext::scopedBranchId() ?? BranchSettings::defaultBranchId();
+
+                            $action->fillForm([
+                                'branch_id' => $defaultBranchId !== null ? (string) $defaultBranchId : null,
+                                'service_id' => null,
+                                'start_time' => '16:00',
+                                'end_time' => '17:00',
+                                'repeat_weekly' => false,
+                                'weekly_occurrence_count' => 7,
+                            ]);
                         })
                         ->modalHeading('Add appointment')
                         ->modalDescription(fn () => $this->addForDate ? Carbon::parse($this->addForDate)->format('l, F j, Y') : '')
@@ -169,11 +183,16 @@ class ViewStaffSchedule extends Page
                         fn ($query) => $query->whereKey($branchId),
                         fn ($query) => $query->where('is_active', true)->orderBy('sort_order')->orderBy('name'),
                     )
-                    ->pluck('name', 'id')
+                    ->orderBy('sort_order')
+                    ->orderBy('name')
+                    ->get()
+                    ->mapWithKeys(fn (Branch $branch) => [(string) $branch->id => $branch->name])
                     ->all())
-                ->default(fn () => BranchContext::scopedBranchId() ?? BranchSettings::defaultBranchId())
+                ->default(fn () => ($id = BranchContext::scopedBranchId() ?? BranchSettings::defaultBranchId()) !== null ? (string) $id : null)
                 ->searchable()
+                ->preload()
                 ->required()
+                ->native(false)
                 ->visible(fn (): bool => ! BranchContext::isScoped()),
             Forms\Components\Select::make('service_id')
                 ->label('Service')
