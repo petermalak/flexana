@@ -7,6 +7,7 @@ use App\Filament\Resources\StaffResource;
 use App\Infrastructure\Persistence\Eloquent\AppointmentModel;
 use App\Infrastructure\Persistence\Eloquent\ServiceModel;
 use App\Models\Branch;
+use App\Support\BranchContext;
 use App\Support\BranchSettings;
 use Carbon\Carbon;
 use Filament\Actions\Action;
@@ -163,14 +164,17 @@ class ViewStaffSchedule extends Page
             Forms\Components\Select::make('branch_id')
                 ->label('Branch')
                 ->options(fn () => Branch::query()
-                    ->where('is_active', true)
-                    ->orderBy('sort_order')
-                    ->orderBy('name')
+                    ->when(
+                        ($branchId = BranchContext::scopedBranchId()),
+                        fn ($query) => $query->whereKey($branchId),
+                        fn ($query) => $query->where('is_active', true)->orderBy('sort_order')->orderBy('name'),
+                    )
                     ->pluck('name', 'id')
                     ->all())
-                ->default(fn () => BranchSettings::defaultBranchId())
+                ->default(fn () => BranchContext::scopedBranchId() ?? BranchSettings::defaultBranchId())
                 ->searchable()
-                ->required(),
+                ->required()
+                ->visible(fn (): bool => ! BranchContext::isScoped()),
             Forms\Components\Select::make('service_id')
                 ->label('Service')
                 ->options($services)
@@ -260,7 +264,8 @@ class ViewStaffSchedule extends Page
 
         $serviceId = (int) $serviceId;
         $branchId = BranchSettings::resolveBranchId(
-            isset($data['branch_id']) && $data['branch_id'] !== '' ? (int) $data['branch_id'] : null,
+            BranchContext::scopedBranchId()
+                ?? (isset($data['branch_id']) && $data['branch_id'] !== '' ? (int) $data['branch_id'] : null),
         );
 
         if ($branchId === null) {
@@ -406,9 +411,11 @@ class ViewStaffSchedule extends Page
         $weekStart = $this->getWeekStartCarbon();
         $weekEnd = $this->getWeekEndCarbon();
 
-        $appointments = AppointmentModel::query()
-            ->where('provider_id', $staff->getKey())
-            ->whereBetween('booking_start', [$weekStart, $weekEnd])
+        $appointments = BranchContext::scopeAppointments(
+            AppointmentModel::query()
+                ->where('provider_id', $staff->getKey())
+                ->whereBetween('booking_start', [$weekStart, $weekEnd]),
+        )
             ->with(['service', 'branch'])
             ->orderBy('booking_start')
             ->get();

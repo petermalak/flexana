@@ -2,9 +2,11 @@
 
 namespace App\Filament\Resources;
 
+use App\Filament\Concerns\ScopesToUserBranch;
 use App\Filament\Resources\ServiceResource\Pages;
 use App\Models\Category;
 use App\Models\Service;
+use App\Support\BranchContext;
 use Filament\Forms;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
@@ -18,6 +20,8 @@ use Filament\Actions;
 
 class ServiceResource extends Resource
 {
+    use ScopesToUserBranch;
+
     protected static ?string $model = Service::class;
 
     protected static \BackedEnum|string|null $navigationIcon = 'heroicon-o-sparkles';
@@ -74,12 +78,21 @@ class ServiceResource extends Resource
                                             ->relationship(
                                                 'branches',
                                                 'name',
-                                                fn ($query) => $query->where('is_active', true)->orderBy('sort_order')->orderBy('name'),
+                                                fn ($query) => $query
+                                                    ->when(
+                                                        ($branchId = BranchContext::scopedBranchId()),
+                                                        fn ($scopedQuery) => $scopedQuery->whereKey($branchId),
+                                                        fn ($scopedQuery) => $scopedQuery
+                                                            ->where('is_active', true)
+                                                            ->orderBy('sort_order')
+                                                            ->orderBy('name'),
+                                                    ),
                                             )
                                             ->multiple()
                                             ->searchable()
                                             ->preload()
                                             ->required()
+                                            ->default(fn () => ($branchId = BranchContext::scopedBranchId()) ? [$branchId] : null)
                                             ->helperText('Select which branches offer this service.'),
                                     ])->columns(2),
                             ]),
@@ -316,6 +329,20 @@ class ServiceResource extends Resource
         return [
             'index' => Pages\ManageServices::route('/'),
         ];
+    }
+
+    public static function getEloquentQuery(): \Illuminate\Database\Eloquent\Builder
+    {
+        $query = parent::getEloquentQuery();
+
+        if (! BranchContext::isScoped()) {
+            return $query;
+        }
+
+        return $query->whereHas(
+            'branches',
+            fn (\Illuminate\Database\Eloquent\Builder $branchQuery) => $branchQuery->whereKey(BranchContext::scopedBranchId()),
+        );
     }
 }
 

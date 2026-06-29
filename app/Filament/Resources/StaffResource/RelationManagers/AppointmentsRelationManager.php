@@ -2,7 +2,9 @@
 
 namespace App\Filament\Resources\StaffResource\RelationManagers;
 
+use App\Filament\Concerns\ScopesToUserBranch;
 use App\Infrastructure\Persistence\Eloquent\AppointmentModel;
+use App\Support\BranchContext;
 use App\Support\BranchSettings;
 use Filament\Forms;
 use Filament\Resources\RelationManagers\RelationManager;
@@ -18,6 +20,8 @@ use Carbon\Carbon;
 
 class AppointmentsRelationManager extends RelationManager
 {
+    use ScopesToUserBranch;
+
     protected static string $relationship = 'appointments';
 
     protected static ?string $title = 'Appointments';
@@ -32,7 +36,11 @@ class AppointmentsRelationManager extends RelationManager
                     ->schema([
                         Forms\Components\Select::make('service_id')
                             ->label('Service')
-                            ->relationship('service', 'name')
+                            ->relationship(
+                                'service',
+                                'name',
+                                fn ($query) => BranchContext::scopeServicesForBranch($query),
+                            )
                             ->searchable()
                             ->preload()
                             ->required(),
@@ -43,12 +51,21 @@ class AppointmentsRelationManager extends RelationManager
                             ->relationship(
                                 'branch',
                                 'name',
-                                fn ($query) => $query->where('is_active', true)->orderBy('sort_order')->orderBy('name'),
+                                fn ($query) => $query
+                                    ->when(
+                                        ($branchId = BranchContext::scopedBranchId()),
+                                        fn ($scopedQuery) => $scopedQuery->whereKey($branchId),
+                                        fn ($scopedQuery) => $scopedQuery
+                                            ->where('is_active', true)
+                                            ->orderBy('sort_order')
+                                            ->orderBy('name'),
+                                    ),
                             )
                             ->searchable()
                             ->preload()
-                            ->default(fn () => BranchSettings::defaultBranchId())
-                            ->required(),
+                            ->default(fn () => BranchContext::scopedBranchId() ?? BranchSettings::defaultBranchId())
+                            ->required()
+                            ->visible(fn (): bool => ! BranchContext::isScoped()),
                         Forms\Components\DateTimePicker::make('booking_start')
                             ->label('Starts')
                             ->required(),
@@ -75,6 +92,7 @@ class AppointmentsRelationManager extends RelationManager
     public function table(Table $table): Table
     {
         return $table
+            ->modifyQueryUsing(fn ($query) => static::applyBranchScope($query))
             ->recordTitleAttribute('id')
             ->columns([
                 Tables\Columns\TextColumn::make('service.name')
@@ -119,7 +137,14 @@ class AppointmentsRelationManager extends RelationManager
             ])
             ->headerActions([
                 Actions\CreateAction::make()
-                    ->label('Add appointment'),
+                    ->label('Add appointment')
+                    ->mutateFormDataUsing(function (array $data): array {
+                        if ($branchId = BranchContext::scopedBranchId()) {
+                            $data['branch_id'] = $branchId;
+                        }
+
+                        return $data;
+                    }),
             ])
             ->actions([
                 Actions\EditAction::make(),

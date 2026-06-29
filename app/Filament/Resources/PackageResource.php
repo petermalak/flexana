@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources;
 
+use App\Filament\Concerns\SuperAdminOnlyResource;
 use App\Filament\Resources\PackageResource\Pages;
 use App\Models\Package;
 use App\Models\ClassType;
@@ -16,6 +17,8 @@ use Filament\Actions;
 
 class PackageResource extends Resource
 {
+    use SuperAdminOnlyResource;
+
     protected static ?string $model = Package::class;
 
     protected static \BackedEnum|string|null $navigationIcon = 'heroicon-o-gift';

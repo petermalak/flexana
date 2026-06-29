@@ -2,9 +2,11 @@
 
 namespace App\Models;
 
+use App\Support\BranchContext;
 use Filament\Models\Contracts\FilamentUser;
 use Filament\Panel;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Str;
@@ -42,6 +44,7 @@ class User extends Authenticatable implements FilamentUser
         'phone',
         'avatar_url',
         'role',
+        'branch_id',
         'status',
         'last_login_at',
         'preferences',
@@ -71,7 +74,32 @@ class User extends Authenticatable implements FilamentUser
             'last_login_at' => 'datetime',
             'preferences' => 'array',
             'password' => 'hashed',
+            'branch_id' => 'integer',
         ];
+    }
+
+    public function branch(): BelongsTo
+    {
+        return $this->belongsTo(Branch::class, 'branch_id');
+    }
+
+    public function isSuperAdmin(): bool
+    {
+        return $this->hasRole(BranchContext::ROLE_SUPER_ADMIN);
+    }
+
+    public function isBranchAdmin(): bool
+    {
+        return $this->hasRole(BranchContext::ROLE_BRANCH_ADMIN);
+    }
+
+    public function scopedBranchId(): ?int
+    {
+        if ($this->isSuperAdmin()) {
+            return null;
+        }
+
+        return $this->branch_id !== null ? (int) $this->branch_id : null;
     }
 
     /**
@@ -79,7 +107,6 @@ class User extends Authenticatable implements FilamentUser
      */
     public function canAccessPanel(Panel $panel): bool
     {
-        // Allow all authenticated users to access the admin panel
-        return true;
+        return $this->isSuperAdmin() || $this->isBranchAdmin();
     }
 }

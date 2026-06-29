@@ -6,6 +6,7 @@ use App\Filament\Resources\AmeliaAppointments\AmeliaAppointmentResource;
 use App\Infrastructure\Persistence\Eloquent\AppointmentModel;
 use App\Infrastructure\Persistence\Eloquent\CompanyOffDayModel;
 use App\Infrastructure\Persistence\Eloquent\StaffOffDayModel;
+use App\Support\BranchContext;
 use Carbon\Carbon;
 use App\Filament\Resources\Pages\StaysOnPageCreateRecord;
 use Illuminate\Support\Str;
@@ -30,6 +31,10 @@ class CreateAmeliaAppointment extends StaysOnPageCreateRecord
 
     public function mutateFormDataBeforeCreate(array $data): array
     {
+        if ($branchId = BranchContext::scopedBranchId()) {
+            $data['branch_id'] = $branchId;
+        }
+
         $createRecurring = ! empty($data['create_recurring']);
         $day = $data['create_recurring_day'] ?? null;
         $count = isset($data['create_recurring_count']) ? (int) $data['create_recurring_count'] : 0;

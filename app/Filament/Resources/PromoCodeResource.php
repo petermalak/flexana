@@ -3,6 +3,7 @@
 namespace App\Filament\Resources;
 
 use App\Domain\Promo\Enums\PromoApplicableType;
+use App\Filament\Concerns\SuperAdminOnlyResource;
 use App\Filament\Resources\PromoCodeResource\Pages;
 use App\Infrastructure\Persistence\Eloquent\AppointmentModel;
 use App\Models\PromoCode;
@@ -19,6 +20,8 @@ use Illuminate\Database\Eloquent\Collection;
 
 class PromoCodeResource extends Resource
 {
+    use SuperAdminOnlyResource;
+
     protected static ?string $model = PromoCode::class;
 
     protected static \BackedEnum|string|null $navigationIcon = 'heroicon-o-ticket';

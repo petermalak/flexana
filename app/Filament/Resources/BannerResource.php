@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources;
 
+use App\Filament\Concerns\SuperAdminOnlyResource;
 use App\Filament\Resources\BannerResource\Pages;
 use App\Models\Banner;
 use BackedEnum;
@@ -16,6 +17,8 @@ use Filament\Tables\Table;
 
 class BannerResource extends Resource
 {
+    use SuperAdminOnlyResource;
+
     protected static ?string $model = Banner::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedPhoto;

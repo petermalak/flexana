@@ -2,8 +2,10 @@
 
 namespace App\Filament\Resources;
 
+use App\Filament\Concerns\ScopesToUserBranch;
 use App\Filament\Resources\CustomerResource\Pages;
 use App\Models\Customer;
+use App\Support\BranchContext;
 use Filament\Forms;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
@@ -14,6 +16,8 @@ use Filament\Actions;
 
 class CustomerResource extends Resource
 {
+    use ScopesToUserBranch;
+
     protected static ?string $model = Customer::class;
 
     protected static \BackedEnum|string|null $navigationIcon = 'heroicon-o-user-group';
@@ -99,6 +103,11 @@ class CustomerResource extends Resource
         return [
             'index' => Pages\ManageCustomers::route('/'),
         ];
+    }
+
+    public static function getEloquentQuery(): \Illuminate\Database\Eloquent\Builder
+    {
+        return BranchContext::scopeCustomersWithBranchBookings(parent::getEloquentQuery());
     }
 }
 

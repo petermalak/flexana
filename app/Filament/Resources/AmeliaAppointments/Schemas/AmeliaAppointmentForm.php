@@ -5,6 +5,7 @@ namespace App\Filament\Resources\AmeliaAppointments\Schemas;
 use App\Infrastructure\Persistence\Eloquent\AppointmentModel;
 use App\Infrastructure\Persistence\Eloquent\CompanyOffDayModel;
 use App\Infrastructure\Persistence\Eloquent\StaffOffDayModel;
+use App\Support\BranchContext;
 use App\Support\BranchSettings;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
@@ -22,7 +23,11 @@ class AmeliaAppointmentForm
                     ->schema([
                         Forms\Components\Select::make('service_id')
                             ->label('Service')
-                            ->relationship('service', 'name')
+                            ->relationship(
+                                'service',
+                                'name',
+                                fn ($query) => BranchContext::scopeServicesForBranch($query),
+                            )
                             ->searchable()
                             ->preload()
                             ->required(),
@@ -37,12 +42,21 @@ class AmeliaAppointmentForm
                             ->relationship(
                                 'branch',
                                 'name',
-                                fn ($query) => $query->where('is_active', true)->orderBy('sort_order')->orderBy('name'),
+                                fn ($query) => $query
+                                    ->when(
+                                        ($branchId = BranchContext::scopedBranchId()),
+                                        fn ($scopedQuery) => $scopedQuery->whereKey($branchId),
+                                        fn ($scopedQuery) => $scopedQuery
+                                            ->where('is_active', true)
+                                            ->orderBy('sort_order')
+                                            ->orderBy('name'),
+                                    ),
                             )
                             ->searchable()
                             ->preload()
-                            ->default(fn () => BranchSettings::defaultBranchId())
+                            ->default(fn () => BranchContext::scopedBranchId() ?? BranchSettings::defaultBranchId())
                             ->required()
+                            ->visible(fn (): bool => ! BranchContext::isScoped())
                             ->helperText('Each session runs at one branch. Many appointments can share the same branch.'),
                         Forms\Components\DateTimePicker::make('booking_start')
                             ->label('Starts')

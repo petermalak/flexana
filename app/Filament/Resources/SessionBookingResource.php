@@ -3,10 +3,12 @@
 namespace App\Filament\Resources;
 
 use App\Application\Admin\SessionBooking\AdminSessionBookingService;
+use App\Filament\Concerns\ScopesToUserBranch;
 use App\Filament\Resources\SessionBookingResource\Pages;
 use App\Infrastructure\Persistence\Eloquent\AppointmentModel;
 use App\Infrastructure\Persistence\Eloquent\BookingModel;
 use App\Infrastructure\Persistence\Eloquent\CustomerModel;
+use App\Support\BranchContext;
 use Filament\Actions;
 use Filament\Forms;
 use Filament\Notifications\Notification;
@@ -18,6 +20,8 @@ use Illuminate\Database\Eloquent\Builder;
 
 class SessionBookingResource extends Resource
 {
+    use ScopesToUserBranch;
+
     protected static ?string $model = BookingModel::class;
 
     protected static \BackedEnum|string|null $navigationIcon = 'heroicon-o-calendar-days';
@@ -35,10 +39,12 @@ class SessionBookingResource extends Resource
                 ->label('Session')
                 ->required()
                 ->options(function () {
-                    return AppointmentModel::query()
-                        ->with(['service', 'provider'])
-                        ->orderByDesc('booking_start')
-                        ->limit(500)
+                    return BranchContext::scopeAppointments(
+                        AppointmentModel::query()
+                            ->with(['service', 'provider'])
+                            ->orderByDesc('booking_start')
+                            ->limit(500),
+                    )
                         ->get()
                         ->mapWithKeys(function (AppointmentModel $a) {
                             $service = $a->service?->name ?? 'Unknown';
@@ -61,13 +67,14 @@ class SessionBookingResource extends Resource
                         return [];
                     }
 
-                    return CustomerModel::query()
-                        ->where(function (Builder $q) use ($search) {
+                    return BranchContext::scopeCustomersWithBranchBookings(
+                        CustomerModel::query()->where(function (Builder $q) use ($search) {
                             $q->where('first_name', 'like', "%{$search}%")
                                 ->orWhere('last_name', 'like', "%{$search}%")
                                 ->orWhereRaw("concat(first_name, ' ', last_name) like ?", ["%{$search}%"])
                                 ->orWhere('phone', 'like', "%{$search}%");
-                        })
+                        }),
+                    )
                         ->orderBy('first_name')
                         ->limit(50)
                         ->get()
@@ -238,6 +245,11 @@ class SessionBookingResource extends Resource
         return [
             'index' => Pages\ManageSessionBookings::route('/'),
         ];
+    }
+
+    public static function getEloquentQuery(): Builder
+    {
+        return static::applyBranchScopeViaRelation(parent::getEloquentQuery(), 'appointment');
     }
 }
 

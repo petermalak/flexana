@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources;
 
+use App\Filament\Concerns\SuperAdminOnlyResource;
 use App\Filament\Resources\BranchResource\Pages;
 use App\Models\Branch;
 use App\Rules\GoogleMapsUrl;
@@ -17,6 +18,8 @@ use Filament\Tables\Table;
 
 class BranchResource extends Resource
 {
+    use SuperAdminOnlyResource;
+
     protected static ?string $model = Branch::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedBuildingOffice2;

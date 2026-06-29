@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources;
 
+use App\Filament\Concerns\SuperAdminOnlyResource;
 use App\Filament\Resources\CustomerPackagePurchaseResource\Pages;
 use App\Infrastructure\Persistence\Eloquent\CustomerPackagePurchaseModel;
 use App\Infrastructure\Persistence\Eloquent\PackageModel;
@@ -15,6 +16,8 @@ use Filament\Tables\Table;
 
 class CustomerPackagePurchaseResource extends Resource
 {
+    use SuperAdminOnlyResource;
+
     protected static ?string $model = CustomerPackagePurchaseModel::class;
 
     protected static \BackedEnum|string|null $navigationIcon = 'heroicon-o-ticket';

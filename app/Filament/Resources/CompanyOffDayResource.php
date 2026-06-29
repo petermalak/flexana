@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources;
 
+use App\Filament\Concerns\SuperAdminOnlyResource;
 use App\Filament\Resources\CompanyOffDayResource\Pages;
 use App\Infrastructure\Persistence\Eloquent\CompanyOffDayModel;
 use Filament\Forms;
@@ -15,6 +16,8 @@ use Filament\Actions;
 
 class CompanyOffDayResource extends Resource
 {
+    use SuperAdminOnlyResource;
+
     protected static ?string $model = CompanyOffDayModel::class;
 
     protected static \BackedEnum|string|null $navigationIcon = 'heroicon-o-building-office';

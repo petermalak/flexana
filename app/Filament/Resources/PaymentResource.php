@@ -2,14 +2,18 @@
 
 namespace App\Filament\Resources;
 
+use App\Filament\Concerns\ScopesToUserBranch;
 use App\Filament\Resources\PaymentResource\Pages;
 use App\Models\Payment;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 
 class PaymentResource extends Resource
 {
+    use ScopesToUserBranch;
+
     protected static ?string $model = Payment::class;
 
     protected static \BackedEnum|string|null $navigationIcon = 'heroicon-o-credit-card';
@@ -80,5 +84,10 @@ class PaymentResource extends Resource
     public static function canCreate(): bool
     {
         return false;
+    }
+
+    public static function getEloquentQuery(): Builder
+    {
+        return static::applyBranchScopeViaRelation(parent::getEloquentQuery(), 'booking.appointment');
     }
 }
