@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 
 use App\Filament\Concerns\SuperAdminOnlyResource;
 use App\Filament\Resources\PackageResource\Pages;
+use App\Models\Branch;
 use App\Models\Package;
 use App\Models\ClassType;
 use Filament\Forms;
@@ -58,6 +59,33 @@ class PackageResource extends Resource
                             ->required()
                             ->helperText('Product category for app filtering (Yoga or Reformer Pilates)'),
                     ])->columns(2),
+                Components\Section::make('Branch availability')
+                    ->description('Control which branches can sell this package in the mobile app.')
+                    ->icon(Heroicon::OutlinedBuildingOffice2)
+                    ->schema([
+                        Forms\Components\Select::make('branches')
+                            ->label('Branches')
+                            ->relationship(
+                                'branches',
+                                'name',
+                                fn ($query) => $query
+                                    ->where('is_active', true)
+                                    ->orderBy('sort_order')
+                                    ->orderBy('name'),
+                            )
+                            ->multiple()
+                            ->searchable()
+                            ->preload()
+                            ->required()
+                            ->default(fn (): array => Branch::query()
+                                ->where('is_active', true)
+                                ->orderBy('sort_order')
+                                ->orderBy('name')
+                                ->pluck('id')
+                                ->map(fn ($id) => (string) $id)
+                                ->all())
+                            ->helperText('Only customers at the selected branches will see and purchase this package.'),
+                    ]),
                 Components\Section::make('Sessions & Pricing')
                     ->description('Number of sessions, price, and discount. Used sessions are tracked automatically.')
                     ->icon(Heroicon::OutlinedBanknotes)
@@ -139,6 +167,11 @@ class PackageResource extends Resource
                     })
                     ->sortable()
                     ->toggleable(),
+                Tables\Columns\TextColumn::make('branches.name')
+                    ->label('Branches')
+                    ->badge()
+                    ->color('info')
+                    ->toggleable(),
                 Tables\Columns\TextColumn::make('sort_order')
                     ->label('Order')
                     ->sortable(),
@@ -189,12 +222,36 @@ class PackageResource extends Resource
                         'active' => 'Active',
                         'inactive' => 'Inactive',
                     ]),
+                Tables\Filters\SelectFilter::make('branches')
+                    ->label('Branch')
+                    ->relationship('branches', 'name', fn ($query) => $query
+                        ->where('is_active', true)
+                        ->orderBy('sort_order')
+                        ->orderBy('name'))
+                    ->searchable()
+                    ->preload(),
                 Tables\Filters\SelectFilter::make('class_type_id')
                     ->label('Class format')
                     ->relationship('classType', 'name'),
             ])
             ->actions([
-                Actions\EditAction::make(),
+                Actions\EditAction::make()
+                    ->mountUsing(function (Actions\EditAction $action, Package $record): void {
+                        $record->loadMissing('branches');
+
+                        $action->fillForm([
+                            ...$record->attributesToArray(),
+                            'branches' => $record->branches
+                                ->pluck('id')
+                                ->map(fn ($id) => (string) $id)
+                                ->all(),
+                        ]);
+                    })
+                    ->after(function (Package $record, array $data): void {
+                        if (array_key_exists('branches', $data)) {
+                            $record->branches()->sync($data['branches'] ?? []);
+                        }
+                    }),
             ])
             ->bulkActions([
                 Actions\BulkActionGroup::make([
@@ -209,6 +266,11 @@ class PackageResource extends Resource
         return [
             'index' => Pages\ManagePackages::route('/'),
         ];
+    }
+
+    public static function getEloquentQuery(): \Illuminate\Database\Eloquent\Builder
+    {
+        return parent::getEloquentQuery()->with(['branches', 'classType']);
     }
 }
 

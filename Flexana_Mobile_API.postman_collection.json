@@ -804,7 +804,7 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "v1", "package-offers"]
 						},
-						"description": "Package offers grouped by category. Response: { data: [{ categoryId, categoryName, slug, packages: [{ id, name, price, sessions, description, expirationMonths, expirationDays, serviceType, classFormat, packageDuration, packageDurationDays }, ...] }, ...] }. expirationDays / packageDurationDays: exact day-based expiry when set in admin (e.g. 30-day unlimited). Requires Bearer."
+						"description": "Package offers grouped by category. Optional query: branchId — return only packages sold at that branch. Each package includes branchIds. Response: { data: [{ categoryId, categoryName, slug, packages: [{ id, name, price, sessions, description, expirationMonths, expirationDays, serviceType, classFormat, packageDuration, packageDurationDays, branchIds }, ...] }, ...] }. expirationDays / packageDurationDays: exact day-based expiry when set in admin (e.g. 30-day unlimited). Requires Bearer."
 					},
 					"response": [
 						{ "name": "Success (grouped by category)", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"data\":[{\"categoryId\":\"2\",\"categoryName\":\"Reformer\",\"slug\":\"reformer\",\"packages\":[{\"id\":17,\"name\":\"Test\",\"price\":300,\"sessions\":10,\"description\":\"test\",\"expirationMonths\":0,\"expirationDays\":null,\"serviceType\":\"Reformer Pilates\",\"classFormat\":null,\"packageDuration\":3,\"packageDurationDays\":null}]},{\"categoryId\":\"1\",\"categoryName\":\"Yoga  & Mat Pilates Classes\",\"slug\":\"yoga-mat-pilates-classes\",\"packages\":[{\"id\":1,\"name\":\"30 Day Unlimited\",\"price\":500,\"sessions\":999,\"description\":\"Unlimited yoga\",\"expirationMonths\":0,\"expirationDays\":30,\"serviceType\":\"Yoga\",\"classFormat\":\"Yoga\",\"packageDuration\":null,\"packageDurationDays\":30}]}]}" },
@@ -821,7 +821,7 @@
 							"raw": "{\n    \"packageId\": 1,\n    \"promoCode\": \"SAVE10\"\n}"
 						},
 						"url": { "raw": "{{base_url}}/api/v1/purchase-package", "host": ["{{base_url}}"], "path": ["api", "v1", "purchase-package"] },
-						"description": "Purchase one package. Body: packageId (required), promoCode (optional, percentage discount). Package must be active. Requires Bearer."
+						"description": "Purchase one package. Body: packageId (required), promoCode (optional), branchId (optional — rejects purchase if package is not sold at that branch). Package must be active. Requires Bearer."
 					},
 					"response": [
 						{ "name": "Success", "status": "Created", "code": 201, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"message\":\"Package purchased successfully\",\"data\":{\"id\":\"123\",\"packageId\":\"1\",\"customerId\":\"1\"}}" },

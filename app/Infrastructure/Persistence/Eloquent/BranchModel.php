@@ -59,4 +59,10 @@ class BranchModel extends Model
             ->withPivot(['price'])
             ->withTimestamps();
     }
+
+    public function packages(): BelongsToMany
+    {
+        return $this->belongsToMany(PackageModel::class, 'branch_package', 'branch_id', 'package_id')
+            ->withTimestamps();
+    }
 }

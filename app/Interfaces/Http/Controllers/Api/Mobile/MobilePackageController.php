@@ -29,6 +29,8 @@ class MobilePackageController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
+        $branchId = $request->filled('branchId') ? (int) $request->query('branchId') : null;
+
         $categories = Category::query()
             ->where('status', true)
             ->orderBy('position')
@@ -36,8 +38,12 @@ class MobilePackageController extends Controller
             ->get();
 
         $packages = PackageModel::query()
-            ->with(['services.category', 'classType'])
+            ->with(['services.category', 'classType', 'branches'])
             ->where('status', 'active')
+            ->when(
+                $branchId !== null,
+                fn ($query) => $query->whereHas('branches', fn ($branchQuery) => $branchQuery->whereKey($branchId)),
+            )
             ->orderBy('sort_order')
             ->orderBy('title')
             ->get();
@@ -190,6 +196,9 @@ class MobilePackageController extends Controller
             'classFormat' => $package->classType?->name ?? null,
             'packageDuration' => $package->package_duration !== null ? (int) $package->package_duration : null,
             'packageDurationDays' => $durationDays > 0 ? $durationDays : null,
+            'branchIds' => $package->relationLoaded('branches')
+                ? $package->branches->pluck('id')->map(fn ($id) => (string) $id)->values()->all()
+                : $package->branches()->pluck('branches.id')->map(fn ($id) => (string) $id)->values()->all(),
         ];
     }
 
@@ -270,13 +279,14 @@ class MobilePackageController extends Controller
 
     /**
      * Purchase a package. Uses authenticated customer.
-     * Body: { packageId [, promoCode ] }
+     * Body: { packageId [, promoCode, branchId ] }
      */
     public function purchase(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
             'packageId' => 'required|integer',
             'promoCode' => 'nullable|string|max:64',
+            'branchId' => 'nullable|integer|exists:branches,id',
         ]);
 
         if ($validator->fails()) {
@@ -289,16 +299,26 @@ class MobilePackageController extends Controller
 
         $packageId = (int) $validator->validated()['packageId'];
         $promoCode = $validator->validated()['promoCode'] ?? null;
+        $branchId = isset($validator->validated()['branchId'])
+            ? (int) $validator->validated()['branchId']
+            : null;
 
         /** @var Customer $customer */
         $customer = $request->user();
 
-        $package = PackageModel::query()->with('services')->find($packageId);
+        $package = PackageModel::query()->with(['services', 'branches'])->find($packageId);
         if (! $package || $package->status !== 'active') {
             return response()->json([
                 'success' => false,
                 'message' => 'Package not found or not available',
             ], 404);
+        }
+
+        if ($branchId !== null && ! $package->availableAtBranch($branchId)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This package is not available at the selected branch.',
+            ], 400);
         }
 
         // Use the package's total_sessions (admin-defined), not sum of service pivot quantities
