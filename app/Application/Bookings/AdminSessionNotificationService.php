@@ -75,7 +75,7 @@ final class AdminSessionNotificationService
             'bookings' => 0,
         ];
 
-        $appointment->loadMissing(['service', 'provider']);
+        $appointment->loadMissing(['service', 'provider', 'branch']);
 
         foreach ($this->activeBookingsForAppointment($appointment) as $booking) {
             $stats['bookings']++;

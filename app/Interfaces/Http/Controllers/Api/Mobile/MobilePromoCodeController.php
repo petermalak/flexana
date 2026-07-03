@@ -4,6 +4,7 @@ namespace App\Interfaces\Http\Controllers\Api\Mobile;
 
 use App\Domain\Promo\Enums\PromoApplicableType;
 use App\Http\Controllers\Controller;
+use App\Infrastructure\Persistence\Eloquent\AppointmentModel;
 use App\Infrastructure\Persistence\Eloquent\PromoCodeModel;
 use App\Support\ApiDateTime;
 use Illuminate\Http\JsonResponse;
@@ -66,7 +67,8 @@ class MobilePromoCodeController extends Controller
         /** @var \App\Models\Customer $customer */
         $customer = $request->user();
         $appointmentId = $this->resolveAppointmentId($request);
-        $reason = $promo->invalidReasonForCustomer((int) $customer->id, $context, $appointmentId);
+        $branchId = $this->resolveBranchId($appointmentId);
+        $reason = $promo->invalidReasonForCustomer((int) $customer->id, $context, $appointmentId, $branchId);
         if ($reason !== null) {
             $payload = [
                 'valid' => false,
@@ -86,6 +88,10 @@ class MobilePromoCodeController extends Controller
                 'wrong_appointment' => response()->json([
                     ...$payload,
                     'message' => (string) config('promo.wrong_appointment_message', 'This promo code is not valid for the selected session.'),
+                ], 200),
+                'wrong_branch' => response()->json([
+                    ...$payload,
+                    'message' => (string) config('promo.wrong_branch_message', 'This promo code is not valid for the selected branch.'),
                 ], 200),
                 'not_yet_valid' => response()->json([
                     ...$payload,
@@ -155,6 +161,19 @@ class MobilePromoCodeController extends Controller
         return (int) $raw;
     }
 
+    private function resolveBranchId(?int $appointmentId): ?int
+    {
+        if ($appointmentId === null) {
+            return null;
+        }
+
+        $branchId = AppointmentModel::query()
+            ->whereKey($appointmentId)
+            ->value('branch_id');
+
+        return $branchId !== null ? (int) $branchId : null;
+    }
+
     private function wrongTypeMessage(PromoCodeModel $promo): string
     {
         $messages = config('promo.wrong_type_messages', []);
@@ -167,6 +186,7 @@ class MobilePromoCodeController extends Controller
     {
         $usesByYou = $customerId !== null ? $promo->redemptionCountForCustomer($customerId) : null;
         $restrictedToAppointments = $promo->isRestrictedToAppointments();
+        $restrictedToBranches = $promo->isRestrictedToBranches();
 
         return [
             'id' => $promo->id,
@@ -179,6 +199,12 @@ class MobilePromoCodeController extends Controller
                 ? ($promo->relationLoaded('appointments')
                     ? $promo->appointments->pluck('id')->map(fn ($id) => (int) $id)->values()->all()
                     : $promo->appointments()->pluck('appointments.id')->map(fn ($id) => (int) $id)->values()->all())
+                : [],
+            'restricted_to_branches' => $restrictedToBranches,
+            'allowed_branch_ids' => $restrictedToBranches
+                ? ($promo->relationLoaded('branches')
+                    ? $promo->branches->pluck('id')->map(fn ($id) => (int) $id)->values()->all()
+                    : $promo->branches()->pluck('branches.id')->map(fn ($id) => (int) $id)->values()->all())
                 : [],
             'valid_from' => ApiDateTime::toBusinessIso8601($promo->valid_from),
             'valid_from_utc' => ApiDateTime::toUtcIso8601($promo->valid_from),

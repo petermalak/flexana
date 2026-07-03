@@ -62,6 +62,34 @@ class PromoCodeModel extends Model
         )->withTimestamps();
     }
 
+    public function branches(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            BranchModel::class,
+            'branch_promo_code',
+            'promo_code_id',
+            'branch_id',
+        )->withTimestamps();
+    }
+
+    public function isRestrictedToBranches(): bool
+    {
+        if ($this->relationLoaded('branches')) {
+            return $this->branches->isNotEmpty();
+        }
+
+        return $this->branches()->exists();
+    }
+
+    public function appliesToBranch(?int $branchId): bool
+    {
+        if ($branchId === null || ! $this->isRestrictedToBranches()) {
+            return true;
+        }
+
+        return $this->branches()->whereKey($branchId)->exists();
+    }
+
     public function isRestrictedToAppointments(): bool
     {
         if ($this->relationLoaded('appointments')) {
@@ -110,13 +138,14 @@ class PromoCodeModel extends Model
         int $customerId,
         PromoApplicableType $context,
         ?int $appointmentId = null,
+        ?int $branchId = null,
     ): ?self {
         $promo = static::findByCode($code);
         if (! $promo) {
             return null;
         }
 
-        if ($promo->invalidReasonForCustomer($customerId, $context, $appointmentId) !== null) {
+        if ($promo->invalidReasonForCustomer($customerId, $context, $appointmentId, $branchId) !== null) {
             return null;
         }
 
@@ -133,12 +162,13 @@ class PromoCodeModel extends Model
      * Why the code cannot be used for this customer, or null if valid.
      * Per-user usage limit replaces the old global usage_limit / used_count cap.
      *
-     * @return 'inactive'|'not_yet_valid'|'expired'|'usage_limit_reached'|'wrong_type'|'wrong_appointment'|null
+     * @return 'inactive'|'not_yet_valid'|'expired'|'usage_limit_reached'|'wrong_type'|'wrong_appointment'|'wrong_branch'|null
      */
     public function invalidReasonForCustomer(
         ?int $customerId = null,
         ?PromoApplicableType $context = null,
         ?int $appointmentId = null,
+        ?int $branchId = null,
     ): ?string {
         if (! $this->is_active) {
             return 'inactive';
@@ -154,6 +184,14 @@ class PromoCodeModel extends Model
             && ! $this->appliesToAppointment($appointmentId)
         ) {
             return 'wrong_appointment';
+        }
+
+        if (
+            $branchId !== null
+            && $context !== PromoApplicableType::Packages
+            && ! $this->appliesToBranch($branchId)
+        ) {
+            return 'wrong_branch';
         }
 
         $tz = (string) config('promo.calendar_timezone', 'UTC');
@@ -184,8 +222,9 @@ class PromoCodeModel extends Model
         int $customerId,
         ?PromoApplicableType $context = null,
         ?int $appointmentId = null,
+        ?int $branchId = null,
     ): bool {
-        return $this->invalidReasonForCustomer($customerId, $context, $appointmentId) === null;
+        return $this->invalidReasonForCustomer($customerId, $context, $appointmentId, $branchId) === null;
     }
 
     /**

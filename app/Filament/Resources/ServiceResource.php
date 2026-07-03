@@ -7,12 +7,15 @@ use App\Filament\Resources\ServiceResource\Pages;
 use App\Models\Category;
 use App\Models\Service;
 use App\Support\BranchContext;
+use App\Support\ServiceBranchPricing;
 use Filament\Forms;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Schemas\Components;
 use Filament\Schemas\Components\Tabs;
 use Filament\Schemas\Components\Tabs\Tab;
+use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\Utilities\Set;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables;
 use Filament\Tables\Table;
@@ -93,7 +96,15 @@ class ServiceResource extends Resource
                                             ->preload()
                                             ->required()
                                             ->default(fn () => ($branchId = BranchContext::scopedBranchId()) ? [$branchId] : null)
-                                            ->helperText('Select which branches offer this service.'),
+                                            ->helperText('Select which branches offer this service.')
+                                            ->live()
+                                            ->afterStateUpdated(function ($state, Set $set, Get $get): void {
+                                                $set('branch_prices', ServiceBranchPricing::rowsForSelectedBranches(
+                                                    is_array($state) ? $state : [],
+                                                    (float) ($get('price') ?? 0),
+                                                    is_array($get('branch_prices')) ? $get('branch_prices') : [],
+                                                ));
+                                            }),
                                     ])->columns(2),
                             ]),
                         Tab::make('Pricing & capacity')
@@ -107,7 +118,8 @@ class ServiceResource extends Resource
                                             ->numeric()
                                             ->prefix('$')
                                             ->required()
-                                            ->default(0),
+                                            ->default(0)
+                                            ->helperText('Default drop-in price when a branch-specific price is not set.'),
                                         Forms\Components\TextInput::make('duration')
                                             ->numeric()
                                             ->label('Duration (seconds)')
@@ -141,6 +153,45 @@ class ServiceResource extends Resource
                                             ->default(0)
                                             ->helperText('Sort order in lists'),
                                     ])->columns(3),
+                                Components\Section::make('Branch pricing')
+                                    ->description('Optional drop-in price per branch. Uses the default price above when a branch row is omitted.')
+                                    ->icon(Heroicon::OutlinedBuildingOffice2)
+                                    ->schema([
+                                        Forms\Components\Repeater::make('branch_prices')
+                                            ->label('Prices by branch')
+                                            ->schema([
+                                                Forms\Components\Select::make('branch_id')
+                                                    ->label('Branch')
+                                                    ->options(fn () => \App\Models\Branch::query()
+                                                        ->when(
+                                                            ($branchId = BranchContext::scopedBranchId()),
+                                                            fn ($query) => $query->whereKey($branchId),
+                                                            fn ($query) => $query
+                                                                ->where('is_active', true)
+                                                                ->orderBy('sort_order')
+                                                                ->orderBy('name'),
+                                                        )
+                                                        ->pluck('name', 'id')
+                                                        ->mapWithKeys(fn ($name, $id) => [(string) $id => $name])
+                                                        ->all())
+                                                    ->searchable()
+                                                    ->required()
+                                                    ->disabled()
+                                                    ->dehydrated(),
+                                                Forms\Components\TextInput::make('price')
+                                                    ->label('Drop-in price')
+                                                    ->numeric()
+                                                    ->prefix('$')
+                                                    ->required(),
+                                            ])
+                                            ->columns(2)
+                                            ->default([])
+                                            ->addable(false)
+                                            ->deletable(false)
+                                            ->reorderable(false)
+                                            ->helperText('One price row per selected branch. Update the default price above, then adjust branch rows if needed.'),
+                                    ])
+                                    ->visible(fn (Get $get): bool => ! empty($get('branches'))),
                             ]),
                         Tab::make('Images')
                             ->icon(Heroicon::OutlinedPhoto)
@@ -315,7 +366,20 @@ class ServiceResource extends Resource
                     ->preload(),
             ])
             ->actions([
-                Actions\EditAction::make(),
+                Actions\EditAction::make()
+                    ->mountUsing(function (Actions\EditAction $action, Service $record): void {
+                        $record->loadMissing('branches');
+
+                        $action->fillForm([
+                            ...$record->attributesToArray(),
+                            'branches' => $record->branches->pluck('id')->map(fn ($id) => (string) $id)->all(),
+                            'branch_prices' => ServiceBranchPricing::formRows($record),
+                        ]);
+                    })
+                    ->after(function (Service $record, array $data): void {
+                        ServiceBranchPricing::ensurePivotPricesForBranches($record, $data['branches'] ?? []);
+                        ServiceBranchPricing::applyPivotPrices($record, $data['branch_prices'] ?? []);
+                    }),
             ])
             ->bulkActions([
                 Actions\BulkActionGroup::make([

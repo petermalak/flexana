@@ -103,7 +103,30 @@ class ServiceModel extends Model
     public function branches(): BelongsToMany
     {
         return $this->belongsToMany(BranchModel::class, 'branch_service', 'service_id', 'branch_id')
+            ->withPivot(['price'])
             ->withTimestamps();
+    }
+
+    public function priceForBranch(?int $branchId): float
+    {
+        if ($branchId) {
+            if ($this->relationLoaded('branches')) {
+                $branch = $this->branches->firstWhere('id', $branchId);
+                if ($branch?->pivot?->price !== null) {
+                    return (float) $branch->pivot->price;
+                }
+            } else {
+                $pivotPrice = $this->branches()
+                    ->whereKey($branchId)
+                    ->value('branch_service.price');
+
+                if ($pivotPrice !== null) {
+                    return (float) $pivotPrice;
+                }
+            }
+        }
+
+        return (float) ($this->price ?? 0);
     }
 }
 

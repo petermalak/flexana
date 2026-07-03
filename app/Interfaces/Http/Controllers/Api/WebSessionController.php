@@ -138,7 +138,7 @@ class WebSessionController extends Controller
                 'instructor' => $provider ? $provider->name : '',
                 'service' => $service ? $service->name : '',
                 'serviceType' => $serviceType,
-                'price' => $service ? (float) ($service->price ?? 0) : 0.0,
+                'price' => $service ? $service->priceForBranch($appointment->branch_id ? (int) $appointment->branch_id : null) : 0.0,
                 'date' => ApiDateTime::toBusinessIso8601($appointment->booking_start),
                 'dateUtc' => ApiDateTime::toUtcIso8601($appointment->booking_start),
                 'isBooked' => $isBooked,

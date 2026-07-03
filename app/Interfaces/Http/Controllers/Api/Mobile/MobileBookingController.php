@@ -13,9 +13,10 @@ use App\Infrastructure\Persistence\Eloquent\PromoCodeModel;
 use App\Infrastructure\Persistence\Eloquent\ServiceModel;
 use App\Models\Customer;
 use App\Support\ApiDateTime;
+use App\Support\BookingConfirmationEmailText;
+use App\Support\PackagePurchaseLifecycle;
 use App\Support\ValidPackagePurchaseFinder;
 use App\Support\InternalNotificationMail;
-use App\Support\PromoEmailText;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -198,7 +199,7 @@ class MobileBookingController extends Controller
             $packageId = $purchaseToUse->package_id;
             $customerPackagePurchaseId = $purchaseToUse->id;
         } else {
-            $servicePrice = $service ? (float) ($service->price ?? 0) : 0;
+            $servicePrice = $service ? $service->priceForBranch($appointment->branch_id ? (int) $appointment->branch_id : null) : 0;
             $subtotalBeforePromo = $servicePrice * $spots;
             $totalPrice = $subtotalBeforePromo;
             $promoRecord = null;
@@ -208,6 +209,7 @@ class MobileBookingController extends Controller
                     (int) $customer->id,
                     PromoApplicableType::DropIns,
                     $sessionID,
+                    $appointment->branch_id ? (int) $appointment->branch_id : null,
                 );
                 if ($promoRecord) {
                     $totalPrice = $totalPrice * (1 - (float) $promoRecord->percent_discount / 100);
@@ -252,6 +254,7 @@ class MobileBookingController extends Controller
 
             if ($purchaseToUse) {
                 $purchaseToUse->decrement('remaining_sessions', $spots);
+                PackagePurchaseLifecycle::afterSessionsConsumed($purchaseToUse);
             }
 
             \App\Infrastructure\Persistence\Eloquent\PaymentModel::query()->create([
@@ -473,47 +476,15 @@ class MobileBookingController extends Controller
             return;
         }
 
-        $service = $appointment->service;
-        $provider = $appointment->provider;
-
         $customerName = trim(($customer->first_name ?? '') . ' ' . ($customer->last_name ?? ''));
         $customerName = $customerName !== '' ? $customerName : ($customer->email ?? 'Customer');
 
-        $appointmentDate = ApiDateTime::formatInBusinessTimezone($appointment->booking_start, 'Y-m-d');
-        $appointmentTime = ApiDateTime::formatInBusinessTimezone($appointment->booking_start, 'H:i');
-
-        $promoLines = $promo !== null
-            ? PromoEmailText::appliedSection(
-                $promo,
-                $subtotalBeforePromo ?? (float) $booking->total_amount,
-                (float) $booking->total_amount,
-            )
-            : '';
-
-        $body = "Thank you for booking with Flexana!\n\n"
-            . "Booking Details\n\n"
-            . "* Name: {$customerName},\n\n"
-            . "* Email: {$customer->email}\n\n"
-            . "* Phone: {$customer->phone}\n\n"
-            . "* Spots: " . ((int) ($booking->party_size ?? 1)) . "\n\n"
-            . "* Class: " . ($service?->name ?? 'Unknown') . "\n\n"
-            . "* Day: {$appointmentDate}\n\n"
-            . "* Time: {$appointmentTime}\n\n"
-            . "* Instructor: " . ($provider?->name ?? 'Unknown') . "\n\n"
-            . "* Type: " . ($service?->description ?? '') . "\n\n"
-            . $promoLines
-            . "If you need to cancel, please do so at least 24 hours in advance via your Flexana account or by contacting us directly.\n\n"
-            . "You can contact us at +20 122 0221100 to reschedule your session or request a refund.\n\n"
-            . "We look forward to seeing you on the mat!\n\n"
-            . "Flexana Team";
-
-        $subject = 'Your Flexana booking confirmation';
-
         InternalNotificationMail::sendCustomerAndInternalCopy(
-            $body,
-            $subject,
+            BookingConfirmationEmailText::body($booking, $appointment, $customer, $promo, $subtotalBeforePromo),
+            BookingConfirmationEmailText::customerSubject(),
             $customer->email,
             $customerName,
+            BookingConfirmationEmailText::internalSubject($appointment),
         );
     }
 

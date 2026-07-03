@@ -56,6 +56,7 @@ class BranchModel extends Model
     public function services(): BelongsToMany
     {
         return $this->belongsToMany(ServiceModel::class, 'branch_service', 'branch_id', 'service_id')
+            ->withPivot(['price'])
             ->withTimestamps();
     }
 }

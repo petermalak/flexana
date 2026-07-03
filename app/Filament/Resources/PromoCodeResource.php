@@ -99,6 +99,30 @@ class PromoCodeResource extends Resource
                         [PromoApplicableType::DropIns->value, PromoApplicableType::Both->value],
                         true,
                     )),
+                Components\Section::make('Branch restrictions')
+                    ->description('Optional. Limit this code to specific branches.')
+                    ->icon(Heroicon::OutlinedBuildingOffice2)
+                    ->schema([
+                        Forms\Components\Select::make('branches')
+                            ->label('Allowed branches')
+                            ->relationship(
+                                'branches',
+                                'name',
+                                fn ($query) => $query
+                                    ->where('is_active', true)
+                                    ->orderBy('sort_order')
+                                    ->orderBy('name'),
+                            )
+                            ->multiple()
+                            ->searchable()
+                            ->preload()
+                            ->helperText('Leave empty to allow any branch. Select one or more branches to restrict where this code works.'),
+                    ])
+                    ->visible(fn (Get $get): bool => in_array(
+                        $get('applicable_to'),
+                        [PromoApplicableType::DropIns->value, PromoApplicableType::Both->value],
+                        true,
+                    )),
                 Components\Section::make('Validity')
                     ->schema([
                         Forms\Components\DateTimePicker::make('valid_from')
@@ -142,6 +166,11 @@ class PromoCodeResource extends Resource
                     ->label('Sessions')
                     ->counts('appointments')
                     ->formatStateUsing(fn (int $state): string => $state > 0 ? "{$state} session(s)" : 'Any')
+                    ->toggleable(),
+                Tables\Columns\TextColumn::make('branches_count')
+                    ->label('Branches')
+                    ->counts('branches')
+                    ->formatStateUsing(fn (int $state): string => $state > 0 ? "{$state} branch(es)" : 'Any')
                     ->toggleable(),
                 Tables\Columns\TextColumn::make('used_count')
                     ->label('Total uses')

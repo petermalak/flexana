@@ -34,4 +34,6 @@ return [
 
     'wrong_appointment_message' => 'This promo code is not valid for the selected session.',
 
+    'wrong_branch_message' => 'This promo code is not valid for the selected branch.',
+
 ];

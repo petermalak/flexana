@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use App\Support\PackagePurchaseLifecycle;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -132,6 +133,7 @@ class BookingModel extends Model
                 }
 
                 $purchase->decrement('remaining_sessions', $spots);
+                PackagePurchaseLifecycle::afterSessionsConsumed($purchase);
                 $fresh->updateQuietly(['customer_package_purchase_id' => $purchase->id]);
             });
         });

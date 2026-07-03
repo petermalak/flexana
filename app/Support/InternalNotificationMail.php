@@ -20,6 +20,7 @@ final class InternalNotificationMail
         string $subject,
         string $customerEmail,
         string $customerName = '',
+        ?string $internalSubject = null,
     ): void {
         Mail::raw($body, function ($message) use ($customerEmail, $customerName, $subject): void {
             if ($customerName !== '') {
@@ -31,7 +32,7 @@ final class InternalNotificationMail
         });
 
         try {
-            self::sendCopy($body, $subject);
+            self::sendCopy($body, $internalSubject ?? $subject);
         } catch (\Throwable $e) {
             report($e);
         }

@@ -10,6 +10,7 @@ use App\Infrastructure\Persistence\Eloquent\CustomerPackagePurchaseModel;
 use App\Infrastructure\Persistence\Eloquent\PaymentModel;
 use App\Infrastructure\Persistence\Eloquent\PromoCodeModel;
 use App\Infrastructure\Persistence\Eloquent\ServiceModel;
+use App\Support\PackagePurchaseLifecycle;
 use App\Support\ValidPackagePurchaseFinder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -85,7 +86,7 @@ final class AdminSessionBookingService
             $packageId = $purchaseToUse->package_id;
             $customerPackagePurchaseId = $purchaseToUse->id;
         } else {
-            $servicePrice = $service ? (float) ($service->price ?? 0) : 0.0;
+            $servicePrice = $service ? $service->priceForBranch($appointment->branch_id ? (int) $appointment->branch_id : null) : 0.0;
             $subtotalBeforePromo = $servicePrice * $spots;
             $totalPrice = $subtotalBeforePromo;
 
@@ -95,6 +96,7 @@ final class AdminSessionBookingService
                     $customerId,
                     PromoApplicableType::DropIns,
                     (int) $appointment->id,
+                    $appointment->branch_id ? (int) $appointment->branch_id : null,
                 );
                 if ($promoRecord) {
                     $totalPrice = $totalPrice * (1 - (float) $promoRecord->percent_discount / 100);
@@ -150,6 +152,7 @@ final class AdminSessionBookingService
 
             if ($purchaseToUse) {
                 $purchaseToUse->decrement('remaining_sessions', $spots);
+                PackagePurchaseLifecycle::afterSessionsConsumed($purchaseToUse);
             }
 
             // Mobile parity: payment row is created with status=paid/provider=on_site.

@@ -161,7 +161,11 @@ final class AutoSyncAmeliaService
             ->pluck('id');
 
         if ($branchIds->isNotEmpty()) {
-            $service->branches()->sync($branchIds);
+            $service->branches()->sync(
+                $branchIds->mapWithKeys(fn ($id) => [
+                    (int) $id => ['price' => (float) ($service->price ?? 0)],
+                ])->all(),
+            );
         }
     }
 
