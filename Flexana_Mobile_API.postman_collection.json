@@ -2,7 +2,7 @@
 	"info": {
 		"_postman_id": "flexana-mobile-api-v1",
 		"name": "Flexana Mobile API (v1)",
-		"description": "Flexana mobile app API (updated Jun 2026).\n\nAuth: Login with email OR phone + password. Signup: phone+email → OTP via email → verify (email+code). OTPs for signup, password reset, and email change are sent by email. Forgot/reset password accepts email OR phone (OTP always goes to account email).\n\nProfile: phone updates directly on PUT auth/me; email change requires OTP via send-email-change-code.\n\nPackage booking: isDropIn=false only allowed when session date is on/before package expiry.\n\nVariables: base_url, bearer_token (auto-set), signup_email, test_email, test_phone.\n\nImport Flexana_Mobile_API.postman_environment.json and pick Local or Production.",
+		"description": "Flexana mobile app API (updated Jul 2026).\n\nAuth: Login with email OR phone + password. Signup: phone+email → OTP via email → verify (email+code).\n\nBranches: GET /branches returns id + name + image + address + mapUrl. Use branchId on sessions, package-offers, service (branch-specific drop-in price), and purchase-package.\n\nPackages: GET /package-offers?branchId= filters by branch; each package includes branchIds + branchName.\n\nPromos: drop-in codes can be restricted to appointments and/or branches — pass sessionID on verify for drop-ins.\n\nPackage booking: isDropIn=false only allowed when session date is on/before package expiry.\n\nVariables: base_url, bearer_token (auto-set), branch_id, signup_email, test_email, test_phone.\n\nImport Flexana_Mobile_API.postman_environment.json and pick Local or Production.",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"auth": {
@@ -593,10 +593,10 @@
 						"method": "GET",
 						"header": [],
 						"url": { "raw": "{{base_url}}/api/v1/branches", "host": ["{{base_url}}"], "path": ["api", "v1", "branches"] },
-						"description": "Get active studio branches. Response: [{ name, image, address, mapUrl }, ...]. image is full URL (or null). mapUrl is a Google Maps link. Requires Bearer."
+						"description": "Get active studio branches. Response: [{ id, name, image, address, mapUrl }, ...]. id is the branchId for sessions, packages, and filters. image is full URL (or null). mapUrl is a Google Maps link. Requires Bearer."
 					},
 					"response": [
-						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "[{\"name\":\"Main Studio\",\"image\":\"https://example.com/serve-storage.php?path=branches%2Fmain.jpg\",\"address\":\"123 Fitness St\",\"mapUrl\":\"https://maps.google.com/?q=123+Fitness+St\"},{\"name\":\"Downtown Branch\",\"image\":\"https://example.com/serve-storage.php?path=branches%2Fdowntown.jpg\",\"address\":\"456 Center Ave\",\"mapUrl\":\"https://maps.app.goo.gl/abc123\"}]" }
+						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "[{\"id\":\"1\",\"name\":\"Main Studio\",\"image\":\"https://example.com/serve-storage.php?path=branches%2Fmain.jpg\",\"address\":\"123 Fitness St\",\"mapUrl\":\"https://maps.google.com/?q=123+Fitness+St\"},{\"id\":\"2\",\"name\":\"Downtown Branch\",\"image\":\"https://example.com/serve-storage.php?path=branches%2Fdowntown.jpg\",\"address\":\"456 Center Ave\",\"mapUrl\":\"https://maps.app.goo.gl/abc123\"}]" }
 					]
 				},
 				{
@@ -636,8 +636,15 @@
 					"request": {
 						"method": "GET",
 						"header": [],
-						"url": { "raw": "{{base_url}}/api/v1/service", "host": ["{{base_url}}"], "path": ["api", "v1", "service"] },
-						"description": "Response: categories for home screen. Format: [{ category: \"Yoga\" | \"Reformer Pilates\", services: [{ id, name, level, image, brief }, ...] }, ...]. Requires Bearer."
+						"url": {
+							"raw": "{{base_url}}/api/v1/service?branchId={{branch_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "service"],
+							"query": [
+								{ "key": "branchId", "value": "{{branch_id}}", "description": "Optional. When set, each service price reflects the drop-in price for that branch (from admin branch pricing)." }
+							]
+						},
+						"description": "Response: categories for home screen. Format: [{ category: \"Yoga\" | \"Reformer Pilates\", services: [{ id, name, level, image, brief, price, ... }, ...] }, ...]. Optional query branchId for branch-specific drop-in price. Requires Bearer."
 					},
 					"response": [
 						{
@@ -804,7 +811,7 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "v1", "package-offers"]
 						},
-						"description": "Package offers grouped by category. Optional query: branchId — return only packages sold at that branch. Each package includes branchIds. Response: { data: [{ categoryId, categoryName, slug, packages: [{ id, name, price, sessions, description, expirationMonths, expirationDays, serviceType, classFormat, packageDuration, packageDurationDays, branchIds }, ...] }, ...] }. expirationDays / packageDurationDays: exact day-based expiry when set in admin (e.g. 30-day unlimited). Requires Bearer."
+						"description": "Package offers grouped by category. Optional query: branchId — return only packages sold at that branch; each package includes branchName for that branch. Response: { data: [{ categoryId, categoryName, slug, packages: [{ id, name, price, sessions, description, expirationMonths, expirationDays, serviceType, classFormat, packageDuration, packageDurationDays, branchIds, branchName }, ...] }, ...] }. expirationDays / packageDurationDays: exact day-based expiry when set in admin (e.g. 30-day unlimited). Requires Bearer."
 					},
 					"response": [
 						{ "name": "Success (grouped by category)", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"data\":[{\"categoryId\":\"2\",\"categoryName\":\"Reformer\",\"slug\":\"reformer\",\"packages\":[{\"id\":17,\"name\":\"Test\",\"price\":300,\"sessions\":10,\"description\":\"test\",\"expirationMonths\":0,\"expirationDays\":null,\"serviceType\":\"Reformer Pilates\",\"classFormat\":null,\"packageDuration\":3,\"packageDurationDays\":null}]},{\"categoryId\":\"1\",\"categoryName\":\"Yoga  & Mat Pilates Classes\",\"slug\":\"yoga-mat-pilates-classes\",\"packages\":[{\"id\":1,\"name\":\"30 Day Unlimited\",\"price\":500,\"sessions\":999,\"description\":\"Unlimited yoga\",\"expirationMonths\":0,\"expirationDays\":30,\"serviceType\":\"Yoga\",\"classFormat\":\"Yoga\",\"packageDuration\":null,\"packageDurationDays\":30}]}]}" },

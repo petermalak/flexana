@@ -10,7 +10,7 @@ class MobileBranchController extends Controller
 {
     /**
      * Get active branches for the mobile app.
-     * Response: [{ name, image, address, mapUrl }, ...]
+     * Response: [{ id, name, image, address, mapUrl }, ...]
      */
     public function index(): JsonResponse
     {
@@ -20,6 +20,7 @@ class MobileBranchController extends Controller
             ->orderBy('name')
             ->get()
             ->map(fn (Branch $branch): array => [
+                'id' => (string) $branch->getKey(),
                 'name' => $branch->name ?? '',
                 'image' => self::fullImageUrl($branch->image_url),
                 'address' => $branch->address ?? '',

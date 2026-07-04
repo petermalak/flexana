@@ -9,6 +9,7 @@ use App\Infrastructure\Persistence\Eloquent\CustomerPackagePurchaseModel;
 use App\Infrastructure\Persistence\Eloquent\PackageModel;
 use App\Infrastructure\Persistence\Eloquent\PaymentModel;
 use App\Infrastructure\Persistence\Eloquent\PromoCodeModel;
+use App\Models\Branch;
 use App\Models\Category;
 use App\Models\Customer;
 use App\Support\InternalNotificationMail;
@@ -30,6 +31,9 @@ class MobilePackageController extends Controller
     public function index(Request $request): JsonResponse
     {
         $branchId = $request->filled('branchId') ? (int) $request->query('branchId') : null;
+        $branchName = $branchId !== null
+            ? (string) (Branch::query()->whereKey($branchId)->value('name') ?? '')
+            : null;
 
         $categories = Category::query()
             ->where('status', true)
@@ -53,7 +57,7 @@ class MobilePackageController extends Controller
         $uncategorized = [];
 
         foreach ($packages as $package) {
-            $item = $this->mapPackageToItem($package);
+            $item = $this->mapPackageToItem($package, $branchId, $branchName);
             $categoryIds = $this->packageCategoryIds($package);
             $resolvedCategoryId = $this->resolveCategoryForPackage($package, $categoryIds, $categories);
 
@@ -165,8 +169,11 @@ class MobilePackageController extends Controller
     /**
      * Map a package model to the API item shape.
      */
-    private function mapPackageToItem(PackageModel $package): array
-    {
+    private function mapPackageToItem(
+        PackageModel $package,
+        ?int $branchId = null,
+        ?string $branchName = null,
+    ): array {
         $sessions = (int) ($package->total_sessions ?? 0);
         $durationDays = (int) ($package->package_duration_days ?? 0);
         $durationMonths = (int) ($package->package_duration ?? 0);
@@ -199,7 +206,29 @@ class MobilePackageController extends Controller
             'branchIds' => $package->relationLoaded('branches')
                 ? $package->branches->pluck('id')->map(fn ($id) => (string) $id)->values()->all()
                 : $package->branches()->pluck('branches.id')->map(fn ($id) => (string) $id)->values()->all(),
+            'branchName' => $this->packageBranchName($package, $branchId, $branchName),
         ];
+    }
+
+    private function packageBranchName(
+        PackageModel $package,
+        ?int $branchId,
+        ?string $branchName,
+    ): string {
+        if ($branchId !== null && $branchName !== null && $branchName !== '') {
+            return $branchName;
+        }
+
+        if ($branchId !== null) {
+            $package->loadMissing('branches');
+            $matched = $package->branches->firstWhere('id', $branchId);
+
+            return (string) ($matched?->name ?? '');
+        }
+
+        $package->loadMissing('branches');
+
+        return $package->branches->pluck('name')->filter()->implode(', ');
     }
 
     /**
