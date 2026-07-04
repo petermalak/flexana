@@ -597,6 +597,20 @@
 					},
 					"response": [
 						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "[{\"id\":\"1\",\"name\":\"Main Studio\",\"image\":\"https://example.com/serve-storage.php?path=branches%2Fmain.jpg\",\"address\":\"123 Fitness St\",\"mapUrl\":\"https://maps.google.com/?q=123+Fitness+St\"},{\"id\":\"2\",\"name\":\"Downtown Branch\",\"image\":\"https://example.com/serve-storage.php?path=branches%2Fdowntown.jpg\",\"address\":\"456 Center Ave\",\"mapUrl\":\"https://maps.app.goo.gl/abc123\"}]" }
+					],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"const branches = pm.response.json();",
+									"if (Array.isArray(branches) && branches[0] && branches[0].id) {",
+									"    pm.collectionVariables.set('branch_id', String(branches[0].id));",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
 					]
 				},
 				{
@@ -718,7 +732,7 @@
 								{ "key": "page", "value": "1", "description": "Page number" }
 							]
 						},
-						"description": "Paginated sessions (appointments). Filter by date (YYYY-MM-DD), category (Yoga or Reformer Pilates — accepts yoga, reformer, reformer-pilates), instructorID, branchId. Response: { data: [{ id, bookingId, branchId, branchName, instructor, service, serviceType, price, date, dateUtc, isBooked, isFull, remainingSpots, canCancel, canBook, willPay, minutesBeforeCancellation }, ...], meta }. branchId/branchName come from the appointment branch (default branch used when none selected). remainingSpots = seats left (confirmed+pending count toward capacity). When a booking is cancelled (app or admin), spots reopen immediately. Requires Bearer."
+						"description": "Paginated sessions (appointments). Filter by date (YYYY-MM-DD), category (Yoga or Reformer Pilates — accepts yoga, reformer, reformer-pilates), instructorID, branchId. price uses branch-specific drop-in pricing when configured in admin. Response: { data: [{ id, bookingId, branchId, branchName, instructor, service, serviceType, price, date, dateUtc, isBooked, isFull, remainingSpots, canCancel, canBook, willPay, minutesBeforeCancellation }, ...], meta }. branchId/branchName come from the appointment branch (default branch used when none selected). remainingSpots = seats left (confirmed+pending count toward capacity). When a booking is cancelled (app or admin), spots reopen immediately. Requires Bearer."
 					},
 					"response": [
 						{ "name": "Success (all sessions for date)", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"data\":[{\"id\":\"1\",\"bookingId\":null,\"branchId\":\"1\",\"branchName\":\"Main Studio\",\"instructor\":\"John\",\"service\":\"Vinyasa-Ladies only\",\"serviceType\":\"Yoga\",\"price\":200,\"date\":\"2024-01-20T10:00:00.000000Z\",\"isBooked\":false,\"isFull\":false,\"remainingSpots\":5,\"canCancel\":false,\"canBook\":true,\"willPay\":false,\"minutesBeforeCancellation\":60},{\"id\":\"2\",\"bookingId\":null,\"branchId\":\"2\",\"branchName\":\"Downtown Branch\",\"instructor\":\"Jane\",\"service\":\"Reformer Pilates - Ladies only L1\",\"serviceType\":\"Reformer Pilates\",\"price\":250,\"date\":\"2024-01-20T14:00:00.000000Z\",\"isBooked\":false,\"isFull\":false,\"remainingSpots\":3,\"canCancel\":false,\"canBook\":true,\"willPay\":true,\"minutesBeforeCancellation\":60}],\"meta\":{\"current_page\":1,\"last_page\":1,\"per_page\":15,\"total\":2}}" },
@@ -811,11 +825,30 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "v1", "package-offers"]
 						},
-						"description": "Package offers grouped by category. Optional query: branchId — return only packages sold at that branch; each package includes branchName for that branch. Response: { data: [{ categoryId, categoryName, slug, packages: [{ id, name, price, sessions, description, expirationMonths, expirationDays, serviceType, classFormat, packageDuration, packageDurationDays, branchIds, branchName }, ...] }, ...] }. expirationDays / packageDurationDays: exact day-based expiry when set in admin (e.g. 30-day unlimited). Requires Bearer."
+						"description": "Package offers grouped by category (all branches). Response: { data: [{ categoryId, categoryName, slug, packages: [{ id, name, price, sessions, description, expirationMonths, expirationDays, serviceType, classFormat, packageDuration, packageDurationDays, branchIds, branchName }, ...] }, ...] }. branchIds = branches that sell the package. branchName = comma-separated branch names when no branchId filter. expirationDays / packageDurationDays: exact day-based expiry when set in admin (e.g. 30-day unlimited). Requires Bearer."
 					},
 					"response": [
-						{ "name": "Success (grouped by category)", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"data\":[{\"categoryId\":\"2\",\"categoryName\":\"Reformer\",\"slug\":\"reformer\",\"packages\":[{\"id\":17,\"name\":\"Test\",\"price\":300,\"sessions\":10,\"description\":\"test\",\"expirationMonths\":0,\"expirationDays\":null,\"serviceType\":\"Reformer Pilates\",\"classFormat\":null,\"packageDuration\":3,\"packageDurationDays\":null}]},{\"categoryId\":\"1\",\"categoryName\":\"Yoga  & Mat Pilates Classes\",\"slug\":\"yoga-mat-pilates-classes\",\"packages\":[{\"id\":1,\"name\":\"30 Day Unlimited\",\"price\":500,\"sessions\":999,\"description\":\"Unlimited yoga\",\"expirationMonths\":0,\"expirationDays\":30,\"serviceType\":\"Yoga\",\"classFormat\":\"Yoga\",\"packageDuration\":null,\"packageDurationDays\":30}]}]}" },
-						{ "name": "Success (with Uncategorized)", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"data\":[{\"categoryId\":\"2\",\"categoryName\":\"Reformer\",\"slug\":\"reformer\",\"packages\":[]},{\"categoryId\":\"1\",\"categoryName\":\"Yoga  & Mat Pilates Classes\",\"slug\":\"yoga-mat-pilates-classes\",\"packages\":[]},{\"categoryId\":\"\",\"categoryName\":\"Uncategorized\",\"slug\":\"uncategorized\",\"packages\":[{\"id\":1,\"name\":\"Misc Pack\",\"price\":50,\"sessions\":5,\"description\":\"\",\"expirationMonths\":0,\"serviceType\":null,\"classFormat\":null,\"packageDuration\":1}]}]}" }
+						{ "name": "Success (grouped by category)", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"data\":[{\"categoryId\":\"2\",\"categoryName\":\"Reformer\",\"slug\":\"reformer\",\"packages\":[{\"id\":17,\"name\":\"Test\",\"price\":300,\"sessions\":10,\"description\":\"test\",\"expirationMonths\":0,\"expirationDays\":null,\"serviceType\":\"Reformer Pilates\",\"classFormat\":null,\"packageDuration\":3,\"packageDurationDays\":null,\"branchIds\":[\"1\",\"2\"],\"branchName\":\"Main Studio, Downtown Branch\"}]},{\"categoryId\":\"1\",\"categoryName\":\"Yoga  & Mat Pilates Classes\",\"slug\":\"yoga-mat-pilates-classes\",\"packages\":[{\"id\":1,\"name\":\"30 Day Unlimited\",\"price\":500,\"sessions\":999,\"description\":\"Unlimited yoga\",\"expirationMonths\":0,\"expirationDays\":30,\"serviceType\":\"Yoga\",\"classFormat\":\"Yoga\",\"packageDuration\":null,\"packageDurationDays\":30,\"branchIds\":[\"1\"],\"branchName\":\"5th settlement\"}]}]}" },
+						{ "name": "Success (with Uncategorized)", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"data\":[{\"categoryId\":\"2\",\"categoryName\":\"Reformer\",\"slug\":\"reformer\",\"packages\":[]},{\"categoryId\":\"1\",\"categoryName\":\"Yoga  & Mat Pilates Classes\",\"slug\":\"yoga-mat-pilates-classes\",\"packages\":[]},{\"categoryId\":\"\",\"categoryName\":\"Uncategorized\",\"slug\":\"uncategorized\",\"packages\":[{\"id\":1,\"name\":\"Misc Pack\",\"price\":50,\"sessions\":5,\"description\":\"\",\"expirationMonths\":0,\"serviceType\":null,\"classFormat\":null,\"packageDuration\":1,\"branchIds\":[\"1\"],\"branchName\":\"5th settlement\"}]}]}" }
+					]
+				},
+				{
+					"name": "Get Package Offers (by branch)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/package-offers?branchId={{branch_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "package-offers"],
+							"query": [
+								{ "key": "branchId", "value": "{{branch_id}}", "description": "Branch ID from GET /branches. Returns only packages sold at this branch." }
+							]
+						},
+						"description": "Package offers filtered by branch. Each package includes branchName for the selected branch. Use after GET /branches to pick branchId. Requires Bearer."
+					},
+					"response": [
+						{ "name": "Success (branchId=1)", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"data\":[{\"categoryId\":\"1\",\"categoryName\":\"Yoga  & Mat Pilates Classes\",\"slug\":\"yoga-mat-pilates-classes\",\"packages\":[{\"id\":3,\"name\":\"Package name\",\"price\":1,\"sessions\":10,\"description\":\"Add description for the package\",\"expirationMonths\":3,\"expirationDays\":null,\"serviceType\":\"Yoga\",\"classFormat\":\"Yoga\",\"packageDuration\":3,\"packageDurationDays\":null,\"branchIds\":[\"1\"],\"branchName\":\"5th settlement\"}]}]}" }
 					]
 				},
 				{
@@ -825,23 +858,24 @@
 						"header": [{ "key": "Content-Type", "value": "application/json" }],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"packageId\": 1,\n    \"promoCode\": \"SAVE10\"\n}"
+							"raw": "{\n    \"packageId\": 1,\n    \"promoCode\": \"SAVE10\",\n    \"branchId\": {{branch_id}}\n}"
 						},
 						"url": { "raw": "{{base_url}}/api/v1/purchase-package", "host": ["{{base_url}}"], "path": ["api", "v1", "purchase-package"] },
 						"description": "Purchase one package. Body: packageId (required), promoCode (optional), branchId (optional — rejects purchase if package is not sold at that branch). Package must be active. Requires Bearer."
 					},
 					"response": [
 						{ "name": "Success", "status": "Created", "code": 201, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"message\":\"Package purchased successfully\",\"data\":{\"id\":\"123\",\"packageId\":\"1\",\"customerId\":\"1\"}}" },
+						{ "name": "400 Package not at branch", "status": "Bad Request", "code": 400, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":false,\"message\":\"This package is not available at the selected branch.\"}" },
 						{ "name": "404 Package not found or not available", "status": "Not Found", "code": 404, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":false,\"message\":\"Package not found or not available\"}" },
 						{ "name": "422 Validation failed", "status": "Unprocessable Entity", "code": 422, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":false,\"message\":\"Validation failed\",\"errors\":{\"packageId\":[\"The package id field is required.\"]}}" }
 					]
 				}
 			],
-			"description": "Packages screen. All require Bearer token."
+			"description": "Packages screen. Use GET /branches first, set branch_id variable, then filter package-offers by branchId. All require Bearer token."
 		},
 		{
 			"name": "Promo Code Flow",
-			"description": "Promo codes apply a percentage discount. Each code has applicable_to: both | packages | drop_ins (set in Admin → Promo Codes). Drop-in codes can optionally be restricted to specific appointments in admin. Always verify with IsPackage before applying: true = package purchase, false = drop-in booking. For drop-ins, pass sessionID when verifying if the code is session-restricted. POST /api/v1/promo-codes/verify returns reason wrong_type or wrong_appointment when the code does not match. Then pass promoCode on session-bookings (drop-in only) or purchase-package. Invalid/expired/wrong-type codes are ignored at checkout (full price).",
+			"description": "Promo codes apply a percentage discount. Each code has applicable_to: both | packages | drop_ins (set in Admin → Promo Codes). Drop-in codes can optionally be restricted to specific appointments and/or branches in admin. Always verify with IsPackage before applying: true = package purchase, false = drop-in booking. For drop-ins, pass sessionID when verifying if the code is session- or branch-restricted (branch is resolved from the appointment). POST /api/v1/promo-codes/verify returns reason wrong_type, wrong_appointment, or wrong_branch when the code does not match. Then pass promoCode on session-bookings (drop-in only) or purchase-package. Invalid/expired/wrong-type codes are ignored at checkout (full price).",
 			"item": [
 				{
 					"name": "Verify Promo Code (drop-in)",
@@ -853,11 +887,13 @@
 							"raw": "{\n    \"code\": \"SAVE20\",\n    \"IsPackage\": false,\n    \"sessionID\": 1\n}"
 						},
 						"url": { "raw": "{{base_url}}/api/v1/promo-codes/verify", "host": ["{{base_url}}"], "path": ["api", "v1", "promo-codes", "verify"] },
-						"description": "Validate a promo for drop-in session booking. Body: code (required), IsPackage=false (required), sessionID (optional but required when the promo is restricted to specific appointments). Legacy: context=drop_ins also accepted. Returns valid, reason (not_found | inactive | wrong_type | wrong_appointment | not_yet_valid | expired | usage_limit_reached), message, promo_code (includes applicable_to, restricted_to_appointments, allowed_appointment_ids). Requires Bearer."
+						"description": "Validate a promo for drop-in session booking. Body: code (required), IsPackage=false (required), sessionID (optional but required when the promo is restricted to specific appointments or branches — branch is resolved from the appointment). Legacy: context=drop_ins also accepted. Returns valid, reason (not_found | inactive | wrong_type | wrong_appointment | wrong_branch | not_yet_valid | expired | usage_limit_reached), message, promo_code (includes applicable_to, restricted_to_appointments, allowed_appointment_ids, restricted_to_branches, allowed_branch_ids). Requires Bearer."
 					},
 					"response": [
-						{ "name": "Valid", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"valid\":true,\"message\":\"Promo code is valid.\",\"promo_code\":{\"id\":1,\"code\":\"SAVE20\",\"name\":\"Summer Sale\",\"percent_discount\":20,\"applicable_to\":\"drop_ins\",\"valid_from\":null,\"valid_until\":\"2025-12-31T23:59:59+00:00\",\"usage_limit_per_user\":1,\"uses_by_you\":0,\"used_count_total\":42,\"is_active\":true}}" },
+						{ "name": "Valid", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"valid\":true,\"message\":\"Promo code is valid.\",\"promo_code\":{\"id\":1,\"code\":\"SAVE20\",\"name\":\"Summer Sale\",\"percent_discount\":20,\"applicable_to\":\"drop_ins\",\"restricted_to_appointments\":false,\"allowed_appointment_ids\":[],\"restricted_to_branches\":true,\"allowed_branch_ids\":[1],\"valid_from\":null,\"valid_until\":\"2025-12-31T23:59:59+00:00\",\"usage_limit_per_user\":1,\"uses_by_you\":0,\"used_count_total\":42,\"is_active\":true}}" },
 						{ "name": "Wrong type (packages-only code)", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"valid\":false,\"reason\":\"wrong_type\",\"message\":\"This promo code is only valid for package purchases.\",\"promo_code\":{\"id\":2,\"code\":\"PKG10\",\"name\":\"Package promo\",\"percent_discount\":10,\"applicable_to\":\"packages\",\"is_active\":true}}" },
+						{ "name": "Wrong branch", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"valid\":false,\"reason\":\"wrong_branch\",\"message\":\"This promo code is not valid for the selected branch.\",\"promo_code\":{\"id\":1,\"code\":\"SAVE20\",\"name\":\"Branch promo\",\"percent_discount\":20,\"applicable_to\":\"drop_ins\",\"restricted_to_branches\":true,\"allowed_branch_ids\":[1],\"is_active\":true}}" },
+						{ "name": "Wrong appointment", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"valid\":false,\"reason\":\"wrong_appointment\",\"message\":\"This promo code is not valid for the selected session.\",\"promo_code\":{\"id\":3,\"code\":\"SESSION10\",\"name\":\"Session promo\",\"percent_discount\":10,\"applicable_to\":\"drop_ins\",\"restricted_to_appointments\":true,\"allowed_appointment_ids\":[42],\"is_active\":true}}" },
 						{ "name": "Not found", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"valid\":false,\"reason\":\"not_found\",\"message\":\"Promo code does not exist.\"}" }
 					]
 				},
@@ -901,10 +937,10 @@
 						"header": [{ "key": "Content-Type", "value": "application/json" }],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"packageId\": 1,\n    \"promoCode\": \"SAVE10\"\n}"
+							"raw": "{\n    \"packageId\": 1,\n    \"promoCode\": \"SAVE10\",\n    \"branchId\": {{branch_id}}\n}"
 						},
 						"url": { "raw": "{{base_url}}/api/v1/purchase-package", "host": ["{{base_url}}"], "path": ["api", "v1", "purchase-package"] },
-						"description": "Apply a promo on package purchase. Promo must have applicable_to packages or both — verify first with IsPackage=true. Drop-in-only promos are ignored at checkout. Requires Bearer."
+						"description": "Apply a promo on package purchase. Promo must have applicable_to packages or both — verify first with IsPackage=true. Optional branchId. Drop-in-only promos are ignored at checkout. Requires Bearer."
 					},
 					"response": [
 						{ "name": "Success", "status": "Created", "code": 201, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"message\":\"Package purchased successfully\",\"data\":{\"id\":1,\"packageId\":1,\"customerId\":1}}" }
@@ -999,6 +1035,7 @@
 		{ "key": "base_url_localhost", "value": "http://127.0.0.1:8000", "type": "string", "description": "Local development" },
 		{ "key": "base_url_production", "value": "https://sdhds.net/backend/backend/public", "type": "string", "description": "Production / stage" },
 		{ "key": "bearer_token", "value": "", "type": "string", "description": "Auto-set after Login or Verify" },
+		{ "key": "branch_id", "value": "1", "type": "string", "description": "Branch ID from GET /branches — used for package-offers, sessions, service price, purchase-package" },
 		{ "key": "signup_email", "value": "jane@example.com", "type": "string", "description": "Auto-set after Signup" },
 		{ "key": "test_email", "value": "feloalaa50@gmail.com", "type": "string", "description": "Test account email for login / reset" },
 		{ "key": "test_phone", "value": "+201234567890", "type": "string", "description": "Test account phone (E.164)" },
