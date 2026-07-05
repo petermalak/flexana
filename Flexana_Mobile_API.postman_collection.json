@@ -890,7 +890,7 @@
 							"raw": "{\n    \"code\": \"SAVE20\",\n    \"IsPackage\": false,\n    \"sessionID\": 1\n}"
 						},
 						"url": { "raw": "{{base_url}}/api/v1/promo-codes/verify", "host": ["{{base_url}}"], "path": ["api", "v1", "promo-codes", "verify"] },
-						"description": "Validate a promo for drop-in session booking. Body: code (required), IsPackage=false (required), sessionID (optional but required when the promo is restricted to specific appointments or branches — branch is resolved from the appointment). Legacy: context=drop_ins also accepted. Returns valid, reason (not_found | inactive | wrong_type | wrong_appointment | wrong_branch | not_yet_valid | expired | usage_limit_reached), message, promo_code (includes applicable_to, restricted_to_appointments, allowed_appointment_ids, restricted_to_branches, allowed_branch_ids). Requires Bearer."
+						"description": "Validate a promo for drop-in session booking. Body: code (required), IsPackage=false (required), sessionID (appointment id from schedule — branch is resolved from the session). Legacy: context=drop_ins also accepted. Returns valid, reason (not_found | inactive | wrong_type | wrong_appointment | wrong_branch | wrong_package | not_yet_valid | expired | usage_limit_reached), message, promo_code. Requires Bearer."
 					},
 					"response": [
 						{ "name": "Valid", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"valid\":true,\"message\":\"Promo code is valid.\",\"promo_code\":{\"id\":1,\"code\":\"SAVE20\",\"name\":\"Summer Sale\",\"percent_discount\":20,\"applicable_to\":\"drop_ins\",\"restricted_to_appointments\":false,\"allowed_appointment_ids\":[],\"restricted_to_branches\":true,\"allowed_branch_ids\":[1],\"valid_from\":null,\"valid_until\":\"2025-12-31T23:59:59+00:00\",\"usage_limit_per_user\":1,\"uses_by_you\":0,\"used_count_total\":42,\"is_active\":true}}" },
@@ -907,10 +907,10 @@
 						"header": [{ "key": "Content-Type", "value": "application/json" }],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"code\": \"PKG10\",\n    \"IsPackage\": true,\n    \"packageId\": 1,\n    \"branchId\": {{branch_id}}\n}"
+							"raw": "{\n    \"code\": \"PKG10\",\n    \"IsPackage\": true,\n    \"packageId\": 1\n}"
 						},
 						"url": { "raw": "{{base_url}}/api/v1/promo-codes/verify", "host": ["{{base_url}}"], "path": ["api", "v1", "promo-codes", "verify"] },
-						"description": "Validate a promo for package purchase. Body: code (required), IsPackage=true (required), packageId (required when promo is restricted to specific packages), branchId (required when promo is restricted to branches). Legacy: context=packages also accepted. Requires Bearer."
+						"description": "Validate a promo for package purchase. Body: code (required), IsPackage=true (required), packageId (when promo is package-restricted). Branch is inferred from the package — no branchId needed. Legacy: context=packages also accepted. Requires Bearer."
 					},
 					"response": [
 						{ "name": "Valid", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"valid\":true,\"message\":\"Promo code is valid.\",\"promo_code\":{\"id\":2,\"code\":\"PKG10\",\"name\":\"Package promo\",\"percent_discount\":10,\"applicable_to\":\"packages\",\"restricted_to_packages\":true,\"allowed_package_ids\":[1],\"restricted_to_branches\":true,\"allowed_branch_ids\":[1],\"usage_limit_per_user\":1,\"uses_by_you\":0,\"used_count_total\":5,\"is_active\":true}}" },

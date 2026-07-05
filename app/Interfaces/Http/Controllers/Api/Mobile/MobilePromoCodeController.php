@@ -5,6 +5,7 @@ namespace App\Interfaces\Http\Controllers\Api\Mobile;
 use App\Domain\Promo\Enums\PromoApplicableType;
 use App\Http\Controllers\Controller;
 use App\Infrastructure\Persistence\Eloquent\AppointmentModel;
+use App\Infrastructure\Persistence\Eloquent\PackageModel;
 use App\Infrastructure\Persistence\Eloquent\PromoCodeModel;
 use App\Support\ApiDateTime;
 use Illuminate\Http\JsonResponse;
@@ -18,9 +19,8 @@ class MobilePromoCodeController extends Controller
      * Verify a promo code.
      * Returns whether the code exists, is valid/expired/inactive/limit reached, and details when valid.
      *
-     * Body: { code, IsPackage, sessionID | packageId, branchId? }
-     * Drop-in: pass sessionID (appointment) so session/branch restrictions apply.
-     * Package: pass packageId and branchId when the promo is restricted to packages and/or branches.
+     * Body: { code, IsPackage, sessionID | packageId }
+     * Branch is resolved automatically — from the session (appointment) or from the package's branch assignment.
      * Legacy: { code, context } with context=packages|drop_ins|both still accepted.
      */
     public function verify(Request $request): JsonResponse
@@ -34,8 +34,6 @@ class MobilePromoCodeController extends Controller
             'appointmentId' => 'nullable|integer|exists:appointments,id',
             'packageId' => 'nullable|integer|exists:packages,id',
             'packageID' => 'nullable|integer|exists:packages,id',
-            'branchId' => 'nullable|integer|exists:branches,id',
-            'branch_id' => 'nullable|integer|exists:branches,id',
         ]);
 
         if ($validator->fails()) {
@@ -74,7 +72,7 @@ class MobilePromoCodeController extends Controller
         $customer = $request->user();
         $appointmentId = $this->resolveAppointmentId($request);
         $packageId = $this->resolvePackageId($request);
-        $branchId = $this->resolveBranchId($request, $appointmentId);
+        $branchId = $this->resolveBranchId($appointmentId, $packageId, $promo);
         $reason = $promo->invalidReasonForCustomer(
             (int) $customer->id,
             $context,
@@ -189,22 +187,50 @@ class MobilePromoCodeController extends Controller
         return (int) $raw;
     }
 
-    private function resolveBranchId(Request $request, ?int $appointmentId): ?int
+    private function resolveBranchId(?int $appointmentId, ?int $packageId, PromoCodeModel $promo): ?int
     {
-        $raw = $request->input('branchId', $request->input('branch_id'));
-        if ($raw !== null && $raw !== '') {
-            return (int) $raw;
+        if ($appointmentId !== null) {
+            $branchId = AppointmentModel::query()
+                ->whereKey($appointmentId)
+                ->value('branch_id');
+
+            return $branchId !== null ? (int) $branchId : null;
         }
 
-        if ($appointmentId === null) {
+        if ($packageId === null) {
             return null;
         }
 
-        $branchId = AppointmentModel::query()
-            ->whereKey($appointmentId)
-            ->value('branch_id');
+        $package = PackageModel::query()
+            ->with('branches')
+            ->find($packageId);
 
-        return $branchId !== null ? (int) $branchId : null;
+        if (! $package) {
+            return null;
+        }
+
+        $packageBranchIds = $package->branches
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->values();
+
+        if ($packageBranchIds->count() === 1) {
+            return $packageBranchIds->first();
+        }
+
+        if ($promo->isRestrictedToBranches()) {
+            $promo->loadMissing('branches');
+            $promoBranchIds = $promo->branches
+                ->pluck('id')
+                ->map(fn ($id) => (int) $id);
+
+            $intersection = $packageBranchIds->intersect($promoBranchIds)->values();
+            if ($intersection->count() === 1) {
+                return $intersection->first();
+            }
+        }
+
+        return null;
     }
 
     private function wrongTypeMessage(PromoCodeModel $promo): string

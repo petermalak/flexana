@@ -236,16 +236,16 @@ class PackageResource extends Resource
             ])
             ->actions([
                 Actions\EditAction::make()
-                    ->mountUsing(function (Actions\EditAction $action, Package $record): void {
+                    ->mutateRecordDataUsing(function (array $data, Package $record): array {
                         $record->loadMissing('branches');
 
-                        $action->fillForm([
-                            ...$record->attributesToArray(),
+                        return [
+                            ...$data,
                             'branches' => $record->branches
                                 ->pluck('id')
                                 ->map(fn ($id) => (string) $id)
                                 ->all(),
-                        ]);
+                        ];
                     })
                     ->after(function (Package $record, array $data): void {
                         if (array_key_exists('branches', $data)) {
