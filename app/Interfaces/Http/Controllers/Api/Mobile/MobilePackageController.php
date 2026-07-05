@@ -361,6 +361,9 @@ class MobilePackageController extends Controller
                 $promoCode,
                 (int) $customer->id,
                 PromoApplicableType::Packages,
+                null,
+                $branchId,
+                $packageId,
             );
             if ($promoRecord) {
                 $price = $price * (1 - (float) $promoRecord->percent_discount / 100);

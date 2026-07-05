@@ -878,7 +878,7 @@
 		},
 		{
 			"name": "Promo Code Flow",
-			"description": "Promo codes apply a percentage discount. Each code has applicable_to: both | packages | drop_ins (set in Admin → Promo Codes). Drop-in codes can optionally be restricted to specific appointments and/or branches in admin. Always verify with IsPackage before applying: true = package purchase, false = drop-in booking. For drop-ins, pass sessionID when verifying if the code is session- or branch-restricted (branch is resolved from the appointment). POST /api/v1/promo-codes/verify returns reason wrong_type, wrong_appointment, or wrong_branch when the code does not match. Then pass promoCode on session-bookings (drop-in only) or purchase-package. Invalid/expired/wrong-type codes are ignored at checkout (full price).",
+			"description": "Promo codes apply a percentage discount. Each code has applicable_to: both | packages | drop_ins (set in Admin → Promo Codes). Drop-in codes can be restricted to appointments and/or branches; package codes can be restricted to packages and/or branches. Verify with IsPackage: true = package (pass packageId + branchId), false = drop-in (pass sessionID). POST /api/v1/promo-codes/verify returns wrong_type, wrong_appointment, wrong_package, or wrong_branch when the code does not match. Then pass promoCode on session-bookings or purchase-package.",
 			"item": [
 				{
 					"name": "Verify Promo Code (drop-in)",
@@ -907,13 +907,14 @@
 						"header": [{ "key": "Content-Type", "value": "application/json" }],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"code\": \"PKG10\",\n    \"IsPackage\": true\n}"
+							"raw": "{\n    \"code\": \"PKG10\",\n    \"IsPackage\": true,\n    \"packageId\": 1,\n    \"branchId\": {{branch_id}}\n}"
 						},
 						"url": { "raw": "{{base_url}}/api/v1/promo-codes/verify", "host": ["{{base_url}}"], "path": ["api", "v1", "promo-codes", "verify"] },
-						"description": "Validate a promo for package purchase. Body: code (required), IsPackage=true (required). Legacy: context=packages also accepted. Requires Bearer."
+						"description": "Validate a promo for package purchase. Body: code (required), IsPackage=true (required), packageId (required when promo is restricted to specific packages), branchId (required when promo is restricted to branches). Legacy: context=packages also accepted. Requires Bearer."
 					},
 					"response": [
-						{ "name": "Valid", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"valid\":true,\"message\":\"Promo code is valid.\",\"promo_code\":{\"id\":2,\"code\":\"PKG10\",\"name\":\"Package promo\",\"percent_discount\":10,\"applicable_to\":\"packages\",\"usage_limit_per_user\":1,\"uses_by_you\":0,\"used_count_total\":5,\"is_active\":true}}" },
+						{ "name": "Valid", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"valid\":true,\"message\":\"Promo code is valid.\",\"promo_code\":{\"id\":2,\"code\":\"PKG10\",\"name\":\"Package promo\",\"percent_discount\":10,\"applicable_to\":\"packages\",\"restricted_to_packages\":true,\"allowed_package_ids\":[1],\"restricted_to_branches\":true,\"allowed_branch_ids\":[1],\"usage_limit_per_user\":1,\"uses_by_you\":0,\"used_count_total\":5,\"is_active\":true}}" },
+						{ "name": "Wrong package", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"valid\":false,\"reason\":\"wrong_package\",\"message\":\"This promo code is not valid for the selected package.\",\"promo_code\":{\"id\":2,\"code\":\"PKG10\",\"name\":\"Package promo\",\"percent_discount\":10,\"applicable_to\":\"packages\",\"restricted_to_packages\":true,\"allowed_package_ids\":[1],\"is_active\":true}}" },
 						{ "name": "Wrong type (drop-in-only code)", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"valid\":false,\"reason\":\"wrong_type\",\"message\":\"This promo code is only valid for drop-in bookings.\",\"promo_code\":{\"id\":1,\"code\":\"SAVE20\",\"name\":\"Summer Sale\",\"percent_discount\":20,\"applicable_to\":\"drop_ins\",\"is_active\":true}}" }
 					]
 				},

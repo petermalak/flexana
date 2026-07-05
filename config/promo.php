@@ -36,4 +36,6 @@ return [
 
     'wrong_branch_message' => 'This promo code is not valid for the selected branch.',
 
+    'wrong_package_message' => 'This promo code is not valid for the selected package.',
+
 ];

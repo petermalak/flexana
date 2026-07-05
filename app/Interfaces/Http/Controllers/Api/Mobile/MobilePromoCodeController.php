@@ -18,7 +18,9 @@ class MobilePromoCodeController extends Controller
      * Verify a promo code.
      * Returns whether the code exists, is valid/expired/inactive/limit reached, and details when valid.
      *
-     * Body: { code, IsPackage } where IsPackage=true checks package promos, false checks drop-in promos.
+     * Body: { code, IsPackage, sessionID | packageId, branchId? }
+     * Drop-in: pass sessionID (appointment) so session/branch restrictions apply.
+     * Package: pass packageId and branchId when the promo is restricted to packages and/or branches.
      * Legacy: { code, context } with context=packages|drop_ins|both still accepted.
      */
     public function verify(Request $request): JsonResponse
@@ -30,6 +32,10 @@ class MobilePromoCodeController extends Controller
             'context' => ['nullable', 'string', Rule::in(array_column(PromoApplicableType::cases(), 'value'))],
             'sessionID' => 'nullable|integer|exists:appointments,id',
             'appointmentId' => 'nullable|integer|exists:appointments,id',
+            'packageId' => 'nullable|integer|exists:packages,id',
+            'packageID' => 'nullable|integer|exists:packages,id',
+            'branchId' => 'nullable|integer|exists:branches,id',
+            'branch_id' => 'nullable|integer|exists:branches,id',
         ]);
 
         if ($validator->fails()) {
@@ -67,8 +73,15 @@ class MobilePromoCodeController extends Controller
         /** @var \App\Models\Customer $customer */
         $customer = $request->user();
         $appointmentId = $this->resolveAppointmentId($request);
-        $branchId = $this->resolveBranchId($appointmentId);
-        $reason = $promo->invalidReasonForCustomer((int) $customer->id, $context, $appointmentId, $branchId);
+        $packageId = $this->resolvePackageId($request);
+        $branchId = $this->resolveBranchId($request, $appointmentId);
+        $reason = $promo->invalidReasonForCustomer(
+            (int) $customer->id,
+            $context,
+            $appointmentId,
+            $branchId,
+            $packageId,
+        );
         if ($reason !== null) {
             $payload = [
                 'valid' => false,
@@ -92,6 +105,10 @@ class MobilePromoCodeController extends Controller
                 'wrong_branch' => response()->json([
                     ...$payload,
                     'message' => (string) config('promo.wrong_branch_message', 'This promo code is not valid for the selected branch.'),
+                ], 200),
+                'wrong_package' => response()->json([
+                    ...$payload,
+                    'message' => (string) config('promo.wrong_package_message', 'This promo code is not valid for the selected package.'),
                 ], 200),
                 'not_yet_valid' => response()->json([
                     ...$payload,
@@ -161,8 +178,24 @@ class MobilePromoCodeController extends Controller
         return (int) $raw;
     }
 
-    private function resolveBranchId(?int $appointmentId): ?int
+    private function resolvePackageId(Request $request): ?int
     {
+        $raw = $request->input('packageId', $request->input('packageID'));
+
+        if ($raw === null || $raw === '') {
+            return null;
+        }
+
+        return (int) $raw;
+    }
+
+    private function resolveBranchId(Request $request, ?int $appointmentId): ?int
+    {
+        $raw = $request->input('branchId', $request->input('branch_id'));
+        if ($raw !== null && $raw !== '') {
+            return (int) $raw;
+        }
+
         if ($appointmentId === null) {
             return null;
         }
@@ -187,6 +220,7 @@ class MobilePromoCodeController extends Controller
         $usesByYou = $customerId !== null ? $promo->redemptionCountForCustomer($customerId) : null;
         $restrictedToAppointments = $promo->isRestrictedToAppointments();
         $restrictedToBranches = $promo->isRestrictedToBranches();
+        $restrictedToPackages = $promo->isRestrictedToPackages();
 
         return [
             'id' => $promo->id,
@@ -205,6 +239,12 @@ class MobilePromoCodeController extends Controller
                 ? ($promo->relationLoaded('branches')
                     ? $promo->branches->pluck('id')->map(fn ($id) => (int) $id)->values()->all()
                     : $promo->branches()->pluck('branches.id')->map(fn ($id) => (int) $id)->values()->all())
+                : [],
+            'restricted_to_packages' => $restrictedToPackages,
+            'allowed_package_ids' => $restrictedToPackages
+                ? ($promo->relationLoaded('packages')
+                    ? $promo->packages->pluck('id')->map(fn ($id) => (int) $id)->values()->all()
+                    : $promo->packages()->pluck('packages.id')->map(fn ($id) => (int) $id)->values()->all())
                 : [],
             'valid_from' => ApiDateTime::toBusinessIso8601($promo->valid_from),
             'valid_from_utc' => ApiDateTime::toUtcIso8601($promo->valid_from),
