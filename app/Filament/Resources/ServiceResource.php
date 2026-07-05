@@ -78,31 +78,48 @@ class ServiceResource extends Resource
                                             ->required(),
                                         Forms\Components\Select::make('branches')
                                             ->label('Branches')
-                                            ->relationship(
-                                                'branches',
-                                                'name',
-                                                fn ($query) => $query
-                                                    ->when(
-                                                        ($branchId = BranchContext::scopedBranchId()),
-                                                        fn ($scopedQuery) => $scopedQuery->whereKey($branchId),
-                                                        fn ($scopedQuery) => $scopedQuery
-                                                            ->where('is_active', true)
-                                                            ->orderBy('sort_order')
-                                                            ->orderBy('name'),
-                                                    ),
-                                            )
+                                            ->options(fn () => \App\Models\Branch::query()
+                                                ->when(
+                                                    ($branchId = BranchContext::scopedBranchId()),
+                                                    fn ($query) => $query->whereKey($branchId),
+                                                    fn ($query) => $query
+                                                        ->where('is_active', true)
+                                                        ->orderBy('sort_order')
+                                                        ->orderBy('name'),
+                                                )
+                                                ->pluck('name', 'id')
+                                                ->mapWithKeys(fn ($name, $id) => [(string) $id => $name])
+                                                ->all())
                                             ->multiple()
                                             ->searchable()
                                             ->preload()
                                             ->required()
-                                            ->default(fn () => ($branchId = BranchContext::scopedBranchId()) ? [$branchId] : null)
+                                            ->default(fn () => ($branchId = BranchContext::scopedBranchId()) ? [(string) $branchId] : null)
                                             ->helperText('Select which branches offer this service.')
                                             ->live()
                                             ->afterStateUpdated(function ($state, Set $set, Get $get): void {
+                                                $selected = is_array($state) ? $state : [];
+                                                $existingRows = is_array($get('branch_prices')) ? $get('branch_prices') : [];
+                                                $selectedIds = collect($selected)
+                                                    ->map(fn ($id) => (string) $id)
+                                                    ->sort()
+                                                    ->values()
+                                                    ->all();
+                                                $existingIds = collect($existingRows)
+                                                    ->pluck('branch_id')
+                                                    ->map(fn ($id) => (string) $id)
+                                                    ->sort()
+                                                    ->values()
+                                                    ->all();
+
+                                                if ($existingRows !== [] && $selectedIds === $existingIds) {
+                                                    return;
+                                                }
+
                                                 $set('branch_prices', ServiceBranchPricing::rowsForSelectedBranches(
-                                                    is_array($state) ? $state : [],
+                                                    $selected,
                                                     (float) ($get('price') ?? 0),
-                                                    is_array($get('branch_prices')) ? $get('branch_prices') : [],
+                                                    $existingRows,
                                                 ));
                                             }),
                                     ])->columns(2),
@@ -305,7 +322,15 @@ class ServiceResource extends Resource
                     ->searchable()
                     ->sortable(),
                 Tables\Columns\TextColumn::make('price')
+                    ->label('Price')
                     ->money()
+                    ->formatStateUsing(function ($state, Service $record): float {
+                        $branchId = BranchContext::scopedBranchId();
+
+                        return $branchId !== null
+                            ? $record->priceForBranch($branchId)
+                            : (float) ($state ?? 0);
+                    })
                     ->sortable(),
                 Tables\Columns\TextColumn::make('duration')
                     ->label('Duration')
@@ -367,18 +392,24 @@ class ServiceResource extends Resource
             ])
             ->actions([
                 Actions\EditAction::make()
-                    ->mountUsing(function (Actions\EditAction $action, Service $record): void {
+                    ->mutateRecordDataUsing(function (array $data, Service $record): array {
                         $record->loadMissing('branches');
 
-                        $action->fillForm([
-                            ...$record->attributesToArray(),
-                            'branches' => $record->branches->pluck('id')->map(fn ($id) => (string) $id)->all(),
+                        return [
+                            ...$data,
+                            'branches' => $record->branches
+                                ->pluck('id')
+                                ->map(fn ($id) => (string) $id)
+                                ->all(),
                             'branch_prices' => ServiceBranchPricing::formRows($record),
-                        ]);
+                        ];
                     })
                     ->after(function (Service $record, array $data): void {
-                        ServiceBranchPricing::ensurePivotPricesForBranches($record, $data['branches'] ?? []);
-                        ServiceBranchPricing::applyPivotPrices($record, $data['branch_prices'] ?? []);
+                        ServiceBranchPricing::syncBranchesFromForm(
+                            $record,
+                            $data['branches'] ?? [],
+                            $data['branch_prices'] ?? [],
+                        );
                     }),
             ])
             ->bulkActions([
@@ -397,7 +428,7 @@ class ServiceResource extends Resource
 
     public static function getEloquentQuery(): \Illuminate\Database\Eloquent\Builder
     {
-        $query = parent::getEloquentQuery();
+        $query = parent::getEloquentQuery()->with('branches');
 
         if (! BranchContext::isScoped()) {
             return $query;

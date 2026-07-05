@@ -20,6 +20,11 @@ class MobileServiceController extends Controller
         $services = ServiceModel::query()
             ->where('status', 'visible')
             ->where('show', true)
+            ->when($branchId, fn ($query) => $query->whereHas(
+                'branches',
+                fn ($branchQuery) => $branchQuery->whereKey($branchId),
+            ))
+            ->with($branchId ? ['branches' => fn ($query) => $query->whereKey($branchId)] : 'branches')
             ->where(function ($query) {
                 $query->where('name', 'LIKE', '%Yoga%')
                     ->orWhere('name', 'LIKE', '%Reformer Pilates%')

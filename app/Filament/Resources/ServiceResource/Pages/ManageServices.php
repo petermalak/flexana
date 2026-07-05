@@ -17,8 +17,11 @@ class ManageServices extends ManageRecordsWithFullWidthForm
         return [
             Actions\CreateAction::make()
                 ->after(function (Service $record, array $data): void {
-                    ServiceBranchPricing::ensurePivotPricesForBranches($record, $data['branches'] ?? []);
-                    ServiceBranchPricing::applyPivotPrices($record, $data['branch_prices'] ?? []);
+                    ServiceBranchPricing::syncBranchesFromForm(
+                        $record,
+                        $data['branches'] ?? [],
+                        $data['branch_prices'] ?? [],
+                    );
                 }),
         ];
     }

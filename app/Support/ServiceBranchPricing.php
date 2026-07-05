@@ -54,6 +54,38 @@ final class ServiceBranchPricing
     }
 
     /**
+     * Persist branch assignments and per-branch drop-in prices from the admin form.
+     *
+     * @param  list<int|string>  $branchIds
+     * @param  list<array{branch_id?: int|string|null, price?: float|int|string|null}>  $branchPrices
+     */
+    public static function syncBranchesFromForm(ServiceModel $service, array $branchIds, array $branchPrices): void
+    {
+        $defaultPrice = (float) ($service->price ?? 0);
+        $pricesByBranch = collect($branchPrices)
+            ->filter(fn (array $row): bool => ! empty($row['branch_id']))
+            ->keyBy(fn (array $row): int => (int) $row['branch_id']);
+
+        $sync = collect($branchIds)
+            ->mapWithKeys(function ($branchId) use ($pricesByBranch, $defaultPrice): array {
+                $branchId = (int) $branchId;
+                $row = $pricesByBranch->get($branchId);
+                $price = $row['price'] ?? null;
+
+                return [
+                    $branchId => [
+                        'price' => $price !== null && $price !== ''
+                            ? (float) $price
+                            : $defaultPrice,
+                    ],
+                ];
+            })
+            ->all();
+
+        $service->branches()->sync($sync);
+    }
+
+    /**
      * @param  list<array{branch_id?: int|null, price?: float|int|string|null}>  $branchPrices
      */
     public static function applyPivotPrices(ServiceModel $service, array $branchPrices): void
@@ -64,28 +96,11 @@ final class ServiceBranchPricing
 
         $service->loadMissing('branches');
 
-        $pricesByBranch = collect($branchPrices)
-            ->filter(fn (array $row): bool => ! empty($row['branch_id']))
-            ->keyBy(fn (array $row): int => (int) $row['branch_id']);
-
-        $sync = $service->branches
-            ->mapWithKeys(function (BranchModel $branch) use ($pricesByBranch, $service): array {
-                $row = $pricesByBranch->get((int) $branch->id);
-                $price = $row['price'] ?? null;
-
-                return [
-                    (int) $branch->id => [
-                        'price' => $price !== null && $price !== ''
-                            ? (float) $price
-                            : (float) ($service->price ?? 0),
-                    ],
-                ];
-            })
-            ->all();
-
-        if ($sync !== []) {
-            $service->branches()->sync($sync);
-        }
+        self::syncBranchesFromForm(
+            $service,
+            $service->branches->pluck('id')->all(),
+            $branchPrices,
+        );
     }
 
     /**
