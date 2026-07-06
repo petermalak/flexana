@@ -2,7 +2,9 @@
 
 namespace App\Filament\Resources;
 
+use App\Filament\Concerns\SuperAdminOnlyResource;
 use App\Filament\Resources\PackageResource\Pages;
+use App\Models\Branch;
 use App\Models\Package;
 use App\Models\ClassType;
 use Filament\Forms;
@@ -16,6 +18,8 @@ use Filament\Actions;
 
 class PackageResource extends Resource
 {
+    use SuperAdminOnlyResource;
+
     protected static ?string $model = Package::class;
 
     protected static \BackedEnum|string|null $navigationIcon = 'heroicon-o-gift';
@@ -55,6 +59,33 @@ class PackageResource extends Resource
                             ->required()
                             ->helperText('Product category for app filtering (Yoga or Reformer Pilates)'),
                     ])->columns(2),
+                Components\Section::make('Branch availability')
+                    ->description('Control which branches can sell this package in the mobile app.')
+                    ->icon(Heroicon::OutlinedBuildingOffice2)
+                    ->schema([
+                        Forms\Components\Select::make('branches')
+                            ->label('Branches')
+                            ->relationship(
+                                'branches',
+                                'name',
+                                fn ($query) => $query
+                                    ->where('is_active', true)
+                                    ->orderBy('sort_order')
+                                    ->orderBy('name'),
+                            )
+                            ->multiple()
+                            ->searchable()
+                            ->preload()
+                            ->required()
+                            ->default(fn (): array => Branch::query()
+                                ->where('is_active', true)
+                                ->orderBy('sort_order')
+                                ->orderBy('name')
+                                ->pluck('id')
+                                ->map(fn ($id) => (string) $id)
+                                ->all())
+                            ->helperText('Only customers at the selected branches will see and purchase this package.'),
+                    ]),
                 Components\Section::make('Sessions & Pricing')
                     ->description('Number of sessions, price, and discount. Used sessions are tracked automatically.')
                     ->icon(Heroicon::OutlinedBanknotes)
@@ -82,7 +113,7 @@ class PackageResource extends Resource
                             ->required(),
                     ])->columns(4),
                 Components\Section::make('Settings')
-                    ->description('Package duration in months (used for purchase expiry when customers buy this package). Legacy fields on the package row may still exist in the database for older purchases.')
+                    ->description('Purchase expiry: 30-day unlimited uses days (not calendar months). Other packages use months.')
                     ->icon(Heroicon::OutlinedCog6Tooth)
                     ->schema([
                         Forms\Components\TextInput::make('sort_order')
@@ -91,12 +122,18 @@ class PackageResource extends Resource
                             ->default(0)
                             ->required()
                             ->helperText('Lower numbers appear first in the mobile app package list.'),
-                        Forms\Components\TextInput::make('package_duration')
-                            ->label('Package Duration (months)')
+                        Forms\Components\TextInput::make('package_duration_days')
+                            ->label('Package duration (days)')
                             ->numeric()
                             ->minValue(1)
-                            ->required()
-                            ->helperText('New purchases: expiry is calculated as purchase date + this many months.'),
+                            ->nullable()
+                            ->helperText('For 30-day unlimited: set to 30. Expiry = purchase date + exactly this many days.'),
+                        Forms\Components\TextInput::make('package_duration')
+                            ->label('Package duration (months)')
+                            ->numeric()
+                            ->minValue(1)
+                            ->nullable()
+                            ->helperText('Used when duration (days) is empty. Expiry = purchase date + calendar months.'),
                         Forms\Components\Select::make('status')
                             ->options([
                                 'active' => 'Active',
@@ -130,6 +167,11 @@ class PackageResource extends Resource
                     })
                     ->sortable()
                     ->toggleable(),
+                Tables\Columns\TextColumn::make('branches.name')
+                    ->label('Branches')
+                    ->badge()
+                    ->color('info')
+                    ->toggleable(),
                 Tables\Columns\TextColumn::make('sort_order')
                     ->label('Order')
                     ->sortable(),
@@ -159,8 +201,14 @@ class PackageResource extends Resource
                     ->date()
                     ->sortable()
                     ->toggleable(),
+                Tables\Columns\TextColumn::make('package_duration_days')
+                    ->label('Duration (days)')
+                    ->placeholder('—')
+                    ->sortable()
+                    ->toggleable(),
                 Tables\Columns\TextColumn::make('package_duration')
                     ->label('Duration (months)')
+                    ->placeholder('—')
                     ->sortable()
                     ->toggleable(),
                 Tables\Columns\TextColumn::make('updated_at')
@@ -174,12 +222,36 @@ class PackageResource extends Resource
                         'active' => 'Active',
                         'inactive' => 'Inactive',
                     ]),
+                Tables\Filters\SelectFilter::make('branches')
+                    ->label('Branch')
+                    ->relationship('branches', 'name', fn ($query) => $query
+                        ->where('is_active', true)
+                        ->orderBy('sort_order')
+                        ->orderBy('name'))
+                    ->searchable()
+                    ->preload(),
                 Tables\Filters\SelectFilter::make('class_type_id')
                     ->label('Class format')
                     ->relationship('classType', 'name'),
             ])
             ->actions([
-                Actions\EditAction::make(),
+                Actions\EditAction::make()
+                    ->mutateRecordDataUsing(function (array $data, Package $record): array {
+                        $record->loadMissing('branches');
+
+                        return [
+                            ...$data,
+                            'branches' => $record->branches
+                                ->pluck('id')
+                                ->map(fn ($id) => (string) $id)
+                                ->all(),
+                        ];
+                    })
+                    ->after(function (Package $record, array $data): void {
+                        if (array_key_exists('branches', $data)) {
+                            $record->branches()->sync($data['branches'] ?? []);
+                        }
+                    }),
             ])
             ->bulkActions([
                 Actions\BulkActionGroup::make([
@@ -194,6 +266,11 @@ class PackageResource extends Resource
         return [
             'index' => Pages\ManagePackages::route('/'),
         ];
+    }
+
+    public static function getEloquentQuery(): \Illuminate\Database\Eloquent\Builder
+    {
+        return parent::getEloquentQuery()->with(['branches', 'classType']);
     }
 }
 

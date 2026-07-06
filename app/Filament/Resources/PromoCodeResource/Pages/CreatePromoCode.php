@@ -3,9 +3,9 @@
 namespace App\Filament\Resources\PromoCodeResource\Pages;
 
 use App\Filament\Resources\PromoCodeResource;
-use Filament\Resources\Pages\CreateRecord;
+use App\Filament\Resources\Pages\StaysOnPageCreateRecord;
 
-class CreatePromoCode extends CreateRecord
+class CreatePromoCode extends StaysOnPageCreateRecord
 {
     protected static string $resource = PromoCodeResource::class;
 }

@@ -6,6 +6,9 @@ use App\Filament\Resources\AmeliaAppointments\AmeliaAppointmentResource;
 use App\Filament\Resources\StaffResource;
 use App\Infrastructure\Persistence\Eloquent\AppointmentModel;
 use App\Infrastructure\Persistence\Eloquent\ServiceModel;
+use App\Models\Branch;
+use App\Support\BranchContext;
+use App\Support\BranchSettings;
 use Carbon\Carbon;
 use Filament\Actions\Action;
 use Filament\Forms;
@@ -36,7 +39,7 @@ class ViewStaffSchedule extends Page
 
     /**
      * Ensure mounted action has a 'data' key so Livewire can bind form fields
-     * (mountedActions.0.data.service_id, repeat_weekly, weekly_occurrence_count, etc.).
+     * (mountedActions.0.data.branch_id, service_id, repeat_weekly, weekly_occurrence_count, etc.).
      */
     public function mountAction(string $name, array $arguments = [], array $context = []): mixed
     {
@@ -46,7 +49,10 @@ class ViewStaffSchedule extends Page
             $index = array_key_last($this->mountedActions);
             $current = $this->mountedActions[$index]['data'] ?? [];
 
+            $defaultBranchId = BranchContext::scopedBranchId() ?? BranchSettings::defaultBranchId();
+
             $defaults = [
+                'branch_id' => $defaultBranchId !== null ? (string) $defaultBranchId : null,
                 'service_id' => null,
                 'start_time' => '16:00',
                 'end_time' => '17:00',
@@ -114,8 +120,19 @@ class ViewStaffSchedule extends Page
                         ->label('Add')
                         ->icon('heroicon-o-plus')
                         ->form(fn () => $this->getAddAppointmentFormSchema())
-                        ->mountUsing(function () use ($dateKey) {
+                        ->mountUsing(function (Action $action) use ($dateKey): void {
                             $this->addForDate = $dateKey;
+
+                            $defaultBranchId = BranchContext::scopedBranchId() ?? BranchSettings::defaultBranchId();
+
+                            $action->fillForm([
+                                'branch_id' => $defaultBranchId !== null ? (string) $defaultBranchId : null,
+                                'service_id' => null,
+                                'start_time' => '16:00',
+                                'end_time' => '17:00',
+                                'repeat_weekly' => false,
+                                'weekly_occurrence_count' => 7,
+                            ]);
                         })
                         ->modalHeading('Add appointment')
                         ->modalDescription(fn () => $this->addForDate ? Carbon::parse($this->addForDate)->format('l, F j, Y') : '')
@@ -158,6 +175,25 @@ class ViewStaffSchedule extends Page
     {
         $services = $this->getStaffServices();
         return [
+            Forms\Components\Select::make('branch_id')
+                ->label('Branch')
+                ->options(fn () => Branch::query()
+                    ->when(
+                        ($branchId = BranchContext::scopedBranchId()),
+                        fn ($query) => $query->whereKey($branchId),
+                        fn ($query) => $query->where('is_active', true)->orderBy('sort_order')->orderBy('name'),
+                    )
+                    ->orderBy('sort_order')
+                    ->orderBy('name')
+                    ->get()
+                    ->mapWithKeys(fn (Branch $branch) => [(string) $branch->id => $branch->name])
+                    ->all())
+                ->default(fn () => ($id = BranchContext::scopedBranchId() ?? BranchSettings::defaultBranchId()) !== null ? (string) $id : null)
+                ->searchable()
+                ->preload()
+                ->required()
+                ->native(false)
+                ->visible(fn (): bool => ! BranchContext::isScoped()),
             Forms\Components\Select::make('service_id')
                 ->label('Service')
                 ->options($services)
@@ -201,7 +237,7 @@ class ViewStaffSchedule extends Page
         foreach ($appointments as $apt) {
             $name = e($apt->service->name ?? '—');
             $time = e($apt->booking_start->format('g:i a') . ' – ' . $apt->booking_end->format('g:i a'));
-            $location = 'Default location';
+            $location = e($apt->branch?->name ?? 'No branch');
             $status = strtolower($apt->status ?? 'approved');
             $statusLabel = e(ucfirst($status));
             $editUrl = AmeliaAppointmentResource::getUrl('edit', ['record' => $apt->getKey()]);
@@ -246,6 +282,19 @@ class ViewStaffSchedule extends Page
         }
 
         $serviceId = (int) $serviceId;
+        $branchId = BranchSettings::resolveBranchId(
+            BranchContext::scopedBranchId()
+                ?? (isset($data['branch_id']) && $data['branch_id'] !== '' ? (int) $data['branch_id'] : null),
+        );
+
+        if ($branchId === null) {
+            Notification::make()
+                ->title('Please select a branch.')
+                ->danger()
+                ->send();
+            return;
+        }
+
         $serviceExists = ServiceModel::query()->whereKey($serviceId)->exists();
         if (! $serviceExists) {
             Notification::make()
@@ -294,6 +343,7 @@ class ViewStaffSchedule extends Page
         AppointmentModel::create([
             'provider_id' => $staff->getKey(),
             'service_id' => $serviceId,
+            'branch_id' => $branchId,
             'booking_start' => $start,
             'booking_end' => $end,
             'status' => 'approved',
@@ -323,6 +373,7 @@ class ViewStaffSchedule extends Page
                 AppointmentModel::create([
                     'provider_id' => $staff->getKey(),
                     'service_id' => $serviceId,
+                    'branch_id' => $branchId,
                     'booking_start' => $currentStart->copy(),
                     'booking_end' => $currentEnd->copy(),
                     'status' => 'approved',
@@ -379,10 +430,12 @@ class ViewStaffSchedule extends Page
         $weekStart = $this->getWeekStartCarbon();
         $weekEnd = $this->getWeekEndCarbon();
 
-        $appointments = AppointmentModel::query()
-            ->where('provider_id', $staff->getKey())
-            ->whereBetween('booking_start', [$weekStart, $weekEnd])
-            ->with('service')
+        $appointments = BranchContext::scopeAppointments(
+            AppointmentModel::query()
+                ->where('provider_id', $staff->getKey())
+                ->whereBetween('booking_start', [$weekStart, $weekEnd]),
+        )
+            ->with(['service', 'branch'])
             ->orderBy('booking_start')
             ->get();
 

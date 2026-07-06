@@ -4,9 +4,9 @@ namespace App\Filament\Resources\StaffResource\Pages;
 
 use App\Filament\Resources\StaffResource;
 use Filament\Actions;
-use Filament\Resources\Pages\EditRecord;
+use App\Filament\Resources\Pages\StaysOnPageEditRecord;
 
-class EditStaff extends EditRecord
+class EditStaff extends StaysOnPageEditRecord
 {
     protected static string $resource = StaffResource::class;
 

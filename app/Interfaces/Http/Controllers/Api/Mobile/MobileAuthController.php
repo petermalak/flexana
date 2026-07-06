@@ -2,6 +2,7 @@
 
 namespace App\Interfaces\Http\Controllers\Api\Mobile;
 
+use App\Application\Auth\EmailVerificationService;
 use App\Application\Auth\PhoneVerificationService;
 use App\Http\Controllers\Controller;
 use App\Infrastructure\Persistence\Eloquent\CategoryModel;
@@ -25,19 +26,24 @@ use Illuminate\Validation\Rules\Password as PasswordRule;
 class MobileAuthController extends Controller
 {
     public function __construct(
-        private readonly PhoneVerificationService $verification,
+        private readonly PhoneVerificationService $phoneVerification,
+        private readonly EmailVerificationService $emailVerification,
     ) {
     }
 
     /**
      * POST /api/v1/auth/login
-     * Body: { phone, password [, fcmToken, platform, deviceId ] }
+     * Body: { email | phone, password [, fcmToken, platform, deviceId ] }
      * Returns token + customer. Optional fcmToken (FCM device token) is stored for push notifications.
      */
     public function login(Request $request): JsonResponse
     {
+        $this->mergeNormalizedPhone($request);
+        $this->mergeNormalizedEmail($request);
+
         $validator = Validator::make($request->all(), [
-            'phone' => 'required|string|max:20',
+            'email' => 'required_without:phone|nullable|email',
+            'phone' => $this->optionalPhoneRules(),
             'password' => 'required|string',
             'fcmToken' => 'nullable|string|max:500',
             'platform' => 'nullable|string|in:android,ios',
@@ -52,13 +58,21 @@ class MobileAuthController extends Controller
             ], 422);
         }
 
-        $password = $validator->validated()['password'];
+        $data = $validator->validated();
+        $password = $data['password'];
 
-        $customer = $this->verification->findCustomerForPhoneAuth($validator->validated()['phone']);
+        $customer = ! empty($data['email'])
+            ? $this->emailVerification->findCustomerByEmail($data['email'])
+            : $this->phoneVerification->findCustomerForPhoneAuth($data['phone']);
+
         if (! $customer || ! $customer->password || ! Hash::check($password, $customer->password)) {
+            $message = ! empty($data['email'])
+                ? 'Invalid email or password.'
+                : 'Invalid phone or password.';
+
             return response()->json([
                 'success' => false,
-                'message' => 'Invalid phone or password.',
+                'message' => $message,
             ], 401);
         }
 
@@ -80,29 +94,40 @@ class MobileAuthController extends Controller
 
     /**
      * POST /api/v1/auth/signup
-     * Body: { phone [, firstName, lastName, email, profileImage ] }
-     * Pure backend OTP: we send a 6-digit code via SMS (Twilio/log), then the app calls POST /auth/verify with phone + code.
+     * Body: { countryCode, phoneNumber, email [, firstName, lastName, profileImage ] }
+     *        OR legacy { phone (E.164), email, ... }
+     * Backend OTP: we send a 6-digit code via SMS, then the app calls POST /auth/verify with phone + code.
      * profileImage: base64 encoded image string or multipart/form-data file upload
      */
     public function signup(Request $request): JsonResponse
     {
-        if ($request->filled('phone')) {
-            $request->merge([
-                'phone' => PhoneNumberNormalizer::normalize((string) $request->input('phone')),
-            ]);
+        $this->mergeNormalizedEmail($request);
+
+        $phoneParts = $this->resolveSignupPhoneParts($request);
+        if ($phoneParts === false) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => [
+                    'phone' => ['Invalid phone number. Provide phone (E.164) or countryCode + phoneNumber.'],
+                ],
+            ], 422);
         }
 
         $validator = Validator::make($request->all(), [
             'phone' => [
                 'required',
                 'string',
-                'max:20',
+                'max:' . PhoneNumberNormalizer::E164_MAX_LENGTH,
+                new \App\Rules\E164PhoneNumber,
                 Rule::unique('customers', 'phone')->whereNull('deleted_at'),
             ],
+            'countryCode' => PhoneNumberNormalizer::countryCodeValidationRules(),
+            'phoneNumber' => ['nullable', 'string', 'max:15', 'regex:/^0?\d{4,14}$/'],
             'firstName' => 'nullable|string|max:100',
             'lastName' => 'nullable|string|max:100',
             'email' => [
-                'nullable',
+                'required',
                 'email',
                 Rule::unique('customers', 'email')->whereNull('deleted_at'),
             ],
@@ -110,6 +135,8 @@ class MobileAuthController extends Controller
         ], [
             'phone.unique' => 'This phone number is already registered. Please log in instead.',
             'email.unique' => 'This email is already registered.',
+            'countryCode.required_with' => 'Country code is required when phone number is provided.',
+            'phoneNumber.required_with' => 'Phone number is required when country code is provided.',
         ]);
 
         if ($validator->fails()) {
@@ -135,13 +162,12 @@ class MobileAuthController extends Controller
             $profileImagePath = $this->storeBase64Image($request->input('profileImage'), 'profiles');
         }
 
-        // Backend OTP only: we send the SMS, app calls POST /auth/verify
-        $result = $this->verification->sendSignupCode(
+        $result = $this->phoneVerification->sendSignupCode(
             $data['phone'],
             $data['firstName'] ?? null,
             $data['lastName'] ?? null,
-            $data['email'] ?? null,
-            $profileImagePath
+            $data['email'],
+            $profileImagePath,
         );
 
         if (! $result['success']) {
@@ -151,12 +177,27 @@ class MobileAuthController extends Controller
             ], 400);
         }
 
-        $phone = $this->normalizePhone($data['phone']);
+        if ($phoneParts !== null) {
+            $pendingCustomer = Customer::query()->where('phone', $data['phone'])->first();
+            if ($pendingCustomer) {
+                $pendingCustomer->phone_country_code = $phoneParts['countryCode'];
+                $pendingCustomer->phone_national_number = $phoneParts['phoneNumber'];
+                $pendingCustomer->save();
+            }
+        }
+
+        $responsePhone = $this->phoneFieldsForCustomerPhone(
+            $data['phone'],
+            $phoneParts['countryCode'] ?? null,
+            $phoneParts['phoneNumber'] ?? null,
+        );
+
         $response = [
             'success' => true,
-            'message' => $result['message'],
+            'message' => 'Verification code sent to your phone.',
             'useLegacyVerify' => true,
-            'phone' => $phone,
+            'email' => $data['email'],
+            ...$responsePhone,
         ];
         if (app()->environment('local', 'testing') && isset($result['code'])) {
             $response['code'] = $result['code'];
@@ -168,7 +209,7 @@ class MobileAuthController extends Controller
     /**
      * POST /api/v1/auth/verify
      * Body: { phone, code [, password, profileImage ] }
-     * Verifies OTP. If password provided, sets it (for new signups). Returns token + customer.
+     * Verifies SMS OTP. If password provided, sets it (for new signups). Returns token + customer.
      * profileImage: base64 encoded image string or multipart/form-data file upload
      */
     public function verify(Request $request): JsonResponse
@@ -179,8 +220,9 @@ class MobileAuthController extends Controller
         if (config('sms.verify_password_reset_workaround') === true
             && $request->filled('password')
             && $request->filled('password_confirmation')) {
+            $this->mergeNormalizedPhone($request);
             $normalizedPhone = PhoneNumberNormalizer::normalize((string) $request->input('phone', ''));
-            if (! $this->verification->hasPendingSignupVerification($normalizedPhone)) {
+            if ($normalizedPhone !== '' && ! $this->phoneVerification->hasPendingSignupVerification($normalizedPhone)) {
                 Log::warning('Password reset via /auth/verify workaround', [
                     'phone' => (string) $request->input('phone', ''),
                 ]);
@@ -189,8 +231,10 @@ class MobileAuthController extends Controller
             }
         }
 
+        $this->mergeNormalizedPhone($request);
+
         $validator = Validator::make($request->all(), [
-            'phone' => 'required|string|max:20',
+            'phone' => 'required|string|max:' . PhoneNumberNormalizer::E164_MAX_LENGTH,
             'code' => 'required|string|size:6',
             'password' => ['nullable', 'string', 'confirmed', PasswordRule::min(8)],
             'profileImage' => $this->profileImageValidationRules($request),
@@ -208,7 +252,7 @@ class MobileAuthController extends Controller
         }
 
         $data = $validator->validated();
-        $result = $this->verification->verifyCode($data['phone'], $data['code']);
+        $result = $this->phoneVerification->verifyCode($data['phone'], $data['code']);
 
         if (! $result['success']) {
             return response()->json([
@@ -256,18 +300,21 @@ class MobileAuthController extends Controller
         ], 200);
     }
 
-    // All Firebase-based signup/verification endpoints have been removed.
-    // Phone verification is now done entirely in the backend via OTP (see signup + verify).
+    // Signup, password reset, and phone change OTPs are sent by SMS.
 
     /**
      * POST /api/v1/auth/forgot-password
-     * Body: { phone }
-     * Sends password reset OTP code to customer's phone via SMS.
+     * Body: { email | phone }
+     * Sends password reset OTP code to the customer's phone via SMS.
      */
     public function forgotPassword(Request $request): JsonResponse
     {
+        $this->mergeNormalizedPhone($request);
+        $this->mergeNormalizedEmail($request);
+
         $validator = Validator::make($request->all(), [
-            'phone' => 'required|string|max:20',
+            'email' => 'required_without:phone|nullable|email',
+            'phone' => $this->optionalPhoneRules(),
         ]);
 
         if ($validator->fails()) {
@@ -278,7 +325,23 @@ class MobileAuthController extends Controller
             ], 422);
         }
 
-        $result = $this->verification->sendPasswordResetCode($validator->validated()['phone']);
+        $data = $validator->validated();
+        $phone = ! empty($data['phone']) ? $data['phone'] : null;
+        if (! $phone && ! empty($data['email'])) {
+            $customer = $this->emailVerification->findCustomerByEmail($data['email']);
+            if ($customer && $customer->phone) {
+                $phone = PhoneNumberNormalizer::normalize((string) $customer->phone);
+            }
+        }
+
+        if (! $phone) {
+            return response()->json([
+                'success' => true,
+                'message' => 'If that account exists, we have sent a password reset code.',
+            ], 200);
+        }
+
+        $result = $this->phoneVerification->sendPasswordResetCode($phone);
 
         if (! $result['success']) {
             return response()->json([
@@ -302,13 +365,17 @@ class MobileAuthController extends Controller
 
     /**
      * POST /api/v1/auth/reset-password
-     * Body: { phone, code, password, password_confirmation }
-     * Verifies the OTP code sent to phone and resets the password.
+     * Body: { email | phone, code, password, password_confirmation }
+     * Verifies the OTP code sent by SMS and resets the password.
      */
     public function resetPassword(Request $request): JsonResponse
     {
+        $this->mergeNormalizedPhone($request);
+        $this->mergeNormalizedEmail($request);
+
         $validator = Validator::make($request->all(), [
-            'phone' => 'required|string|max:20',
+            'email' => 'required_without:phone|nullable|email',
+            'phone' => $this->optionalPhoneRules(),
             'code' => 'required|string|size:6',
             'password' => ['required', 'confirmed', PasswordRule::min(8)],
         ]);
@@ -322,7 +389,22 @@ class MobileAuthController extends Controller
         }
 
         $data = $validator->validated();
-        $result = $this->verification->verifyPasswordResetCode($data['phone'], $data['code']);
+        $phone = ! empty($data['phone']) ? $data['phone'] : null;
+        if (! $phone && ! empty($data['email'])) {
+            $customer = $this->emailVerification->findCustomerByEmail($data['email']);
+            if ($customer && $customer->phone) {
+                $phone = PhoneNumberNormalizer::normalize((string) $customer->phone);
+            }
+        }
+
+        if (! $phone) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid or expired code.',
+            ], 400);
+        }
+
+        $result = $this->phoneVerification->verifyPasswordResetCode($phone, $data['code']);
 
         if (! $result['success']) {
             return response()->json([
@@ -360,20 +442,37 @@ class MobileAuthController extends Controller
      */
     public function me(Request $request): JsonResponse
     {
+        /** @var Customer $customer */
+        $customer = $request->user();
+        $customer->refresh();
+
         return response()->json([
             'success' => true,
-            'customer' => $this->customerToArray($request->user()),
+            'customer' => $this->customerToArray($customer),
         ], 200);
     }
 
     /**
      * PUT /api/v1/auth/me
-     * To change phone: send new phone + phoneChangeCode (from send-phone-change-code).
+     * Phone change requires phoneChangeCode from send-phone-change-code.
+     * Email change requires emailChangeCode from send-email-change-code.
      * To update profile image: send profileImage (file upload or base64 string).
      */
     public function updateMe(Request $request): JsonResponse
     {
         $customer = $request->user();
+        $phoneParts = $this->resolvePhoneParts($request);
+        if ($phoneParts === false) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => [
+                    'phone' => ['Invalid phone number. Provide phone (E.164) or countryCode + phoneNumber.'],
+                ],
+            ], 422);
+        }
+        $this->mergeNormalizedEmail($request);
+
         $validator = Validator::make($request->all(), [
             'firstName' => 'nullable|string|max:100',
             'lastName' => 'nullable|string|max:100',
@@ -384,11 +483,22 @@ class MobileAuthController extends Controller
                     ->ignore($customer->id)
                     ->whereNull('deleted_at'),
             ],
-            'phone' => 'nullable|string|max:20',
+            'phone' => [
+                ...PhoneNumberNormalizer::validationRules(required: false),
+                Rule::unique('customers', 'phone')
+                    ->ignore($customer->id)
+                    ->whereNull('deleted_at'),
+            ],
+            'countryCode' => PhoneNumberNormalizer::countryCodeValidationRules(),
+            'phoneNumber' => ['nullable', 'string', 'max:15', 'regex:/^0?\d{4,14}$/'],
             'phoneChangeCode' => 'nullable|string|size:6',
+            'emailChangeCode' => 'nullable|string|size:6',
             'profileImage' => $this->profileImageValidationRules($request),
         ], [
             'email.unique' => 'This email is already used by another account.',
+            'phone.unique' => 'This phone number is already used by another account.',
+            'countryCode.required_with' => 'Country code is required when phone number is provided.',
+            'phoneNumber.required_with' => 'Phone number is required when country code is provided.',
         ]);
 
         if ($validator->fails()) {
@@ -402,25 +512,71 @@ class MobileAuthController extends Controller
         $data = $validator->validated();
 
         if (isset($data['phone'])) {
-            if (empty($data['phoneChangeCode'])) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'To change phone, request a code first via POST /auth/send-phone-change-code, then send phone and phoneChangeCode.',
-                ], 422);
+            $newPhone = $data['phone'];
+            $currentPhone = PhoneNumberNormalizer::normalizeNullable($customer->phone) ?? '';
+
+            if ($newPhone !== $currentPhone) {
+                if (empty($data['phoneChangeCode'])) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'To change phone, request a code first via POST /auth/send-phone-change-code, then send phone and phoneChangeCode.',
+                    ], 422);
+                }
+
+                $result = $this->phoneVerification->verifyPhoneChangeCode(
+                    $newPhone,
+                    $data['phoneChangeCode'],
+                    (int) $customer->id,
+                );
+                if (! $result['success']) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => $result['message'],
+                    ], 400);
+                }
+
+                $customer->phone = $result['phone'] ?? $newPhone;
+                if ($phoneParts !== null) {
+                    $customer->phone_country_code = $phoneParts['countryCode'];
+                    $customer->phone_national_number = $phoneParts['phoneNumber'];
+                } else {
+                    $parts = PhoneNumberNormalizer::partsFromE164($newPhone);
+                    if ($parts !== null) {
+                        $customer->phone_country_code = $parts['countryCode'];
+                        $customer->phone_national_number = $parts['phoneNumber'];
+                    }
+                }
+                $customer->phone_verified_at = now();
             }
-            $result = $this->verification->verifyPhoneChangeCode(
-                $data['phone'],
-                $data['phoneChangeCode'],
-                (int) $customer->id
-            );
-            if (! $result['success']) {
-                return response()->json([
-                    'success' => false,
-                    'message' => $result['message'],
-                ], 400);
+        }
+
+        if (isset($data['email'])) {
+            $newEmail = strtolower(trim($data['email']));
+            $currentEmail = strtolower(trim((string) $customer->email));
+
+            if ($newEmail !== $currentEmail) {
+                if (empty($data['emailChangeCode'])) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'To change email, request a code first via POST /auth/send-email-change-code, then send email and emailChangeCode.',
+                    ], 422);
+                }
+
+                $result = $this->emailVerification->verifyEmailChangeCode(
+                    $newEmail,
+                    $data['emailChangeCode'],
+                    (int) $customer->id,
+                );
+                if (! $result['success']) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => $result['message'],
+                    ], 400);
+                }
+
+                $customer->email = $result['email'];
+                $customer->email_verified_at = now();
             }
-            $customer->phone = $result['phone'];
-            $customer->phone_verified_at = now();
         }
 
         if (isset($data['firstName'])) {
@@ -428,9 +584,6 @@ class MobileAuthController extends Controller
         }
         if (array_key_exists('lastName', $data)) {
             $customer->last_name = $data['lastName'];
-        }
-        if (array_key_exists('email', $data)) {
-            $customer->email = $data['email'];
         }
 
         // Handle image upload if provided
@@ -459,13 +612,29 @@ class MobileAuthController extends Controller
 
     /**
      * POST /api/v1/auth/send-phone-change-code
-     * Body: { newPhone }
-     * Sends OTP to new phone. Then use PUT auth/me with phone + phoneChangeCode to confirm.
+     * Body: { newPhone } OR { newCountryCode, newPhoneNumber }
+     * Sends OTP to the new phone via SMS. Then use PUT auth/me with phone + phoneChangeCode to confirm.
      */
     public function sendPhoneChangeCode(Request $request): JsonResponse
     {
+        $phoneParts = $this->resolvePhoneParts($request, 'newPhone', 'newCountryCode', 'newPhoneNumber');
+        if ($phoneParts === false) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => [
+                    'newPhone' => ['Invalid phone number. Provide newPhone (E.164) or newCountryCode + newPhoneNumber.'],
+                ],
+            ], 422);
+        }
+
         $validator = Validator::make($request->all(), [
-            'newPhone' => 'required|string|max:20',
+            'newPhone' => PhoneNumberNormalizer::validationRules(required: $phoneParts === null),
+            'newCountryCode' => PhoneNumberNormalizer::countryCodeValidationRules(),
+            'newPhoneNumber' => ['nullable', 'string', 'max:15', 'regex:/^0?\d{4,14}$/'],
+        ], [
+            'newCountryCode.required_with' => 'Country code is required when phone number is provided.',
+            'newPhoneNumber.required_with' => 'Phone number is required when country code is provided.',
         ]);
 
         if ($validator->fails()) {
@@ -477,9 +646,55 @@ class MobileAuthController extends Controller
         }
 
         $customer = $request->user();
-        $result = $this->verification->sendPhoneChangeCode(
-            $validator->validated()['newPhone'],
-            (int) $customer->id
+        $newPhone = (string) $request->input('newPhone');
+        $result = $this->phoneVerification->sendPhoneChangeCode(
+            $newPhone,
+            (int) $customer->id,
+        );
+
+        if (! $result['success']) {
+            return response()->json([
+                'success' => false,
+                'message' => $result['message'],
+            ], 400);
+        }
+
+        $response = [
+            'success' => true,
+            'message' => 'Verification code sent to your phone.',
+        ];
+        if (app()->environment('local', 'testing') && isset($result['code'])) {
+            $response['code'] = $result['code'];
+        }
+
+        return response()->json($response, 200);
+    }
+
+    /**
+     * POST /api/v1/auth/send-email-change-code
+     * Body: { newEmail }
+     * Sends OTP to the new email address. Then use PUT auth/me with email + emailChangeCode to confirm.
+     */
+    public function sendEmailChangeCode(Request $request): JsonResponse
+    {
+        $this->mergeNormalizedEmail($request, 'newEmail');
+
+        $validator = Validator::make($request->all(), [
+            'newEmail' => 'required|email',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $customer = $request->user();
+        $result = $this->emailVerification->sendEmailChangeCode(
+            (int) $customer->id,
+            $validator->validated()['newEmail'],
         );
 
         if (! $result['success']) {
@@ -595,9 +810,161 @@ class MobileAuthController extends Controller
         return false;
     }
 
+    /**
+     * Phone is optional unless email is omitted (required_without:email).
+     *
+     * @return array<int, mixed>
+     */
+    private function optionalPhoneRules(): array
+    {
+        return [
+            'required_without:email',
+            'nullable',
+            'string',
+            'max:' . PhoneNumberNormalizer::E164_MAX_LENGTH,
+            new \App\Rules\E164PhoneNumber,
+        ];
+    }
+
+    /**
+     * Signup accepts either legacy `phone` (E.164) or `countryCode` + `phoneNumber`.
+     *
+     * @return array{countryCode: string, phoneNumber: string}|null|false null = use legacy phone only, false = invalid parts
+     */
+    private function resolveSignupPhoneParts(Request $request): array|null|false
+    {
+        return $this->resolvePhoneParts($request);
+    }
+
+    /**
+     * Accept either E.164 phone field or countryCode + phoneNumber pair.
+     *
+     * @return array{countryCode: string, phoneNumber: string}|null|false null = no phone input, false = invalid
+     */
+    private function resolvePhoneParts(
+        Request $request,
+        string $e164Field = 'phone',
+        string $countryCodeField = 'countryCode',
+        string $nationalField = 'phoneNumber',
+    ): array|null|false {
+        $hasParts = $request->filled($countryCodeField) || $request->filled($nationalField);
+        $hasLegacyPhone = $request->filled($e164Field);
+
+        if ($hasParts && $hasLegacyPhone) {
+            return false;
+        }
+
+        if ($hasParts) {
+            if (! $request->filled($countryCodeField) || ! $request->filled($nationalField)) {
+                return false;
+            }
+
+            $parts = PhoneNumberNormalizer::fromParts(
+                (string) $request->input($countryCodeField),
+                (string) $request->input($nationalField),
+            );
+            if ($parts === null) {
+                return false;
+            }
+
+            $request->merge([$e164Field => $parts['e164']]);
+
+            return [
+                'countryCode' => $parts['countryCode'],
+                'phoneNumber' => $parts['phoneNumber'],
+            ];
+        }
+
+        if ($hasLegacyPhone) {
+            $this->mergeNormalizedPhone($request, $e164Field);
+            $parts = PhoneNumberNormalizer::partsFromE164((string) $request->input($e164Field));
+
+            return $parts;
+        }
+
+        return null;
+    }
+
+    /**
+     * @return array{phone: ?string, countryCode: ?string, phoneNumber: ?string}
+     */
+    private function phoneFieldsForCustomer(Customer $customer): array
+    {
+        $e164 = $customer->phone !== null && $customer->phone !== ''
+            ? PhoneNumberNormalizer::normalize((string) $customer->phone)
+            : null;
+
+        return $this->phoneFieldsForCustomerPhone(
+            $e164 !== '' ? $e164 : null,
+            $this->nullableString($customer->phone_country_code),
+            $this->nullableString($customer->phone_national_number),
+        );
+    }
+
+    /**
+     * @return array{phone: ?string, countryCode: ?string, phoneNumber: ?string}
+     */
+    private function phoneFieldsForCustomerPhone(?string $e164, ?string $countryCode, ?string $phoneNumber): array
+    {
+        if ($e164 !== null && $e164 !== '') {
+            $e164 = PhoneNumberNormalizer::normalize($e164);
+            if ($e164 === '') {
+                $e164 = null;
+            }
+        }
+
+        if ($countryCode === null || $phoneNumber === null) {
+            $parts = PhoneNumberNormalizer::partsFromE164($e164);
+            if ($parts !== null) {
+                $countryCode ??= $parts['countryCode'];
+                $phoneNumber ??= $parts['phoneNumber'];
+            }
+        }
+
+        return [
+            'phone' => $e164,
+            'countryCode' => $countryCode,
+            'phoneNumber' => $phoneNumber,
+        ];
+    }
+
+    private function nullableString(mixed $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        $value = trim((string) $value);
+
+        return $value === '' ? null : $value;
+    }
+
+    private function mergeNormalizedPhone(Request $request, string $field = 'phone'): void
+    {
+        if ($request->filled($field)) {
+            $request->merge([
+                $field => PhoneNumberNormalizer::normalize((string) $request->input($field)),
+            ]);
+        }
+    }
+
+    private function mergeNormalizedEmail(Request $request, string $field = 'email'): void
+    {
+        if ($request->filled($field)) {
+            $request->merge([
+                $field => $this->normalizeEmail((string) $request->input($field)),
+            ]);
+        }
+    }
+
     private function normalizePhone(string $phone): string
     {
         return PhoneNumberNormalizer::normalize($phone);
+    }
+
+    private function normalizeEmail(string $email): string
+    {
+        return strtolower(trim($email));
     }
 
     /**
@@ -847,7 +1214,7 @@ class MobileAuthController extends Controller
             'firstName' => $customer->first_name,
             'lastName' => $customer->last_name,
             'email' => $customer->email,
-            'phone' => $customer->phone,
+            ...$this->phoneFieldsForCustomer($customer),
             'profileImage' => $profileImageUrl,
             'phoneVerifiedAt' => ApiDateTime::toBusinessIso8601($customer->phone_verified_at),
             'phoneVerifiedAtUtc' => ApiDateTime::toUtcIso8601($customer->phone_verified_at),

@@ -3,9 +3,9 @@
 namespace App\Filament\Resources\CustomFieldResource\Pages;
 
 use App\Filament\Resources\CustomFieldResource;
-use Filament\Resources\Pages\EditRecord;
+use App\Filament\Resources\Pages\StaysOnPageEditRecord;
 
-class EditCustomField extends EditRecord
+class EditCustomField extends StaysOnPageEditRecord
 {
     protected static string $resource = CustomFieldResource::class;
 }

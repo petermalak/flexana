@@ -6,12 +6,13 @@ use App\Filament\Resources\AmeliaAppointments\AmeliaAppointmentResource;
 use App\Infrastructure\Persistence\Eloquent\AppointmentModel;
 use App\Infrastructure\Persistence\Eloquent\CompanyOffDayModel;
 use App\Infrastructure\Persistence\Eloquent\StaffOffDayModel;
+use App\Support\BranchContext;
 use Carbon\Carbon;
-use Filament\Resources\Pages\CreateRecord;
+use App\Filament\Resources\Pages\StaysOnPageCreateRecord;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
-class CreateAmeliaAppointment extends CreateRecord
+class CreateAmeliaAppointment extends StaysOnPageCreateRecord
 {
     protected static string $resource = AmeliaAppointmentResource::class;
 
@@ -30,6 +31,10 @@ class CreateAmeliaAppointment extends CreateRecord
 
     public function mutateFormDataBeforeCreate(array $data): array
     {
+        if ($branchId = BranchContext::scopedBranchId()) {
+            $data['branch_id'] = $branchId;
+        }
+
         $createRecurring = ! empty($data['create_recurring']);
         $day = $data['create_recurring_day'] ?? null;
         $count = isset($data['create_recurring_count']) ? (int) $data['create_recurring_count'] : 0;
@@ -95,6 +100,7 @@ class CreateAmeliaAppointment extends CreateRecord
                 'provider_id' => $record->provider_id,
                 'package_id' => $record->package_id,
                 'location_id' => $record->location_id,
+                'branch_id' => $record->branch_id,
                 'booking_start' => $occurrenceStart->format('Y-m-d H:i:s'),
                 'booking_end' => $occurrenceEnd->format('Y-m-d H:i:s'),
                 'status' => $record->status,

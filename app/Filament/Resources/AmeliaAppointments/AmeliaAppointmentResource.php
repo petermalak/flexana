@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\AmeliaAppointments;
 
+use App\Filament\Concerns\ScopesToUserBranch;
 use App\Filament\Resources\AmeliaAppointments\Pages\CreateAmeliaAppointment;
 use App\Filament\Resources\AmeliaAppointments\Pages\EditAmeliaAppointment;
 use App\Filament\Resources\AmeliaAppointments\Pages\ListAmeliaAppointments;
@@ -14,9 +15,12 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 
 class AmeliaAppointmentResource extends Resource
 {
+    use ScopesToUserBranch;
+
     protected static ?string $model = AppointmentModel::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedCalendarDays;
@@ -58,5 +62,10 @@ class AmeliaAppointmentResource extends Resource
             'create' => CreateAmeliaAppointment::route('/create'),
             'edit' => EditAmeliaAppointment::route('/{record}/edit'),
         ];
+    }
+
+    public static function getEloquentQuery(): Builder
+    {
+        return static::applyBranchScope(parent::getEloquentQuery());
     }
 }

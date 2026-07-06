@@ -3,9 +3,9 @@
 namespace App\Filament\Resources\AmeliaProviderServices\Pages;
 
 use App\Filament\Resources\AmeliaProviderServices\AmeliaProviderServiceResource;
-use Filament\Resources\Pages\CreateRecord;
+use App\Filament\Resources\Pages\StaysOnPageCreateRecord;
 
-class CreateAmeliaProviderService extends CreateRecord
+class CreateAmeliaProviderService extends StaysOnPageCreateRecord
 {
     protected static string $resource = AmeliaProviderServiceResource::class;
 }

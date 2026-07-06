@@ -2,11 +2,16 @@
 
 namespace App\Filament\Resources;
 
+use App\Application\Admin\SessionBooking\AdminSessionBookingService;
+use App\Filament\Concerns\ScopesToUserBranch;
 use App\Filament\Resources\SessionBookingResource\Pages;
 use App\Infrastructure\Persistence\Eloquent\AppointmentModel;
 use App\Infrastructure\Persistence\Eloquent\BookingModel;
 use App\Infrastructure\Persistence\Eloquent\CustomerModel;
+use App\Support\BranchContext;
+use Filament\Actions;
 use Filament\Forms;
+use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Tables;
@@ -15,6 +20,8 @@ use Illuminate\Database\Eloquent\Builder;
 
 class SessionBookingResource extends Resource
 {
+    use ScopesToUserBranch;
+
     protected static ?string $model = BookingModel::class;
 
     protected static \BackedEnum|string|null $navigationIcon = 'heroicon-o-calendar-days';
@@ -32,10 +39,12 @@ class SessionBookingResource extends Resource
                 ->label('Session')
                 ->required()
                 ->options(function () {
-                    return AppointmentModel::query()
-                        ->with(['service', 'provider'])
-                        ->orderByDesc('booking_start')
-                        ->limit(500)
+                    return BranchContext::scopeAppointments(
+                        AppointmentModel::query()
+                            ->with(['service', 'provider'])
+                            ->orderByDesc('booking_start')
+                            ->limit(500),
+                    )
                         ->get()
                         ->mapWithKeys(function (AppointmentModel $a) {
                             $service = $a->service?->name ?? 'Unknown';
@@ -58,13 +67,14 @@ class SessionBookingResource extends Resource
                         return [];
                     }
 
-                    return CustomerModel::query()
-                        ->where(function (Builder $q) use ($search) {
+                    return BranchContext::scopeCustomersWithBranchBookings(
+                        CustomerModel::query()->where(function (Builder $q) use ($search) {
                             $q->where('first_name', 'like', "%{$search}%")
                                 ->orWhere('last_name', 'like', "%{$search}%")
                                 ->orWhereRaw("concat(first_name, ' ', last_name) like ?", ["%{$search}%"])
                                 ->orWhere('phone', 'like', "%{$search}%");
-                        })
+                        }),
+                    )
                         ->orderBy('first_name')
                         ->limit(50)
                         ->get()
@@ -188,9 +198,44 @@ class SessionBookingResource extends Resource
                     ->dateTime('Y-m-d H:i')
                     ->sortable(),
             ])
+            ->filters([
+                Tables\Filters\SelectFilter::make('status')
+                    ->options([
+                        'pending' => 'Pending',
+                        'confirmed' => 'Confirmed',
+                        'cancelled' => 'Cancelled',
+                        'completed' => 'Completed',
+                        'no_show' => 'No Show',
+                    ]),
+            ])
             ->actions([
-                \Filament\Actions\ViewAction::make(),
-                \Filament\Actions\EditAction::make(),
+                Actions\ViewAction::make(),
+                Actions\EditAction::make(),
+                Actions\Action::make('cancel')
+                    ->label('Cancel')
+                    ->icon('heroicon-o-x-circle')
+                    ->color('danger')
+                    ->visible(fn (BookingModel $record): bool => $record->appointment_id !== null
+                        && in_array($record->status, ['confirmed', 'pending'], true))
+                    ->requiresConfirmation()
+                    ->modalHeading('Cancel session booking')
+                    ->modalDescription('This frees the spots on the session so new customers can book. Package sessions are restored to the customer when applicable.')
+                    ->action(function (BookingModel $record): void {
+                        try {
+                            app(AdminSessionBookingService::class)->cancel($record);
+                            Notification::make()
+                                ->title('Booking cancelled')
+                                ->body('The session is open for new bookings again.')
+                                ->success()
+                                ->send();
+                        } catch (\Throwable $e) {
+                            Notification::make()
+                                ->title('Could not cancel booking')
+                                ->body($e->getMessage())
+                                ->danger()
+                                ->send();
+                        }
+                    }),
             ])
             ->defaultSort('booked_at', 'desc');
     }
@@ -200,6 +245,11 @@ class SessionBookingResource extends Resource
         return [
             'index' => Pages\ManageSessionBookings::route('/'),
         ];
+    }
+
+    public static function getEloquentQuery(): Builder
+    {
+        return static::applyBranchScopeViaRelation(parent::getEloquentQuery(), 'appointment');
     }
 }
 

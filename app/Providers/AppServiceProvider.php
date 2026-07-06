@@ -24,6 +24,11 @@ use App\Infrastructure\Persistence\Repositories\StaffRepository;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Client\Factory as HttpFactory;
 use Illuminate\Http\Request;
+use App\Infrastructure\Persistence\Eloquent\AppointmentModel;
+use App\Infrastructure\Persistence\Eloquent\BookingModel;
+use App\Policies\AppointmentPolicy;
+use App\Policies\BookingPolicy;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
@@ -59,6 +64,9 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        Gate::policy(AppointmentModel::class, AppointmentPolicy::class);
+        Gate::policy(BookingModel::class, BookingPolicy::class);
+
         RateLimiter::for('web-sessions', function (Request $request) {
             $perMinute = (int) config('web_schedule.per_minute', 120);
 

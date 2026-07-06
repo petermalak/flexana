@@ -3,9 +3,9 @@
 namespace App\Filament\Resources\TagResource\Pages;
 
 use App\Filament\Resources\TagResource;
-use Filament\Resources\Pages\EditRecord;
+use App\Filament\Resources\Pages\StaysOnPageEditRecord;
 
-class EditTag extends EditRecord
+class EditTag extends StaysOnPageEditRecord
 {
     protected static string $resource = TagResource::class;
 }

@@ -2,7 +2,7 @@
 	"info": {
 		"_postman_id": "flexana-mobile-api-v1",
 		"name": "Flexana Mobile API (v1)",
-		"description": "Flexana mobile app API. Auth: Login (phone+password). Signup: POST /auth/signup -> OTP via SMS -> POST /auth/verify -> token. Profile: me, update, phone change, change password, delete account, logout. Schedule: GET sessions (filter by date, category: Yoga | yoga | reformer | Reformer Pilates, instructorID), POST session-bookings (sessionID, optional spots, promoCode, isDropIn), cancel, GET appointments/history (includes isDropIn, spots, canCancel, minutesBeforeCancellation). spots: how many persons to book (1–20, default 1); capacity and price use this count. Packages: GET package-offers (grouped by category; Uncategorized if no match), POST purchase-package. Promo: POST promo-codes/verify, then promoCode when booking or purchasing. Base: /api/v1. Each request has example responses (Success, 4xx) where relevant.\n\nVariables:\n- base_url: Main URL (default: localhost)\n- base_url_localhost: http://127.0.0.1:8000\n- base_url_stage: https://sdhds.net/backend/backend/public\n- bearer_token: Auto-set after login/verify",
+		"description": "Flexana mobile app API (updated Jul 2026).\n\nAuth: Login with email OR phone + password. Signup: phone+email → OTP via email → verify (email+code).\n\nBranches: GET /branches returns id + name + image + address + mapUrl. Use branchId on sessions, package-offers, service (branch-specific drop-in price), and purchase-package.\n\nPackages: GET /package-offers?branchId= filters by branch; each package includes branchIds + branchName.\n\nPromos: drop-in codes can be restricted to appointments and/or branches — pass sessionID on verify for drop-ins.\n\nPackage booking: isDropIn=false only allowed when session date is on/before package expiry.\n\nVariables: base_url, bearer_token (auto-set), branch_id, signup_email, test_email, test_phone.\n\nImport Flexana_Mobile_API.postman_environment.json and pick Local or Production.",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"auth": {
@@ -18,49 +18,42 @@
 	"item": [
 		{
 			"name": "Auth",
-			"description": "Flow: (1) Login = POST /auth/login (phone, password). (2) Signup = POST /auth/signup (phone [+ optional profile]) -> backend sends 6-digit OTP via SMS (Twilio/log) -> user enters code (+ optional password) -> POST /auth/verify (phone, code, optional password) -> token. Forgot/Reset password, Get Me, Update Me, Send Phone Change Code, Change Password, Delete Account, Logout.",
+			"description": "Recommended flows:\n1) Login: email OR phone + password (+ optional fcmToken).\n2) Signup: phone+email → Verify (email+code+password) → token.\n3) Reset password: Forgot (email OR phone) → OTP to email → Reset (same identifier + code + new password).\n4) Profile phone: PUT auth/me with phone OR countryCode + phoneNumber (no OTP).\n5) Email change: Send Email Change Code (newEmail) → OTP to new email → Update Me (email + emailChangeCode).\n\nUse test_email / test_phone collection variables.",
 			"item": [
 				{
-					"name": "Login",
+					"name": "Login (email)",
 					"request": {
 						"auth": { "type": "noauth" },
 						"method": "POST",
-						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Accept", "value": "application/json" }
+						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"phone\": \"+201234567890\",\n    \"password\": \"secret123\",\n    \"fcmToken\": \"dG9rZW4tZnJvbS1maXJlYmFzZS1jbG91ZC1tZXNzYWdpbmc\",\n    \"platform\": \"android\",\n    \"deviceId\": \"unique-device-uuid\"\n}"
+							"raw": "{\n    \"email\": \"{{test_email}}\",\n    \"password\": \"{{test_password}}\",\n    \"fcmToken\": \"dOS6WszpQv2lMxeqHPxUN7:APA91bExampleToken\",\n    \"platform\": \"android\",\n    \"deviceId\": \"BP2A.250605.031.A3\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/v1/auth/login",
 							"host": ["{{base_url}}"],
 							"path": ["api", "v1", "auth", "login"]
 						},
-						"description": "Existing user. Body: phone (required), password (required). Optional: fcmToken (FCM device token for push notifications, stored in backend), platform (android|ios), deviceId (unique per device; used with customer_id to updateOrCreate FCM token). Returns token + customer. Store token; use Authorization: Bearer <token> for all other requests."
+						"description": "Login with email + password. Send email OR phone (not both required). Optional: fcmToken, platform (android|ios), deviceId. Token auto-saved to bearer_token."
 					},
 					"response": [
 						{
-							"name": "Success (phone + password only)",
-							"originalRequest": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\\n    \\\"phone\\\": \\\"+201234567890\\\",\\n    \\\"password\\\": \\\"secret123\\\"\\n}" }, "url": { "raw": "{{base_url}}/api/v1/auth/login", "host": ["{{base_url}}"], "path": ["api", "v1", "auth", "login"] } },
+							"name": "Success",
 							"status": "OK",
 							"code": 200,
 							"header": [{ "key": "Content-Type", "value": "application/json" }],
-							"body": "{\"success\":true,\"message\":\"Logged in.\",\"token\":\"1|abc123xyz\",\"token_type\":\"Bearer\",\"customer\":{\"id\":\"1\",\"uid\":\"550e8400-e29b-41d4-a716-446655440000\",\"firstName\":\"Jane\",\"lastName\":\"Doe\",\"email\":\"jane@example.com\",\"phone\":\"+201234567890\",\"profileImage\":\"http://127.0.0.1:8000/storage/profiles/profile_123.png\",\"phoneVerifiedAt\":\"2024-01-15T10:00:00.000000Z\",\"emailVerifiedAt\":null,\"remainingSessions\":5}}"
-						},
-						{
-							"name": "Success (with FCM token)",
-							"originalRequest": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\\n    \\\"phone\\\": \\\"+201234567890\\\",\\n    \\\"password\\\": \\\"secret123\\\",\\n    \\\"fcmToken\\\": \\\"dG9rZW4tZnJvbS1maXJlYmFzZS1jbG91ZC1tZXNzYWdpbmc\\\",\\n    \\\"platform\\\": \\\"android\\\",\\n    \\\"deviceId\\\": \\\"unique-device-uuid\\\"\\n}" }, "url": { "raw": "{{base_url}}/api/v1/auth/login", "host": ["{{base_url}}"], "path": ["api", "v1", "auth", "login"] } },
-							"status": "OK",
-							"code": 200,
-							"header": [{ "key": "Content-Type", "value": "application/json" }],
-							"body": "{\"success\":true,\"message\":\"Logged in.\",\"token\":\"1|abc123\",\"token_type\":\"Bearer\",\"customer\":{\"id\":\"1\",\"uid\":\"uuid\",\"firstName\":\"Jane\",\"lastName\":\"Doe\",\"email\":\"jane@example.com\",\"phone\":\"+201234567890\",\"profileImage\":\"http://127.0.0.1:8000/storage/profiles/profile_123.png\",\"phoneVerifiedAt\":\"2024-01-15T10:00:00.000000Z\",\"emailVerifiedAt\":null,\"remainingSessions\":5}}"
+							"body": "{\"success\":true,\"message\":\"Logged in.\",\"token\":\"1|abc123xyz\",\"token_type\":\"Bearer\",\"customer\":{\"id\":\"1\",\"email\":\"user@example.com\",\"phone\":\"+201234567890\",\"emailVerifiedAt\":\"2024-01-15T10:00:00.000000Z\"}}"
 						},
 						{
 							"name": "401 Invalid credentials",
-							"originalRequest": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\\n    \\\"phone\\\": \\\"+201234567890\\\",\\n    \\\"password\\\": \\\"wrong\\\"\\n}" }, "url": { "raw": "{{base_url}}/api/v1/auth/login", "host": ["{{base_url}}"], "path": ["api", "v1", "auth", "login"] } },
 							"status": "Unauthorized",
 							"code": 401,
 							"header": [{ "key": "Content-Type", "value": "application/json" }],
-							"body": "{\"success\":false,\"message\":\"Invalid phone or password.\"}"
+							"body": "{\"success\":false,\"message\":\"Invalid email or password.\"}"
 						}
 					],
 					"event": [
@@ -79,21 +72,82 @@
 					]
 				},
 				{
-					"name": "Signup (backend OTP)",
+					"name": "Login (phone)",
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Accept", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"phone\": \"{{test_phone}}\",\n    \"password\": \"{{test_password}}\",\n    \"fcmToken\": \"dG9rZW4tZnJvbS1maXJlYmFzZS1jbG91ZC1tZXNzYWdpbmc\",\n    \"platform\": \"android\",\n    \"deviceId\": \"unique-device-uuid\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/auth/login",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "auth", "login"]
+						},
+						"description": "Login with phone (E.164, e.g. +201234567890) + password. Send email OR phone. Optional: fcmToken, platform, deviceId. Token auto-saved to bearer_token."
+					},
+					"response": [
+						{
+							"name": "Success (phone + password only)",
+							"originalRequest": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\\n    \\\"phone\\\": \\\"+201234567890\\\",\\n    \\\"password\\\": \\\"secret123\\\"\\n}" }, "url": { "raw": "{{base_url}}/api/v1/auth/login", "host": ["{{base_url}}"], "path": ["api", "v1", "auth", "login"] } },
+							"status": "OK",
+							"code": 200,
+							"header": [{ "key": "Content-Type", "value": "application/json" }],
+							"body": "{\"success\":true,\"message\":\"Logged in.\",\"token\":\"1|abc123xyz\",\"token_type\":\"Bearer\",\"customer\":{\"id\":\"1\",\"uid\":\"550e8400-e29b-41d4-a716-446655440000\",\"firstName\":\"Jane\",\"lastName\":\"Doe\",\"email\":\"jane@example.com\",\"phone\":\"+201234567890\",\"profileImage\":\"http://127.0.0.1:8000/storage/profiles/profile_123.png\",\"phoneVerifiedAt\":null,\"emailVerifiedAt\":\"2024-01-15T10:00:00.000000Z\",\"remainingSessions\":5}}"
+						},
+						{
+							"name": "Success (with FCM token)",
+							"originalRequest": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\\n    \\\"phone\\\": \\\"+201234567890\\\",\\n    \\\"password\\\": \\\"secret123\\\",\\n    \\\"fcmToken\\\": \\\"dG9rZW4tZnJvbS1maXJlYmFzZS1jbG91ZC1tZXNzYWdpbmc\\\",\\n    \\\"platform\\\": \\\"android\\\",\\n    \\\"deviceId\\\": \\\"unique-device-uuid\\\"\\n}" }, "url": { "raw": "{{base_url}}/api/v1/auth/login", "host": ["{{base_url}}"], "path": ["api", "v1", "auth", "login"] } },
+							"status": "OK",
+							"code": 200,
+							"header": [{ "key": "Content-Type", "value": "application/json" }],
+							"body": "{\"success\":true,\"message\":\"Logged in.\",\"token\":\"1|abc123\",\"token_type\":\"Bearer\",\"customer\":{\"id\":\"1\",\"uid\":\"uuid\",\"firstName\":\"Jane\",\"lastName\":\"Doe\",\"email\":\"jane@example.com\",\"phone\":\"+201234567890\",\"profileImage\":\"http://127.0.0.1:8000/storage/profiles/profile_123.png\",\"phoneVerifiedAt\":null,\"emailVerifiedAt\":\"2024-01-15T10:00:00.000000Z\",\"remainingSessions\":5}}"
+						},
+						{
+							"name": "401 Invalid credentials",
+							"originalRequest": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\\n    \\\"phone\\\": \\\"+201234567890\\\",\\n    \\\"password\\\": \\\"wrong\\\"\\n}" }, "url": { "raw": "{{base_url}}/api/v1/auth/login", "host": ["{{base_url}}"], "path": ["api", "v1", "auth", "login"] } },
+							"status": "Unauthorized",
+							"code": 401,
+							"header": [{ "key": "Content-Type", "value": "application/json" }],
+							"body": "{\"success\":false,\"message\":\"Invalid email or password.\"}"
+						}
+					],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"const res = pm.response.json();",
+									"if (res.token) {",
+									"    pm.collectionVariables.set('bearer_token', res.token);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					]
+				},
+				{
+					"name": "Signup (phone OTP)",
 					"request": {
 						"auth": { "type": "noauth" },
 						"method": "POST",
 						"header": [{ "key": "Content-Type", "value": "application/json" }],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"phone\": \"+201234567890\",\n    \"firstName\": \"Jane\",\n    \"lastName\": \"Doe\",\n    \"email\": \"jane@example.com\",\n    \"profileImage\": \"data:image/png;base64,iVBORw0KGgo...\"\n}"
+							"raw": "{\n    \"countryCode\": \"20\",\n    \"phoneNumber\": \"01012345678\",\n    \"email\": \"{{test_email}}\",\n    \"firstName\": \"Jane\",\n    \"lastName\": \"Doe\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/v1/auth/signup",
 							"host": ["{{base_url}}"],
 							"path": ["api", "v1", "auth", "signup"]
 						},
-						"description": "Step 1 of signup. Body: phone (required), optional firstName, lastName, email, profileImage. profileImage: send as multipart/form-data file (key: profileImage) OR base64 string in JSON (e.g. data:image/png;base64,...). Max 5MB, jpeg/png/jpg/gif. Backend sends OTP to phone. Then call Verify with phone + code (+ optional password, optional profileImage)."
+						"description": "Step 1 of signup. Body: phone (required, E.164 e.g. +201… or +44…), email (required), optional firstName, lastName, profileImage. profileImage: multipart file (profileImage) OR base64 in JSON. Max 5MB. Backend sends 6-digit OTP via SMS to phone. In local/testing, response may include code. Then call Verify with the same phone + code."
 					},
 					"response": [
 						{
@@ -102,7 +156,24 @@
 							"status": "OK",
 							"code": 200,
 							"header": [{ "key": "Content-Type", "value": "application/json" }],
-							"body": "{\"success\":true,\"message\":\"Verification code sent.\",\"useLegacyVerify\":true,\"phone\":\"+201234567890\"}"
+							"body": "{\"success\":true,\"message\":\"Verification code sent to your phone.\",\"useLegacyVerify\":true,\"email\":\"jane@example.com\",\"phone\":\"+201234567890\"}"
+						}
+					],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"const res = pm.response.json();",
+									"if (res.phone) {",
+									"    pm.collectionVariables.set('signup_phone', res.phone);",
+									"}",
+									"if (res.email) {",
+									"    pm.collectionVariables.set('signup_email', res.email);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
 						}
 					]
 				},
@@ -114,14 +185,14 @@
 						"header": [{ "key": "Content-Type", "value": "application/json" }],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"phone\": \"+201234567890\",\n    \"code\": \"123456\",\n    \"password\": \"secret123\",\n    \"password_confirmation\": \"secret123\",\n    \"profileImage\": \"data:image/png;base64,iVBORw0KGgo...\"\n}"
+							"raw": "{\n    \"phone\": \"{{signup_phone}}\",\n    \"code\": \"123456\",\n    \"password\": \"secret123\",\n    \"password_confirmation\": \"secret123\",\n    \"fcmToken\": \"dG9rZW4tZnJvbS1maXJlYmFzZS1jbG91ZC1tZXNzYWdpbmc\",\n    \"platform\": \"android\",\n    \"deviceId\": \"unique-device-uuid\",\n    \"profileImage\": \"data:image/png;base64,iVBORw0KGgo...\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/v1/auth/verify",
 							"host": ["{{base_url}}"],
 							"path": ["api", "v1", "auth", "verify"]
 						},
-						"description": "Step 2 of signup. Use the same phone returned from Signup. Body: phone (required), code (6 digits), optional password + password_confirmation, optional profileImage (file upload as multipart/form-data or base64 in JSON), fcmToken, platform, deviceId. On success, phone_verified_at is set and token is saved to bearer_token."
+						"description": "Step 2 of signup. Body: phone (required), code (6 digits from SMS), optional password, profileImage, fcmToken+platform+deviceId (register device for class reminder push). On success: phoneVerifiedAt set, bearer_token saved."
 					},
 					"response": [
 						{
@@ -148,21 +219,21 @@
 					]
 				},
 				{
-					"name": "Forgot Password",
+					"name": "Forgot Password (email)",
 					"request": {
 						"auth": { "type": "noauth" },
 						"method": "POST",
 						"header": [{ "key": "Content-Type", "value": "application/json" }],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"phone\": \"+201234567890\"\n}"
+							"raw": "{\n    \"email\": \"{{test_email}}\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/v1/auth/forgot-password",
 							"host": ["{{base_url}}"],
 							"path": ["api", "v1", "auth", "forgot-password"]
 						},
-						"description": "Step 1 of reset flow (phone-based). Body: phone (required). Backend sends a 6-digit OTP code to that phone via SMS. The response is generic (does not reveal if the phone exists). Then call Reset Password with phone + code + new password."
+						"description": "Step 1 of reset flow. Body: email OR phone (one required). OTP is sent via SMS to the account phone. If you identify by email, SMS goes to the phone on file. Response is generic. In local/testing, response may include code."
 					},
 					"response": [
 						{
@@ -175,21 +246,82 @@
 					]
 				},
 				{
-					"name": "Reset Password",
+					"name": "Forgot Password (phone)",
 					"request": {
 						"auth": { "type": "noauth" },
 						"method": "POST",
 						"header": [{ "key": "Content-Type", "value": "application/json" }],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"phone\": \"+201234567890\",\n    \"code\": \"123456\",\n    \"password\": \"newsecret123\",\n    \"password_confirmation\": \"newsecret123\"\n}"
+							"raw": "{\n    \"phone\": \"{{test_phone}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/auth/forgot-password",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "auth", "forgot-password"]
+						},
+						"description": "Same as email variant but identify account by phone. OTP is sent via SMS to that phone."
+					},
+					"response": [
+						{
+							"name": "Success",
+							"status": "OK",
+							"code": 200,
+							"header": [{ "key": "Content-Type", "value": "application/json" }],
+							"body": "{\"success\":true,\"message\":\"If that phone number exists, we have sent a password reset code.\"}"
+						}
+					]
+				},
+				{
+					"name": "Reset Password (email)",
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"{{test_email}}\",\n    \"code\": \"123456\",\n    \"password\": \"newsecret123\",\n    \"password_confirmation\": \"newsecret123\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/v1/auth/reset-password",
 							"host": ["{{base_url}}"],
 							"path": ["api", "v1", "auth", "reset-password"]
 						},
-						"description": "Step 2 of reset flow (phone-based). Body: phone (required), code (6-digit OTP from SMS), password, password_confirmation (min 8 chars). On success user can log in with phone + new password."
+						"description": "Step 2 of reset flow. Body: email OR phone + code (from SMS) + password + password_confirmation (min 8). When using email as identifier, code was sent to the phone on file."
+					},
+					"response": [
+						{
+							"name": "Success",
+							"status": "OK",
+							"code": 200,
+							"header": [{ "key": "Content-Type", "value": "application/json" }],
+							"body": "{\"success\":true,\"message\":\"Password has been reset successfully.\"}"
+						},
+						{
+							"name": "400 Invalid or expired code",
+							"status": "Bad Request",
+							"code": 400,
+							"header": [{ "key": "Content-Type", "value": "application/json" }],
+							"body": "{\"success\":false,\"message\":\"Invalid or expired code.\"}"
+						}
+					]
+				},
+				{
+					"name": "Reset Password (phone)",
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"phone\": \"{{test_phone}}\",\n    \"code\": \"123456\",\n    \"password\": \"newsecret123\",\n    \"password_confirmation\": \"newsecret123\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/auth/reset-password",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "auth", "reset-password"]
+						},
+						"description": "Reset using phone as identifier. Code was sent via SMS to this phone. Use same phone here as in Forgot Password (phone)."
 					},
 					"response": [
 						{
@@ -237,7 +369,7 @@
 						"description": "Current customer profile. Requires Bearer."
 					},
 					"response": [
-						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"customer\":{\"id\":\"1\",\"uid\":\"uuid\",\"firstName\":\"Jane\",\"lastName\":\"Doe\",\"email\":\"jane@example.com\",\"phone\":\"+201234567890\",\"profileImage\":\"http://127.0.0.1:8000/storage/profiles/profile_123.png\",\"phoneVerifiedAt\":\"2024-01-15T10:00:00.000000Z\",\"emailVerifiedAt\":null,\"remainingSessions\":5}}" }
+						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"customer\":{\"id\":\"1\",\"uid\":\"uuid\",\"firstName\":\"Jane\",\"lastName\":\"Doe\",\"email\":\"jane@example.com\",\"phone\":\"+201234567890\",\"profileImage\":\"http://127.0.0.1:8000/storage/profiles/profile_123.png\",\"phoneVerifiedAt\":null,\"emailVerifiedAt\":\"2024-01-15T10:00:00.000000Z\",\"remainingSessions\":5}}" }
 					]
 				},
 				{
@@ -254,7 +386,7 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "v1", "auth", "me"]
 						},
-						"description": "Update profile (firstName, lastName, email, profileImage). profileImage: send as multipart/form-data file (key: profileImage) OR base64 string in JSON. Max 5MB, jpeg/png/jpg/gif. To change phone: first call Send Phone Change Code, then PUT with phone + phoneChangeCode. Requires Bearer."
+						"description": "Update profile (firstName, lastName, phone, email, profileImage). Phone: send phone (E.164) OR countryCode + phoneNumber — no OTP required. Email change: first call Send Email Change Code, then PUT with email + emailChangeCode. profileImage: multipart file (profileImage) OR base64 in JSON. Max 5MB, jpeg/png/jpg/gif. Requires Bearer."
 					},
 					"response": [
 						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"message\":\"Profile updated.\",\"customer\":{\"id\":\"1\",\"firstName\":\"Jane\",\"lastName\":\"Doe\",\"email\":\"jane@example.com\",\"phone\":\"+201234567890\",\"profileImage\":\"http://127.0.0.1:8000/storage/profiles/profile_123.png\"}}" }
@@ -285,43 +417,84 @@
 					]
 				},
 				{
-					"name": "Update Me (with phone change)",
+					"name": "Update Me (with phone)",
 					"request": {
 						"method": "PUT",
 						"header": [{ "key": "Content-Type", "value": "application/json" }],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"phone\": \"+201234567890\",\n    \"phoneChangeCode\": \"123456\"\n}"
+							"raw": "{\n    \"countryCode\": \"20\",\n    \"phoneNumber\": \"01012345678\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/v1/auth/me",
 							"host": ["{{base_url}}"],
 							"path": ["api", "v1", "auth", "me"]
 						},
-						"description": "Confirm phone change after calling Send Phone Change Code. Body: phone (new number) + phoneChangeCode (from SMS). Requires Bearer."
+						"description": "Update phone directly (no OTP). Body: either phone (E.164) OR countryCode + phoneNumber. Do not send both formats together. Requires Bearer."
 					},
 					"response": [
-						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"message\":\"Phone updated.\",\"customer\":{\"id\":\"1\",\"phone\":\"+201234567890\"}}" }
+						{ "name": "Success (countryCode + phoneNumber)", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"message\":\"Profile updated.\",\"customer\":{\"id\":\"1\",\"phone\":\"+201012345678\",\"countryCode\":\"20\",\"phoneNumber\":\"1012345678\"}}" },
+						{ "name": "Success (E.164 phone)", "originalRequest": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\\n    \\\"phone\\\": \\\"+201234567890\\\"\\n}" }, "url": { "raw": "{{base_url}}/api/v1/auth/me", "host": ["{{base_url}}"], "path": ["api", "v1", "auth", "me"] } }, "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"message\":\"Profile updated.\",\"customer\":{\"id\":\"1\",\"phone\":\"+201234567890\",\"countryCode\":\"20\",\"phoneNumber\":\"1234567890\"}}" }
 					]
 				},
 				{
-					"name": "Send Phone Change Code",
+					"name": "Update Me (with email change)",
+					"request": {
+						"method": "PUT",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"newemail@example.com\",\n    \"emailChangeCode\": \"123456\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/auth/me",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "auth", "me"]
+						},
+						"description": "Confirm email change after Send Email Change Code. Body: email (new address) + emailChangeCode (6-digit code sent to the new email). Requires Bearer."
+					},
+					"response": [
+						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"message\":\"Profile updated.\",\"customer\":{\"id\":\"1\",\"email\":\"newemail@example.com\"}}" }
+					]
+				},
+				{
+					"name": "Send Email Change Code",
 					"request": {
 						"method": "POST",
 						"header": [{ "key": "Content-Type", "value": "application/json" }],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"newPhone\": \"+201234567890\"\n}"
+							"raw": "{\n    \"newEmail\": \"newemail@example.com\"\n}"
 						},
 						"url": {
-							"raw": "{{base_url}}/api/v1/auth/send-phone-change-code",
+							"raw": "{{base_url}}/api/v1/auth/send-email-change-code",
 							"host": ["{{base_url}}"],
-							"path": ["api", "v1", "auth", "send-phone-change-code"]
+							"path": ["api", "v1", "auth", "send-email-change-code"]
 						},
-						"description": "Send OTP to new phone before changing phone. Then PUT auth/me with phone + phoneChangeCode. Requires Bearer."
+						"description": "Send OTP to the new email address before changing email. Then PUT auth/me with new email + emailChangeCode. Requires Bearer."
 					},
 					"response": [
-						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"message\":\"Verification code sent to the new phone.\"}" }
+						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"message\":\"Verification code sent to your new email.\"}" }
+					]
+				},
+				{
+					"name": "Register FCM Token",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"fcmToken\": \"dG9rZW4tZnJvbS1maXJlYmFzZS1jbG91ZC1tZXNzYWdpbmc\",\n    \"platform\": \"android\",\n    \"deviceId\": \"unique-device-uuid\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/auth/fcm-token",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "auth", "fcm-token"]
+						},
+						"description": "Register or refresh FCM device token. Required for Firebase push notifications including class reminders (sent by server one day before session). Body: fcmToken (required), platform (android|ios), deviceId. Also pass fcmToken on Login or Verify. Push payload when class is tomorrow: notification title \"Class reminder\", data.type=class_reminder, data.bookingId, data.sessionId, data.serviceName. Requires Bearer."
+					},
+					"response": [
+						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"message\":\"FCM token registered.\"}" }
 					]
 				},
 				{
@@ -370,11 +543,39 @@
 					"request": {
 						"method": "GET",
 						"header": [],
-						"url": { "raw": "{{base_url}}/api/v1/banners", "host": ["{{base_url}}"], "path": ["api", "v1", "banners"] },
-						"description": "Response: [{ image, URL }, ...]. Requires Bearer."
+						"url": {
+							"raw": "{{base_url}}/api/v1/banners?category=home",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "banners"],
+							"query": [
+								{ "key": "category", "value": "home", "description": "Optional. home (default) = home carousel banners; popup = home popup banners." }
+							]
+						},
+						"description": "Get active banners for the home screen. Query: category (optional) — home (default) for carousel banners, popup for home popup banners. Response: [{ title, image, URL }, ...]. Requires Bearer."
 					},
 					"response": [
-						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "[{\"image\":\"https://example.com/banner1.jpg\",\"url\":\"https://example.com\"}]" }
+						{ "name": "Success (home carousel)", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "[{\"title\":\"Summer promo\",\"image\":\"https://example.com/banner1.jpg\",\"URL\":\"https://example.com\"}]" },
+						{ "name": "Success (popup)", "originalRequest": { "method": "GET", "header": [], "url": { "raw": "{{base_url}}/api/v1/banners?category=popup", "host": ["{{base_url}}"], "path": ["api", "v1", "banners"], "query": [{ "key": "category", "value": "popup" }] } }, "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "[{\"title\":\"Welcome offer\",\"image\":\"https://example.com/popup-banner.jpg\",\"URL\":\"https://example.com/offer\"}]" }
+					]
+				},
+				{
+					"name": "Get Banners (Simple)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/banners/simple?category=home",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "banners", "simple"],
+							"query": [
+								{ "key": "category", "value": "home", "description": "Optional. home (default) = home carousel banners; popup = home popup banners." }
+							]
+						},
+						"description": "Lightweight banner list for filter/dropdown UI. Query: category (optional) — home (default) or popup. Response: [{ id, name }, ...]. name is the banner title. Requires Bearer."
+					},
+					"response": [
+						{ "name": "Success (home carousel)", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "[{\"id\":\"1\",\"name\":\"Summer promo\"},{\"id\":\"2\",\"name\":\"New class launch\"}]" },
+						{ "name": "Success (popup)", "originalRequest": { "method": "GET", "header": [], "url": { "raw": "{{base_url}}/api/v1/banners/simple?category=popup", "host": ["{{base_url}}"], "path": ["api", "v1", "banners", "simple"], "query": [{ "key": "category", "value": "popup" }] } }, "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "[{\"id\":\"3\",\"name\":\"Welcome offer\"}]" }
 					]
 				},
 				{
@@ -387,6 +588,44 @@
 					},
 					"response": [
 						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"data\":[{\"id\":\"1\",\"name\":\"Yoga\",\"slug\":\"yoga\",\"type\":\"service\",\"description\":\"Yoga classes\",\"image\":\"http://127.0.0.1:8000/storage/categories/yoga.jpg\",\"position\":0},{\"id\":\"2\",\"name\":\"Reformer Pilates\",\"slug\":\"reformer-pilates\",\"type\":\"service\",\"description\":\"Reformer Pilates\",\"image\":\"http://127.0.0.1:8000/storage/categories/pilates.jpg\",\"position\":1}]}" }
+					]
+				},
+				{
+					"name": "Get Branches",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/branches", "host": ["{{base_url}}"], "path": ["api", "v1", "branches"] },
+						"description": "Get active studio branches. Response: [{ id, name, image, address, mapUrl }, ...]. id is the branchId for sessions, packages, and filters. image is full URL (or null). mapUrl is a Google Maps link. Requires Bearer."
+					},
+					"response": [
+						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "[{\"id\":\"1\",\"name\":\"Main Studio\",\"image\":\"https://example.com/serve-storage.php?path=branches%2Fmain.jpg\",\"address\":\"123 Fitness St\",\"mapUrl\":\"https://maps.google.com/?q=123+Fitness+St\"},{\"id\":\"2\",\"name\":\"Downtown Branch\",\"image\":\"https://example.com/serve-storage.php?path=branches%2Fdowntown.jpg\",\"address\":\"456 Center Ave\",\"mapUrl\":\"https://maps.app.goo.gl/abc123\"}]" }
+					],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"const branches = pm.response.json();",
+									"if (Array.isArray(branches) && branches[0] && branches[0].id) {",
+									"    pm.collectionVariables.set('branch_id', String(branches[0].id));",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					]
+				},
+				{
+					"name": "Get Branches (Simple)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/branches/simple", "host": ["{{base_url}}"], "path": ["api", "v1", "branches", "simple"] },
+						"description": "Lightweight branch list for filter/dropdown UI. Response: [{ id, name }, ...]. Only active branches. Requires Bearer."
+					},
+					"response": [
+						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "[{\"id\":\"1\",\"name\":\"Main Studio\"},{\"id\":\"2\",\"name\":\"Downtown Branch\"}]" }
 					]
 				},
 				{
@@ -414,8 +653,15 @@
 					"request": {
 						"method": "GET",
 						"header": [],
-						"url": { "raw": "{{base_url}}/api/v1/service", "host": ["{{base_url}}"], "path": ["api", "v1", "service"] },
-						"description": "Response: categories for home screen. Format: [{ category: \"Yoga\" | \"Reformer Pilates\", services: [{ id, name, level, image, brief }, ...] }, ...]. Requires Bearer."
+						"url": {
+							"raw": "{{base_url}}/api/v1/service?branchId={{branch_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "service"],
+							"query": [
+								{ "key": "branchId", "value": "{{branch_id}}", "description": "Optional. When set, each service price reflects the drop-in price for that branch (from admin branch pricing)." }
+							]
+						},
+						"description": "Response: categories for home screen. Format: [{ category: \"Yoga\" | \"Reformer Pilates\", services: [{ id, name, level, image, brief, price, ... }, ...] }, ...]. Optional query branchId for branch-specific drop-in price. Requires Bearer."
 					},
 					"response": [
 						{
@@ -477,23 +723,24 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/api/v1/sessions?date=2024-01-20&category=Yoga&instructorID=1&per_page=15&page=1",
+							"raw": "{{base_url}}/api/v1/sessions?date=2024-01-20&category=Yoga&instructorID=1&branchId=1&per_page=15&page=1",
 							"host": ["{{base_url}}"],
 							"path": ["api", "v1", "sessions"],
 							"query": [
 								{ "key": "date", "value": "2024-01-20", "description": "YYYY-MM-DD (required for day view)" },
 								{ "key": "category", "value": "Yoga", "description": "Optional: Yoga | yoga | Reformer Pilates | reformer | reformer-pilates. Filters by service category_id + keywords (vinyasa, hatha, flow, etc. = Yoga; pilates, barre, reformer = Reformer Pilates)" },
 								{ "key": "instructorID", "value": "1", "description": "Optional provider ID" },
+								{ "key": "branchId", "value": "1", "description": "Optional branch ID. Filters sessions by branch. When branchId equals the default branch, older sessions with no branch may still appear." },
 								{ "key": "per_page", "value": "15", "description": "Default 15, max 50" },
 								{ "key": "page", "value": "1", "description": "Page number" }
 							]
 						},
-						"description": "Paginated sessions (appointments). Filter by date (YYYY-MM-DD), category (Yoga or Reformer Pilates — accepts yoga, reformer, reformer-pilates; matches by DB category and by service name/description keywords), instructorID. Response: { data: [{ id, bookingId, instructor, service, serviceType, price, date, isBooked, isFull, canCancel, canBook, willPay, minutesBeforeCancellation }, ...], meta }. price is the service price (per person, numeric). willPay = true means the customer has no valid package for this session category (booking with isDropIn=false will fail); false means it can be covered by a package. serviceType is Yoga | Reformer Pilates | null. Requires Bearer."
+						"description": "Paginated sessions (appointments). Filter by date (YYYY-MM-DD), category (Yoga or Reformer Pilates — accepts yoga, reformer, reformer-pilates), instructorID, branchId. price uses branch-specific drop-in pricing when configured in admin. Response: { data: [{ id, bookingId, branchId, branchName, instructor, service, serviceType, price, date, dateUtc, isBooked, isFull, remainingSpots, canCancel, canBook, willPay, minutesBeforeCancellation }, ...], meta }. branchId/branchName come from the appointment branch (default branch used when none selected). remainingSpots = seats left (confirmed+pending count toward capacity). When a booking is cancelled (app or admin), spots reopen immediately. Requires Bearer."
 					},
 					"response": [
-						{ "name": "Success (all sessions for date)", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"data\":[{\"id\":\"1\",\"bookingId\":null,\"instructor\":\"John\",\"service\":\"Vinyasa-Ladies only\",\"serviceType\":\"Yoga\",\"price\":200,\"date\":\"2024-01-20T10:00:00.000000Z\",\"isBooked\":false,\"isFull\":false,\"canCancel\":false,\"canBook\":true,\"willPay\":false,\"minutesBeforeCancellation\":60},{\"id\":\"2\",\"bookingId\":null,\"instructor\":\"Jane\",\"service\":\"Reformer Pilates - Ladies only L1\",\"serviceType\":\"Reformer Pilates\",\"price\":250,\"date\":\"2024-01-20T14:00:00.000000Z\",\"isBooked\":false,\"isFull\":false,\"canCancel\":false,\"canBook\":true,\"willPay\":true,\"minutesBeforeCancellation\":60}],\"meta\":{\"current_page\":1,\"last_page\":1,\"per_page\":15,\"total\":2}}" },
-						{ "name": "Success (filter category=Yoga)", "originalRequest": { "method": "GET", "header": [], "url": { "raw": "{{base_url}}/api/v1/sessions?date=2024-01-20&category=Yoga&per_page=15&page=1", "host": ["{{base_url}}"], "path": ["api", "v1", "sessions"], "query": [{ "key": "date", "value": "2024-01-20" }, { "key": "category", "value": "Yoga" }, { "key": "per_page", "value": "15" }, { "key": "page", "value": "1" }] } }, "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"data\":[{\"id\":\"1\",\"bookingId\":null,\"instructor\":\"John\",\"service\":\"Vinyasa-Ladies only\",\"serviceType\":\"Yoga\",\"price\":200,\"date\":\"2024-01-20T10:00:00.000000Z\",\"isBooked\":false,\"isFull\":false,\"canCancel\":false,\"canBook\":true,\"willPay\":false,\"minutesBeforeCancellation\":60}],\"meta\":{\"current_page\":1,\"last_page\":1,\"per_page\":15,\"total\":1}}" },
-						{ "name": "Success (filter category=reformer)", "originalRequest": { "method": "GET", "header": [], "url": { "raw": "{{base_url}}/api/v1/sessions?date=2024-01-20&category=reformer&per_page=15&page=1", "host": ["{{base_url}}"], "path": ["api", "v1", "sessions"], "query": [{ "key": "date", "value": "2024-01-20" }, { "key": "category", "value": "reformer" }, { "key": "per_page", "value": "15" }, { "key": "page", "value": "1" }] } }, "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"data\":[{\"id\":\"2\",\"bookingId\":null,\"instructor\":\"Jane\",\"service\":\"Reformer Pilates - Ladies only L1\",\"serviceType\":\"Reformer Pilates\",\"price\":250,\"date\":\"2024-01-20T14:00:00.000000Z\",\"isBooked\":false,\"isFull\":false,\"canCancel\":false,\"canBook\":true,\"willPay\":true,\"minutesBeforeCancellation\":60}],\"meta\":{\"current_page\":1,\"last_page\":1,\"per_page\":15,\"total\":1}}" }
+						{ "name": "Success (all sessions for date)", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"data\":[{\"id\":\"1\",\"bookingId\":null,\"branchId\":\"1\",\"branchName\":\"Main Studio\",\"instructor\":\"John\",\"service\":\"Vinyasa-Ladies only\",\"serviceType\":\"Yoga\",\"price\":200,\"date\":\"2024-01-20T10:00:00.000000Z\",\"isBooked\":false,\"isFull\":false,\"remainingSpots\":5,\"canCancel\":false,\"canBook\":true,\"willPay\":false,\"minutesBeforeCancellation\":60},{\"id\":\"2\",\"bookingId\":null,\"branchId\":\"2\",\"branchName\":\"Downtown Branch\",\"instructor\":\"Jane\",\"service\":\"Reformer Pilates - Ladies only L1\",\"serviceType\":\"Reformer Pilates\",\"price\":250,\"date\":\"2024-01-20T14:00:00.000000Z\",\"isBooked\":false,\"isFull\":false,\"remainingSpots\":3,\"canCancel\":false,\"canBook\":true,\"willPay\":true,\"minutesBeforeCancellation\":60}],\"meta\":{\"current_page\":1,\"last_page\":1,\"per_page\":15,\"total\":2}}" },
+						{ "name": "Success (filter category=Yoga)", "originalRequest": { "method": "GET", "header": [], "url": { "raw": "{{base_url}}/api/v1/sessions?date=2024-01-20&category=Yoga&per_page=15&page=1", "host": ["{{base_url}}"], "path": ["api", "v1", "sessions"], "query": [{ "key": "date", "value": "2024-01-20" }, { "key": "category", "value": "Yoga" }, { "key": "per_page", "value": "15" }, { "key": "page", "value": "1" }] } }, "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"data\":[{\"id\":\"1\",\"bookingId\":null,\"branchId\":\"1\",\"branchName\":\"Main Studio\",\"instructor\":\"John\",\"service\":\"Vinyasa-Ladies only\",\"serviceType\":\"Yoga\",\"price\":200,\"date\":\"2024-01-20T10:00:00.000000Z\",\"isBooked\":false,\"isFull\":false,\"canCancel\":false,\"canBook\":true,\"willPay\":false,\"minutesBeforeCancellation\":60}],\"meta\":{\"current_page\":1,\"last_page\":1,\"per_page\":15,\"total\":1}}" },
+						{ "name": "Success (filter category=reformer)", "originalRequest": { "method": "GET", "header": [], "url": { "raw": "{{base_url}}/api/v1/sessions?date=2024-01-20&category=reformer&per_page=15&page=1", "host": ["{{base_url}}"], "path": ["api", "v1", "sessions"], "query": [{ "key": "date", "value": "2024-01-20" }, { "key": "category", "value": "reformer" }, { "key": "per_page", "value": "15" }, { "key": "page", "value": "1" }] } }, "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"data\":[{\"id\":\"2\",\"bookingId\":null,\"branchId\":\"2\",\"branchName\":\"Downtown Branch\",\"instructor\":\"Jane\",\"service\":\"Reformer Pilates - Ladies only L1\",\"serviceType\":\"Reformer Pilates\",\"price\":250,\"date\":\"2024-01-20T14:00:00.000000Z\",\"isBooked\":false,\"isFull\":false,\"canCancel\":false,\"canBook\":true,\"willPay\":true,\"minutesBeforeCancellation\":60}],\"meta\":{\"current_page\":1,\"last_page\":1,\"per_page\":15,\"total\":1}}" }
 					]
 				},
 				{
@@ -506,13 +753,14 @@
 							"raw": "{\n    \"sessionID\": 1,\n    \"spots\": 1,\n    \"promoCode\": \"SAVE10\",\n    \"isDropIn\": true\n}"
 						},
 						"url": { "raw": "{{base_url}}/api/v1/session-bookings", "host": ["{{base_url}}"], "path": ["api", "v1", "session-bookings"] },
-						"description": "Book one session. Body: sessionID (required), spots (optional, default 1) — number of persons for this booking (1–20); capacity and price multiply by spots. promoCode (optional), isDropIn (optional boolean). isDropIn: true = drop-in (no package required; pay per session; payment_status pending). isDropIn: false = deduct from customer's package (spots sessions from package). Defaults to true if omitted. Response data includes isDropIn, spots. Requires Bearer."
+						"description": "Book one session. Body: sessionID (required), spots (optional, default 1, max 20), promoCode (optional), isDropIn (optional, default true). isDropIn false: uses package only if session date is on/before package expiry (same calendar day allowed). Sessions after expiry must use isDropIn true. Requires Bearer."
 					},
 					"response": [
 						{ "name": "Success (drop-in)", "originalRequest": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\\n    \\\"sessionID\\\": 1,\\n    \\\"spots\\\": 1,\\n    \\\"isDropIn\\\": true\\n}" }, "url": { "raw": "{{base_url}}/api/v1/session-bookings", "host": ["{{base_url}}"], "path": ["api", "v1", "session-bookings"] } }, "status": "Created", "code": 201, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"message\":\"Booking created successfully\",\"data\":{\"id\":\"1\",\"sessionID\":\"1\",\"customerId\":\"1\",\"isDropIn\":true,\"spots\":1}}" },
 						{ "name": "Success (drop-in, multiple persons)", "originalRequest": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\\n    \\\"sessionID\\\": 1,\\n    \\\"spots\\\": 3,\\n    \\\"isDropIn\\\": true\\n}" }, "url": { "raw": "{{base_url}}/api/v1/session-bookings", "host": ["{{base_url}}"], "path": ["api", "v1", "session-bookings"] } }, "status": "Created", "code": 201, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"message\":\"Booking created successfully\",\"data\":{\"id\":\"3\",\"sessionID\":\"1\",\"customerId\":\"1\",\"isDropIn\":true,\"spots\":3}}" },
 						{ "name": "Success (from package)", "originalRequest": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\\n    \\\"sessionID\\\": 1,\\n    \\\"spots\\\": 1,\\n    \\\"isDropIn\\\": false\\n}" }, "url": { "raw": "{{base_url}}/api/v1/session-bookings", "host": ["{{base_url}}"], "path": ["api", "v1", "session-bookings"] } }, "status": "Created", "code": 201, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"message\":\"Booking created successfully\",\"data\":{\"id\":\"2\",\"sessionID\":\"1\",\"customerId\":\"1\",\"isDropIn\":false,\"spots\":1}}" },
 						{ "name": "400 No package (isDropIn false)", "originalRequest": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\\n    \\\"sessionID\\\": 1,\\n    \\\"isDropIn\\\": false\\n}" }, "url": { "raw": "{{base_url}}/api/v1/session-bookings", "host": ["{{base_url}}"], "path": ["api", "v1", "session-bookings"] } }, "status": "Bad Request", "code": 400, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":false,\"message\":\"No package with remaining sessions for this category (Yoga/Reformer Pilates). Book as drop-in or purchase a package.\"}" },
+						{ "name": "400 Package expired before session date", "originalRequest": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\\n    \\\"sessionID\\\": 99,\\n    \\\"spots\\\": 1,\\n    \\\"isDropIn\\\": false\\n}" }, "url": { "raw": "{{base_url}}/api/v1/session-bookings", "host": ["{{base_url}}"], "path": ["api", "v1", "session-bookings"] } }, "status": "Bad Request", "code": 400, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":false,\"message\":\"No package with remaining sessions for this category (Yoga/Reformer Pilates). Book as drop-in or purchase a package.\"}" },
 						{ "name": "400 Session full", "status": "Bad Request", "code": 400, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":false,\"message\":\"Session is full\"}" },
 						{ "name": "404 Session not found", "status": "Not Found", "code": 404, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":false,\"message\":\"Session not found\"}" },
 						{ "name": "422 spots out of range", "status": "Unprocessable Entity", "code": 422, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":false,\"message\":\"Validation failed\",\"errors\":{\"spots\":[\"The spots must not be greater than 20.\"]}}" }
@@ -550,7 +798,7 @@
 								{ "key": "page", "value": "1", "description": "Page number" }
 							]
 						},
-						"description": "Paginated list of the authenticated customer's appointments/bookings. Response: { success, data: [{ id, sessionID, serviceName, instructorName, bookedAt, bookedAtUtc, sessionDate, sessionTime, sessionStart, sessionStartUtc, sessionEnd, sessionEndUtc, status, paymentStatus, spots, totalAmount, currency, isDropIn, canCancel, minutesBeforeCancellation }, ...], meta }. spots = number of persons (party size). canCancel = still within cancellation window (confirmed/pending with session). minutesBeforeCancellation from service time_before. Requires Bearer."
+						"description": "Paginated list of the authenticated customer's appointments/bookings. Response: { success, data: [{ id, sessionID, branchId, branchName, serviceName, instructorName, bookedAt, bookedAtUtc, sessionDate, sessionTime, sessionStart, sessionStartUtc, sessionEnd, sessionEndUtc, status, paymentStatus, spots, totalAmount, currency, isDropIn, canCancel, minutesBeforeCancellation }, ...], meta }. branchId/branchName from the session appointment. spots = number of persons (party size). canCancel = still within cancellation window (confirmed/pending with session). minutesBeforeCancellation from service time_before. Requires Bearer."
 					},
 					"response": [
 						{
@@ -559,13 +807,13 @@
 							"status": "OK",
 							"code": 200,
 							"header": [{ "key": "Content-Type", "value": "application/json" }],
-							"body": "{\"success\":true,\"data\":[{\"id\":\"1\",\"sessionID\":\"1\",\"serviceName\":\"Yoga\",\"instructorName\":\"John\",\"bookedAt\":\"2024-01-15T10:00:00.000000Z\",\"bookedAtUtc\":\"2024-01-15T08:00:00.000000Z\",\"sessionDate\":\"2024-01-20\",\"sessionTime\":\"10:00:00\",\"sessionStart\":\"2024-01-20T10:00:00.000000Z\",\"sessionStartUtc\":\"2024-01-20T08:00:00.000000Z\",\"sessionEnd\":\"2024-01-20T11:00:00.000000Z\",\"sessionEndUtc\":\"2024-01-20T09:00:00.000000Z\",\"status\":\"confirmed\",\"paymentStatus\":\"paid\",\"spots\":3,\"totalAmount\":150,\"currency\":\"USD\",\"isDropIn\":true,\"canCancel\":true,\"minutesBeforeCancellation\":60},{\"id\":\"2\",\"sessionID\":\"2\",\"serviceName\":\"Pilates\",\"instructorName\":\"Jane\",\"bookedAt\":\"2024-01-20T14:00:00.000000Z\",\"bookedAtUtc\":\"2024-01-20T12:00:00.000000Z\",\"sessionDate\":\"2024-01-22\",\"sessionTime\":\"14:00:00\",\"sessionStart\":\"2024-01-22T14:00:00.000000Z\",\"sessionStartUtc\":\"2024-01-22T12:00:00.000000Z\",\"sessionEnd\":\"2024-01-22T15:00:00.000000Z\",\"sessionEndUtc\":\"2024-01-22T13:00:00.000000Z\",\"status\":\"confirmed\",\"paymentStatus\":\"paid\",\"spots\":1,\"totalAmount\":75,\"currency\":\"USD\",\"isDropIn\":false,\"canCancel\":false,\"minutesBeforeCancellation\":60}],\"meta\":{\"current_page\":1,\"last_page\":1,\"per_page\":15,\"total\":2}}"
+							"body": "{\"success\":true,\"data\":[{\"id\":\"1\",\"sessionID\":\"1\",\"branchId\":\"1\",\"branchName\":\"Main Studio\",\"serviceName\":\"Yoga\",\"instructorName\":\"John\",\"bookedAt\":\"2024-01-15T10:00:00.000000Z\",\"bookedAtUtc\":\"2024-01-15T08:00:00.000000Z\",\"sessionDate\":\"2024-01-20\",\"sessionTime\":\"10:00:00\",\"sessionStart\":\"2024-01-20T10:00:00.000000Z\",\"sessionStartUtc\":\"2024-01-20T08:00:00.000000Z\",\"sessionEnd\":\"2024-01-20T11:00:00.000000Z\",\"sessionEndUtc\":\"2024-01-20T09:00:00.000000Z\",\"status\":\"confirmed\",\"paymentStatus\":\"paid\",\"spots\":3,\"totalAmount\":150,\"currency\":\"USD\",\"isDropIn\":true,\"canCancel\":true,\"minutesBeforeCancellation\":60},{\"id\":\"2\",\"sessionID\":\"2\",\"branchId\":\"2\",\"branchName\":\"Downtown Branch\",\"serviceName\":\"Pilates\",\"instructorName\":\"Jane\",\"bookedAt\":\"2024-01-20T14:00:00.000000Z\",\"bookedAtUtc\":\"2024-01-20T12:00:00.000000Z\",\"sessionDate\":\"2024-01-22\",\"sessionTime\":\"14:00:00\",\"sessionStart\":\"2024-01-22T14:00:00.000000Z\",\"sessionStartUtc\":\"2024-01-22T12:00:00.000000Z\",\"sessionEnd\":\"2024-01-22T15:00:00.000000Z\",\"sessionEndUtc\":\"2024-01-22T13:00:00.000000Z\",\"status\":\"confirmed\",\"paymentStatus\":\"paid\",\"spots\":1,\"totalAmount\":75,\"currency\":\"USD\",\"isDropIn\":false,\"canCancel\":false,\"minutesBeforeCancellation\":60}],\"meta\":{\"current_page\":1,\"last_page\":1,\"per_page\":15,\"total\":2}}"
 						},
 						{ "name": "Success (empty list)", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"data\":[],\"meta\":{\"current_page\":1,\"last_page\":1,\"per_page\":15,\"total\":0}}" }
 					]
 				}
 			],
-			"description": "Schedule screen. All require Bearer token."
+			"description": "Schedule screen. All require Bearer. Customers with confirmed/pending bookings receive email + FCM push reminders one calendar day before class (server cron; register fcmToken first). Cancelling frees remainingSpots immediately."
 		},
 		{
 			"name": "Packages Screen",
@@ -580,11 +828,30 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "v1", "package-offers"]
 						},
-						"description": "Package offers grouped by category. Categories from DB; packages matched by service category_id or by service_type/name/description (Yoga vs Reformer Pilates). Unmatched packages appear under Uncategorized (categoryId \"\", categoryName \"Uncategorized\"). Response: { data: [{ categoryId, categoryName, slug, packages: [{ id, name, price, sessions, description, expirationMonths, serviceType, classFormat, packageDuration }, ...] }, ...] }. No pagination. Requires Bearer."
+						"description": "Package offers grouped by category (all branches). Response: { data: [{ categoryId, categoryName, slug, packages: [{ id, name, price, sessions, description, expirationMonths, expirationDays, serviceType, classFormat, packageDuration, packageDurationDays, branchIds, branchName }, ...] }, ...] }. branchIds = branches that sell the package. branchName = comma-separated branch names when no branchId filter. expirationDays / packageDurationDays: exact day-based expiry when set in admin (e.g. 30-day unlimited). Requires Bearer."
 					},
 					"response": [
-						{ "name": "Success (grouped by category)", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"data\":[{\"categoryId\":\"2\",\"categoryName\":\"Reformer\",\"slug\":\"reformer\",\"packages\":[{\"id\":17,\"name\":\"Test\",\"price\":300,\"sessions\":10,\"description\":\"test\",\"expirationMonths\":0,\"serviceType\":\"Reformer Pilates\",\"classFormat\":null,\"packageDuration\":3}]},{\"categoryId\":\"1\",\"categoryName\":\"Yoga  & Mat Pilates Classes\",\"slug\":\"yoga-mat-pilates-classes\",\"packages\":[{\"id\":1,\"name\":\"10 sessions pack\",\"price\":1,\"sessions\":10,\"description\":\"sdsf\",\"expirationMonths\":0,\"serviceType\":\"Yoga\",\"classFormat\":\"Yoga\",\"packageDuration\":3}]}]}" },
-						{ "name": "Success (with Uncategorized)", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"data\":[{\"categoryId\":\"2\",\"categoryName\":\"Reformer\",\"slug\":\"reformer\",\"packages\":[]},{\"categoryId\":\"1\",\"categoryName\":\"Yoga  & Mat Pilates Classes\",\"slug\":\"yoga-mat-pilates-classes\",\"packages\":[]},{\"categoryId\":\"\",\"categoryName\":\"Uncategorized\",\"slug\":\"uncategorized\",\"packages\":[{\"id\":1,\"name\":\"Misc Pack\",\"price\":50,\"sessions\":5,\"description\":\"\",\"expirationMonths\":0,\"serviceType\":null,\"classFormat\":null,\"packageDuration\":1}]}]}" }
+						{ "name": "Success (grouped by category)", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"data\":[{\"categoryId\":\"2\",\"categoryName\":\"Reformer\",\"slug\":\"reformer\",\"packages\":[{\"id\":17,\"name\":\"Test\",\"price\":300,\"sessions\":10,\"description\":\"test\",\"expirationMonths\":0,\"expirationDays\":null,\"serviceType\":\"Reformer Pilates\",\"classFormat\":null,\"packageDuration\":3,\"packageDurationDays\":null,\"branchIds\":[\"1\",\"2\"],\"branchName\":\"Main Studio, Downtown Branch\"}]},{\"categoryId\":\"1\",\"categoryName\":\"Yoga  & Mat Pilates Classes\",\"slug\":\"yoga-mat-pilates-classes\",\"packages\":[{\"id\":1,\"name\":\"30 Day Unlimited\",\"price\":500,\"sessions\":999,\"description\":\"Unlimited yoga\",\"expirationMonths\":0,\"expirationDays\":30,\"serviceType\":\"Yoga\",\"classFormat\":\"Yoga\",\"packageDuration\":null,\"packageDurationDays\":30,\"branchIds\":[\"1\"],\"branchName\":\"5th settlement\"}]}]}" },
+						{ "name": "Success (with Uncategorized)", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"data\":[{\"categoryId\":\"2\",\"categoryName\":\"Reformer\",\"slug\":\"reformer\",\"packages\":[]},{\"categoryId\":\"1\",\"categoryName\":\"Yoga  & Mat Pilates Classes\",\"slug\":\"yoga-mat-pilates-classes\",\"packages\":[]},{\"categoryId\":\"\",\"categoryName\":\"Uncategorized\",\"slug\":\"uncategorized\",\"packages\":[{\"id\":1,\"name\":\"Misc Pack\",\"price\":50,\"sessions\":5,\"description\":\"\",\"expirationMonths\":0,\"serviceType\":null,\"classFormat\":null,\"packageDuration\":1,\"branchIds\":[\"1\"],\"branchName\":\"5th settlement\"}]}]}" }
+					]
+				},
+				{
+					"name": "Get Package Offers (by branch)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/package-offers?branchId={{branch_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "package-offers"],
+							"query": [
+								{ "key": "branchId", "value": "{{branch_id}}", "description": "Branch ID from GET /branches. Returns only packages sold at this branch." }
+							]
+						},
+						"description": "Package offers filtered by branch. Each package includes branchName for the selected branch. Use after GET /branches to pick branchId. Requires Bearer."
+					},
+					"response": [
+						{ "name": "Success (branchId=1)", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"data\":[{\"categoryId\":\"1\",\"categoryName\":\"Yoga  & Mat Pilates Classes\",\"slug\":\"yoga-mat-pilates-classes\",\"packages\":[{\"id\":3,\"name\":\"Package name\",\"price\":1,\"sessions\":10,\"description\":\"Add description for the package\",\"expirationMonths\":3,\"expirationDays\":null,\"serviceType\":\"Yoga\",\"classFormat\":\"Yoga\",\"packageDuration\":3,\"packageDurationDays\":null,\"branchIds\":[\"1\"],\"branchName\":\"5th settlement\"}]}]}" }
 					]
 				},
 				{
@@ -594,39 +861,61 @@
 						"header": [{ "key": "Content-Type", "value": "application/json" }],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"packageId\": 1,\n    \"promoCode\": \"SAVE10\"\n}"
+							"raw": "{\n    \"packageId\": 1,\n    \"promoCode\": \"SAVE10\",\n    \"branchId\": {{branch_id}}\n}"
 						},
 						"url": { "raw": "{{base_url}}/api/v1/purchase-package", "host": ["{{base_url}}"], "path": ["api", "v1", "purchase-package"] },
-						"description": "Purchase one package. Body: packageId (required), promoCode (optional, percentage discount). Package must be active. Requires Bearer."
+						"description": "Purchase one package. Body: packageId (required), promoCode (optional), branchId (optional — rejects purchase if package is not sold at that branch). Package must be active. Requires Bearer."
 					},
 					"response": [
 						{ "name": "Success", "status": "Created", "code": 201, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"message\":\"Package purchased successfully\",\"data\":{\"id\":\"123\",\"packageId\":\"1\",\"customerId\":\"1\"}}" },
+						{ "name": "400 Package not at branch", "status": "Bad Request", "code": 400, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":false,\"message\":\"This package is not available at the selected branch.\"}" },
 						{ "name": "404 Package not found or not available", "status": "Not Found", "code": 404, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":false,\"message\":\"Package not found or not available\"}" },
 						{ "name": "422 Validation failed", "status": "Unprocessable Entity", "code": 422, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":false,\"message\":\"Validation failed\",\"errors\":{\"packageId\":[\"The package id field is required.\"]}}" }
 					]
 				}
 			],
-			"description": "Packages screen. All require Bearer token."
+			"description": "Packages screen. Use GET /branches first, set branch_id variable, then filter package-offers by branchId. All require Bearer token."
 		},
 		{
 			"name": "Promo Code Flow",
-			"description": "Promo codes apply a percentage discount. Verify a code first: POST /api/v1/promo-codes/verify (body: code). Then pass promoCode when booking a session or purchasing a package. Codes are case-sensitive; invalid/expired codes are ignored (full price charged). Managed in Filament Admin → Promo Codes.",
+			"description": "Promo codes apply a percentage discount. Each code has applicable_to: both | packages | drop_ins (set in Admin → Promo Codes). Drop-in codes can be restricted to appointments and/or branches; package codes can be restricted to packages and/or branches. Verify with IsPackage: true = package (pass packageId + branchId), false = drop-in (pass sessionID). POST /api/v1/promo-codes/verify returns wrong_type, wrong_appointment, wrong_package, or wrong_branch when the code does not match. Then pass promoCode on session-bookings or purchase-package.",
 			"item": [
 				{
-					"name": "Verify Promo Code",
+					"name": "Verify Promo Code (drop-in)",
 					"request": {
 						"method": "POST",
 						"header": [{ "key": "Content-Type", "value": "application/json" }],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"code\": \"SAVE20\"\n}"
+							"raw": "{\n    \"code\": \"SAVE20\",\n    \"IsPackage\": false,\n    \"sessionID\": 1\n}"
 						},
 						"url": { "raw": "{{base_url}}/api/v1/promo-codes/verify", "host": ["{{base_url}}"], "path": ["api", "v1", "promo-codes", "verify"] },
-						"description": "Check if a promo code exists and is valid for the current customer. Body: code (required). Returns valid (boolean), reason (not_found | inactive | not_yet_valid | expired | usage_limit_reached), message, and when valid or when code exists: promo_code (id, code, name, percent_discount, valid_from, valid_until, usage_limit_per_user, uses_by_you, used_count_total, is_active). Requires Bearer."
+						"description": "Validate a promo for drop-in session booking. Body: code (required), IsPackage=false (required), sessionID (appointment id from schedule — branch is resolved from the session). Legacy: context=drop_ins also accepted. Returns valid, reason (not_found | inactive | wrong_type | wrong_appointment | wrong_branch | wrong_package | not_yet_valid | expired | usage_limit_reached), message, promo_code. Requires Bearer."
 					},
 					"response": [
-						{ "name": "Valid", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"valid\":true,\"message\":\"Promo code is valid.\",\"promo_code\":{\"id\":1,\"code\":\"SAVE20\",\"name\":\"Summer Sale\",\"percent_discount\":20,\"valid_from\":null,\"valid_until\":\"2025-12-31T23:59:59+00:00\",\"usage_limit_per_user\":1,\"uses_by_you\":0,\"used_count_total\":42,\"is_active\":true}}" },
+						{ "name": "Valid", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"valid\":true,\"message\":\"Promo code is valid.\",\"promo_code\":{\"id\":1,\"code\":\"SAVE20\",\"name\":\"Summer Sale\",\"percent_discount\":20,\"applicable_to\":\"drop_ins\",\"restricted_to_appointments\":false,\"allowed_appointment_ids\":[],\"restricted_to_branches\":true,\"allowed_branch_ids\":[1],\"valid_from\":null,\"valid_until\":\"2025-12-31T23:59:59+00:00\",\"usage_limit_per_user\":1,\"uses_by_you\":0,\"used_count_total\":42,\"is_active\":true}}" },
+						{ "name": "Wrong type (packages-only code)", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"valid\":false,\"reason\":\"wrong_type\",\"message\":\"This promo code is only valid for package purchases.\",\"promo_code\":{\"id\":2,\"code\":\"PKG10\",\"name\":\"Package promo\",\"percent_discount\":10,\"applicable_to\":\"packages\",\"is_active\":true}}" },
+						{ "name": "Wrong branch", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"valid\":false,\"reason\":\"wrong_branch\",\"message\":\"This promo code is not valid for the selected branch.\",\"promo_code\":{\"id\":1,\"code\":\"SAVE20\",\"name\":\"Branch promo\",\"percent_discount\":20,\"applicable_to\":\"drop_ins\",\"restricted_to_branches\":true,\"allowed_branch_ids\":[1],\"is_active\":true}}" },
+						{ "name": "Wrong appointment", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"valid\":false,\"reason\":\"wrong_appointment\",\"message\":\"This promo code is not valid for the selected session.\",\"promo_code\":{\"id\":3,\"code\":\"SESSION10\",\"name\":\"Session promo\",\"percent_discount\":10,\"applicable_to\":\"drop_ins\",\"restricted_to_appointments\":true,\"allowed_appointment_ids\":[42],\"is_active\":true}}" },
 						{ "name": "Not found", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"valid\":false,\"reason\":\"not_found\",\"message\":\"Promo code does not exist.\"}" }
+					]
+				},
+				{
+					"name": "Verify Promo Code (package)",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"code\": \"PKG10\",\n    \"IsPackage\": true,\n    \"packageId\": 1\n}"
+						},
+						"url": { "raw": "{{base_url}}/api/v1/promo-codes/verify", "host": ["{{base_url}}"], "path": ["api", "v1", "promo-codes", "verify"] },
+						"description": "Validate a promo for package purchase. Body: code (required), IsPackage=true (required), packageId (when promo is package-restricted). Branch is inferred from the package — no branchId needed. Legacy: context=packages also accepted. Requires Bearer."
+					},
+					"response": [
+						{ "name": "Valid", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"valid\":true,\"message\":\"Promo code is valid.\",\"promo_code\":{\"id\":2,\"code\":\"PKG10\",\"name\":\"Package promo\",\"percent_discount\":10,\"applicable_to\":\"packages\",\"restricted_to_packages\":true,\"allowed_package_ids\":[1],\"restricted_to_branches\":true,\"allowed_branch_ids\":[1],\"usage_limit_per_user\":1,\"uses_by_you\":0,\"used_count_total\":5,\"is_active\":true}}" },
+						{ "name": "Wrong package", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"valid\":false,\"reason\":\"wrong_package\",\"message\":\"This promo code is not valid for the selected package.\",\"promo_code\":{\"id\":2,\"code\":\"PKG10\",\"name\":\"Package promo\",\"percent_discount\":10,\"applicable_to\":\"packages\",\"restricted_to_packages\":true,\"allowed_package_ids\":[1],\"is_active\":true}}" },
+						{ "name": "Wrong type (drop-in-only code)", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"valid\":false,\"reason\":\"wrong_type\",\"message\":\"This promo code is only valid for drop-in bookings.\",\"promo_code\":{\"id\":1,\"code\":\"SAVE20\",\"name\":\"Summer Sale\",\"percent_discount\":20,\"applicable_to\":\"drop_ins\",\"is_active\":true}}" }
 					]
 				},
 				{
@@ -639,7 +928,7 @@
 							"raw": "{\n    \"sessionID\": 1,\n    \"spots\": 1,\n    \"promoCode\": \"SAVE10\",\n    \"isDropIn\": true\n}"
 						},
 						"url": { "raw": "{{base_url}}/api/v1/session-bookings", "host": ["{{base_url}}"], "path": ["api", "v1", "session-bookings"] },
-						"description": "Apply a promo code when booking a session. Replace SAVE10 with a valid code from Admin. Valid code applies percent discount; invalid/expired code is ignored (booking succeeds at full price). spots = number of persons (default 1). Use isDropIn: true for drop-in (no package) or false to deduct from package. Response includes isDropIn, spots. Requires Bearer."
+						"description": "Apply a promo on drop-in booking (isDropIn: true). Promo must have applicable_to drop_ins or both — verify first with IsPackage=false. Package-only promos are ignored at checkout. Requires Bearer."
 					},
 					"response": [
 						{ "name": "Success", "status": "Created", "code": 201, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"message\":\"Booking created successfully\",\"data\":{\"id\":\"1\",\"sessionID\":\"1\",\"customerId\":\"1\",\"isDropIn\":true,\"spots\":1}}" }
@@ -652,22 +941,108 @@
 						"header": [{ "key": "Content-Type", "value": "application/json" }],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"packageId\": 1,\n    \"promoCode\": \"SAVE10\"\n}"
+							"raw": "{\n    \"packageId\": 1,\n    \"promoCode\": \"SAVE10\",\n    \"branchId\": {{branch_id}}\n}"
 						},
 						"url": { "raw": "{{base_url}}/api/v1/purchase-package", "host": ["{{base_url}}"], "path": ["api", "v1", "purchase-package"] },
-						"description": "Apply a promo code when purchasing a package. Replace SAVE10 with a valid code. Valid code applies percent discount; invalid code is ignored (purchase at full price). Requires Bearer."
+						"description": "Apply a promo on package purchase. Promo must have applicable_to packages or both — verify first with IsPackage=true. Optional branchId. Drop-in-only promos are ignored at checkout. Requires Bearer."
 					},
 					"response": [
 						{ "name": "Success", "status": "Created", "code": 201, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"message\":\"Package purchased successfully\",\"data\":{\"id\":1,\"packageId\":1,\"customerId\":1}}" }
 					]
 				}
 			]
+		},
+		{
+			"name": "Push Notifications",
+			"description": "Server-sent Firebase Cloud Messaging (no client API to trigger). Register fcmToken via Login, Verify, or Register FCM Token. Class reminders run daily (server cron bookings:send-class-reminders) for confirmed/pending bookings with class tomorrow — email + push.",
+			"item": [
+				{
+					"name": "Class reminder push (reference)",
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}",
+							"host": ["{{base_url}}"]
+						},
+						"description": "DOCUMENTATION — not a callable API. When a customer has an FCM token and a session tomorrow, the server sends:\n\nNotification:\n- title: Class reminder\n- body: Hi {name}, your {class} class is tomorrow ({date}) at {time}. See you on the mat!\n\nData payload (all strings):\n- type: class_reminder\n- bookingId\n- sessionId\n- serviceName\n\nApp should handle data.type=class_reminder (e.g. open booking/session). Also sends reminder email if customer has email. Configure server: FIREBASE_SERVICE_ACCOUNT_JSON, SESSIONS_CLASS_REMINDER_PUSH_ENABLED=true."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Web Schedule (public)",
+			"description": "Public website booking flow. No Bearer token. May require WEB_SCHEDULE_ACCESS_KEY header if configured on server.",
+			"item": [
+				{
+					"name": "Get Web Sessions",
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/web-sessions?date=2024-01-20&category=Yoga",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "web-sessions"],
+							"query": [
+								{ "key": "date", "value": "2024-01-20", "description": "YYYY-MM-DD" },
+								{ "key": "category", "value": "Yoga", "description": "Optional filter" }
+							]
+						},
+						"description": "Public session list for website. Same shape as mobile sessions (isFull, remainingSpots, canBook). No auth."
+					},
+					"response": [
+						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"data\":[{\"id\":\"1\",\"service\":\"Yoga Flow\",\"isFull\":false,\"remainingSpots\":4,\"canBook\":true}],\"meta\":{\"current_page\":1,\"last_page\":1,\"per_page\":15,\"total\":1}}" }
+					]
+				},
+				{
+					"name": "Create Web Session Booking",
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"sessionID\": 1,\n    \"firstName\": \"Guest\",\n    \"lastName\": \"User\",\n    \"email\": \"guest@example.com\",\n    \"phone\": \"+201234567890\",\n    \"spots\": 1\n}"
+						},
+						"url": { "raw": "{{base_url}}/api/v1/web-session-bookings", "host": ["{{base_url}}"], "path": ["api", "v1", "web-session-bookings"] },
+						"description": "Guest drop-in booking from website (on-site payment flow). International phone E.164 supported."
+					},
+					"response": [
+						{ "name": "Success", "status": "Created", "code": 201, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"message\":\"Booking created successfully\"}" }
+					]
+				},
+				{
+					"name": "Paymob Init (web drop-in)",
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"sessionID\": 1,\n    \"firstName\": \"Guest\",\n    \"lastName\": \"User\",\n    \"email\": \"guest@example.com\",\n    \"phone\": \"+201234567890\",\n    \"spots\": 1,\n    \"promoCode\": \"SAVE10\"\n}"
+						},
+						"url": { "raw": "{{base_url}}/api/v1/web-session-paymob/init", "host": ["{{base_url}}"], "path": ["api", "v1", "web-session-paymob", "init"] },
+						"description": "Initialize Paymob payment for web drop-in. promoCode must be drop_ins or both type. Returns payment iframe URL / order details."
+					},
+					"response": [
+						{ "name": "Success", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\"success\":true,\"paymentUrl\":\"https://accept.paymob.com/...\"}" }
+					]
+				}
+			]
 		}
 	],
 	"variable": [
-		{ "key": "base_url", "value": "http://127.0.0.1:8000", "type": "string", "description": "Base URL - Change this to switch between localhost and stage. Default: localhost" },
-		{ "key": "base_url_localhost", "value": "http://127.0.0.1:8000", "type": "string", "description": "Localhost development URL" },
-		{ "key": "base_url_stage", "value": "https://sdhds.net/backend/backend/public", "type": "string", "description": "Stage/production URL" },
-		{ "key": "bearer_token", "value": "", "type": "string", "description": "Bearer token for authenticated requests (auto-set after login/verify)" }
+		{ "key": "base_url", "value": "https://sdhds.net/backend/backend/public", "type": "string", "description": "API base URL (no trailing slash)" },
+		{ "key": "base_url_localhost", "value": "http://127.0.0.1:8000", "type": "string", "description": "Local development" },
+		{ "key": "base_url_production", "value": "https://sdhds.net/backend/backend/public", "type": "string", "description": "Production / stage" },
+		{ "key": "bearer_token", "value": "", "type": "string", "description": "Auto-set after Login or Verify" },
+		{ "key": "branch_id", "value": "1", "type": "string", "description": "Branch ID from GET /branches — used for package-offers, sessions, service price, purchase-package" },
+		{ "key": "signup_email", "value": "jane@example.com", "type": "string", "description": "Auto-set after Signup" },
+		{ "key": "test_email", "value": "feloalaa50@gmail.com", "type": "string", "description": "Test account email for login / reset" },
+		{ "key": "test_phone", "value": "+201234567890", "type": "string", "description": "Test account phone (E.164)" },
+		{ "key": "test_password", "value": "your-password-here", "type": "string", "description": "Test account password" }
 	]
 }

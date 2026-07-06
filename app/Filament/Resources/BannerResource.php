@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources;
 
+use App\Filament\Concerns\SuperAdminOnlyResource;
 use App\Filament\Resources\BannerResource\Pages;
 use App\Models\Banner;
 use BackedEnum;
@@ -16,6 +17,8 @@ use Filament\Tables\Table;
 
 class BannerResource extends Resource
 {
+    use SuperAdminOnlyResource;
+
     protected static ?string $model = Banner::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedPhoto;
@@ -55,6 +58,14 @@ class BannerResource extends Resource
                             ->numeric()
                             ->default(0)
                             ->helperText('Lower numbers appear first.'),
+                        Forms\Components\Select::make('category')
+                            ->label('Category')
+                            ->options([
+                                Banner::CATEGORY_HOME => 'Home carousel',
+                                Banner::CATEGORY_POPUP => 'Home popup',
+                            ])
+                            ->default(Banner::CATEGORY_HOME)
+                            ->required(),
                     ])
                     ->columns(2),
             ]);
@@ -84,6 +95,13 @@ class BannerResource extends Resource
                 Tables\Columns\TextColumn::make('sort_order')
                     ->label('Order')
                     ->sortable(),
+                Tables\Columns\TextColumn::make('category')
+                    ->badge()
+                    ->formatStateUsing(fn (string $state): string => match ($state) {
+                        Banner::CATEGORY_POPUP => 'Home popup',
+                        default => 'Home carousel',
+                    })
+                    ->sortable(),
                 Tables\Columns\TextColumn::make('created_at')
                     ->dateTime()
                     ->toggleable(isToggledHiddenByDefault: true),
@@ -91,6 +109,11 @@ class BannerResource extends Resource
             ->filters([
                 Tables\Filters\TernaryFilter::make('is_active')
                     ->label('Active'),
+                Tables\Filters\SelectFilter::make('category')
+                    ->options([
+                        Banner::CATEGORY_HOME => 'Home carousel',
+                        Banner::CATEGORY_POPUP => 'Home popup',
+                    ]),
             ])
             ->actions([
                 Actions\EditAction::make(),

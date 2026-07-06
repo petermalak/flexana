@@ -58,5 +58,33 @@ class PackageModel extends Model
             ->withPivot(['provider_id', 'location_id', 'quantity'])
             ->withTimestamps();
     }
+
+    public function branches(): BelongsToMany
+    {
+        return $this->belongsToMany(BranchModel::class, 'branch_package', 'package_id', 'branch_id')
+            ->withTimestamps();
+    }
+
+    public function isRestrictedToBranches(): bool
+    {
+        if ($this->relationLoaded('branches')) {
+            return $this->branches->isNotEmpty();
+        }
+
+        return $this->branches()->exists();
+    }
+
+    public function availableAtBranch(?int $branchId): bool
+    {
+        if ($branchId === null) {
+            return true;
+        }
+
+        if (! $this->isRestrictedToBranches()) {
+            return true;
+        }
+
+        return $this->branches()->whereKey($branchId)->exists();
+    }
 }
 

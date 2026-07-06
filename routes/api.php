@@ -7,6 +7,7 @@ use App\Interfaces\Http\Controllers\Api\EventController;
 use App\Interfaces\Http\Controllers\Api\EventInstanceController;
 use App\Interfaces\Http\Controllers\Api\Mobile\BannerController;
 use App\Interfaces\Http\Controllers\Api\Mobile\MobileAuthController;
+use App\Interfaces\Http\Controllers\Api\Mobile\MobileBranchController;
 use App\Interfaces\Http\Controllers\Api\Mobile\MobileCategoryController;
 use App\Interfaces\Http\Controllers\Api\Mobile\MobileBookingController;
 use App\Interfaces\Http\Controllers\Api\Mobile\MobileInstructorController;
@@ -99,7 +100,10 @@ Route::prefix('v1')
         // Using "auth:sanctum" authenticates the Bearer token correctly.
         Route::middleware(['auth:sanctum'])->group(function (): void {
             // Home screen
+            Route::get('banners/simple', [BannerController::class, 'simple']);
             Route::get('banners', [BannerController::class, 'index']);
+            Route::get('branches', [MobileBranchController::class, 'index']);
+            Route::get('branches/simple', [MobileBranchController::class, 'simple']);
             Route::get('categories', [MobileCategoryController::class, 'index']);
             Route::get('instructors', [MobileInstructorController::class, 'index']);
             Route::get('service', [MobileServiceController::class, 'index']);
@@ -119,6 +123,7 @@ Route::prefix('v1')
             Route::get('auth/me', [MobileAuthController::class, 'me']);
             Route::put('auth/me', [MobileAuthController::class, 'updateMe']);
             Route::post('auth/send-phone-change-code', [MobileAuthController::class, 'sendPhoneChangeCode']);
+            Route::post('auth/send-email-change-code', [MobileAuthController::class, 'sendEmailChangeCode']);
             Route::post('auth/change-password', [MobileAuthController::class, 'changePassword']);
             Route::post('auth/fcm-token', [MobileAuthController::class, 'registerFcmToken']);
             Route::delete('auth/delete-account', [MobileAuthController::class, 'deleteAccount']);

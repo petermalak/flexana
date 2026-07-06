@@ -4,9 +4,9 @@ namespace App\Filament\Resources\AmeliaEmployeeResource\Pages;
 
 use App\Filament\Resources\AmeliaEmployeeResource;
 use Filament\Actions\DeleteAction;
-use Filament\Resources\Pages\EditRecord;
+use App\Filament\Resources\Pages\StaysOnPageEditRecord;
 
-class EditAmeliaEmployee extends EditRecord
+class EditAmeliaEmployee extends StaysOnPageEditRecord
 {
     protected static string $resource = AmeliaEmployeeResource::class;
 

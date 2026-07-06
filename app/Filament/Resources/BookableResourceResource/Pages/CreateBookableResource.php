@@ -3,9 +3,9 @@
 namespace App\Filament\Resources\BookableResourceResource\Pages;
 
 use App\Filament\Resources\BookableResourceResource;
-use Filament\Resources\Pages\CreateRecord;
+use App\Filament\Resources\Pages\StaysOnPageCreateRecord;
 
-class CreateBookableResource extends CreateRecord
+class CreateBookableResource extends StaysOnPageCreateRecord
 {
     protected static string $resource = BookableResourceResource::class;
 }

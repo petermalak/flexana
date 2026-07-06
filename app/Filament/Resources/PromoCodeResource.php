@@ -2,18 +2,26 @@
 
 namespace App\Filament\Resources;
 
+use App\Domain\Promo\Enums\PromoApplicableType;
+use App\Filament\Concerns\SuperAdminOnlyResource;
 use App\Filament\Resources\PromoCodeResource\Pages;
+use App\Infrastructure\Persistence\Eloquent\AppointmentModel;
 use App\Models\PromoCode;
 use Filament\Forms;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Schemas\Components;
+use Filament\Schemas\Components\Utilities\Get;
+use Filament\Support\Icons\Heroicon;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Filament\Actions;
+use Illuminate\Database\Eloquent\Collection;
 
 class PromoCodeResource extends Resource
 {
+    use SuperAdminOnlyResource;
+
     protected static ?string $model = PromoCode::class;
 
     protected static \BackedEnum|string|null $navigationIcon = 'heroicon-o-ticket';
@@ -48,6 +56,92 @@ class PromoCodeResource extends Resource
                             ->required()
                             ->suffix('%'),
                     ])->columns(2),
+                Components\Section::make('Where this code applies')
+                    ->description('Control whether this promo works on package purchases, drop-in bookings, or both.')
+                    ->icon(Heroicon::OutlinedAdjustmentsHorizontal)
+                    ->schema([
+                        Forms\Components\Select::make('applicable_to')
+                            ->label('Applies to')
+                            ->options(static::applicableTypeOptions())
+                            ->default(PromoApplicableType::Both->value)
+                            ->required()
+                            ->native(false)
+                            ->helperText(fn (?string $state): string => (string) (
+                                config('promo.applicable_type_descriptions')[$state ?? PromoApplicableType::Both->value]
+                                ?? 'Choose which checkout flow accepts this code.'
+                            ))
+                            ->live(),
+                    ]),
+                Components\Section::make('Session restrictions')
+                    ->description('Optional. Limit this code to specific upcoming drop-in sessions.')
+                    ->icon(Heroicon::OutlinedCalendarDays)
+                    ->schema([
+                        Forms\Components\Select::make('appointments')
+                            ->label('Allowed appointments')
+                            ->relationship(
+                                'appointments',
+                                modifyQueryUsing: fn ($query) => $query
+                                    ->with(['service', 'provider'])
+                                    ->where('status', 'approved')
+                                    ->where('booking_start', '>=', now())
+                                    ->orderBy('booking_start'),
+                            )
+                            ->getOptionLabelFromRecordUsing(
+                                fn (AppointmentModel $record): string => $record->adminSelectLabel(),
+                            )
+                            ->multiple()
+                            ->searchable()
+                            ->preload()
+                            ->helperText('Leave empty to allow any session. Select one or more appointments to restrict where this code works.'),
+                    ])
+                    ->visible(fn (Get $get): bool => in_array(
+                        $get('applicable_to'),
+                        [PromoApplicableType::DropIns->value, PromoApplicableType::Both->value],
+                        true,
+                    )),
+                Components\Section::make('Package restrictions')
+                    ->description('Optional. Limit this code to specific packages.')
+                    ->icon(Heroicon::OutlinedGift)
+                    ->schema([
+                        Forms\Components\Select::make('packages')
+                            ->label('Allowed packages')
+                            ->relationship(
+                                'packages',
+                                'title',
+                                fn ($query) => $query
+                                    ->where('status', 'active')
+                                    ->orderBy('sort_order')
+                                    ->orderBy('title'),
+                            )
+                            ->multiple()
+                            ->searchable()
+                            ->preload()
+                            ->helperText('Leave empty to allow any package. Select one or more packages to restrict where this code works.'),
+                    ])
+                    ->visible(fn (Get $get): bool => in_array(
+                        $get('applicable_to'),
+                        [PromoApplicableType::Packages->value, PromoApplicableType::Both->value],
+                        true,
+                    )),
+                Components\Section::make('Branch restrictions')
+                    ->description('Optional. Limit this code to specific branches.')
+                    ->icon(Heroicon::OutlinedBuildingOffice2)
+                    ->schema([
+                        Forms\Components\Select::make('branches')
+                            ->label('Allowed branches')
+                            ->relationship(
+                                'branches',
+                                'name',
+                                fn ($query) => $query
+                                    ->where('is_active', true)
+                                    ->orderBy('sort_order')
+                                    ->orderBy('name'),
+                            )
+                            ->multiple()
+                            ->searchable()
+                            ->preload()
+                            ->helperText('Leave empty to allow any branch. Select one or more branches to restrict where this code works.'),
+                    ]),
                 Components\Section::make('Validity')
                     ->schema([
                         Forms\Components\DateTimePicker::make('valid_from')
@@ -82,6 +176,26 @@ class PromoCodeResource extends Resource
                     ->label('Discount %')
                     ->suffix('%')
                     ->sortable(),
+                Tables\Columns\SelectColumn::make('applicable_to')
+                    ->label('Applies to')
+                    ->options(static::applicableTypeOptions())
+                    ->selectablePlaceholder(false)
+                    ->sortable(),
+                Tables\Columns\TextColumn::make('appointments_count')
+                    ->label('Sessions')
+                    ->counts('appointments')
+                    ->formatStateUsing(fn (int $state): string => $state > 0 ? "{$state} session(s)" : 'Any')
+                    ->toggleable(),
+                Tables\Columns\TextColumn::make('branches_count')
+                    ->label('Branches')
+                    ->counts('branches')
+                    ->formatStateUsing(fn (int $state): string => $state > 0 ? "{$state} branch(es)" : 'Any')
+                    ->toggleable(),
+                Tables\Columns\TextColumn::make('packages_count')
+                    ->label('Packages')
+                    ->counts('packages')
+                    ->formatStateUsing(fn (int $state): string => $state > 0 ? "{$state} package(s)" : 'Any')
+                    ->toggleable(),
                 Tables\Columns\TextColumn::make('used_count')
                     ->label('Total uses')
                     ->sortable(),
@@ -105,13 +219,42 @@ class PromoCodeResource extends Resource
             ->filters([
                 Tables\Filters\TernaryFilter::make('is_active')
                     ->label('Active'),
+                Tables\Filters\SelectFilter::make('applicable_to')
+                    ->label('Applies to')
+                    ->options(static::applicableTypeOptions()),
             ])
             ->actions([
                 Actions\EditAction::make(),
             ])
             ->bulkActions([
-                Actions\DeleteBulkAction::make(),
+                Actions\BulkActionGroup::make([
+                    Actions\BulkAction::make('setApplicableTo')
+                        ->label('Set applies to')
+                        ->icon(Heroicon::OutlinedAdjustmentsHorizontal)
+                        ->form([
+                            Forms\Components\Select::make('applicable_to')
+                                ->label('Applies to')
+                                ->options(static::applicableTypeOptions())
+                                ->required()
+                                ->native(false),
+                        ])
+                        ->action(function (Collection $records, array $data): void {
+                            $records->each(fn (PromoCode $record) => $record->update([
+                                'applicable_to' => $data['applicable_to'],
+                            ]));
+                        })
+                        ->deselectRecordsAfterCompletion(),
+                    Actions\DeleteBulkAction::make(),
+                ]),
             ]);
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public static function applicableTypeOptions(): array
+    {
+        return config('promo.applicable_types', []);
     }
 
     public static function getPages(): array

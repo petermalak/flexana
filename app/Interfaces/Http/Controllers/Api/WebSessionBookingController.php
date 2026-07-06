@@ -6,15 +6,13 @@ use App\Console\Commands\CategorizeServicesCommand;
 use App\Http\Controllers\Controller;
 use App\Infrastructure\Persistence\Eloquent\AppointmentModel;
 use App\Infrastructure\Persistence\Eloquent\BookingModel;
-use App\Infrastructure\Persistence\Eloquent\CustomerPackagePurchaseModel;
 use App\Infrastructure\Persistence\Eloquent\PromoCodeModel;
 use App\Infrastructure\Persistence\Eloquent\ServiceModel;
-use App\Models\Category;
 use App\Models\Customer;
-use App\Support\ApiDateTime;
+use App\Support\BookingConfirmationEmailText;
 use App\Support\InternalNotificationMail;
-use App\Support\PackagePurchaseExpiry;
-use App\Support\PromoEmailText;
+use App\Support\PackagePurchaseLifecycle;
+use App\Support\ValidPackagePurchaseFinder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -71,7 +69,7 @@ class WebSessionBookingController extends Controller
                 'success' => false,
                 'message' => 'Drop-in bookings are only created after successful payment.',
             ], 400);
-        }   
+        }
 
         $customerPayload = $data['customer'] ?? [];
         $email = strtolower(trim((string) ($customerPayload['email'] ?? '')));
@@ -134,11 +132,12 @@ class WebSessionBookingController extends Controller
         $subtotalBeforePromo = null;
 
         if (! $isDropIn) {
-            $purchaseToUse = $this->findValidPurchaseForCategory(
+            $purchaseToUse = ValidPackagePurchaseFinder::forSession(
                 (int) $customer->id,
                 $sessionCategory,
                 $spots,
                 Carbon::parse($appointment->booking_start),
+                fn ($package) => $this->packageCategory($package),
             );
             if (! $purchaseToUse) {
                 return response()->json([
@@ -149,16 +148,20 @@ class WebSessionBookingController extends Controller
             $packageId = $purchaseToUse->package_id;
             $customerPackagePurchaseId = $purchaseToUse->id;
         } else {
-            $servicePrice = $service ? (float) ($service->price ?? 0) : 0;
+            $servicePrice = $service ? $service->priceForBranch($appointment->branch_id ? (int) $appointment->branch_id : null) : 0;
             $subtotalBeforePromo = $servicePrice * $spots;
             $totalPrice = $subtotalBeforePromo;
             $promoRecord = null;
             if ($promoCode) {
-                $promoRecord = PromoCodeModel::findByCode($promoCode);
-                if ($promoRecord && $promoRecord->isValidForCustomer((int) $customer->id)) {
+                $promoRecord = PromoCodeModel::resolveForCustomer(
+                    $promoCode,
+                    (int) $customer->id,
+                    PromoApplicableType::DropIns,
+                    $sessionID,
+                    $appointment->branch_id ? (int) $appointment->branch_id : null,
+                );
+                if ($promoRecord) {
                     $totalPrice = $totalPrice * (1 - (float) $promoRecord->percent_discount / 100);
-                } else {
-                    $promoRecord = null;
                 }
             }
         }
@@ -200,6 +203,7 @@ class WebSessionBookingController extends Controller
 
             if ($purchaseToUse) {
                 $purchaseToUse->decrement('remaining_sessions', $spots);
+                PackagePurchaseLifecycle::afterSessionsConsumed($purchaseToUse);
             }
 
             \App\Infrastructure\Persistence\Eloquent\PaymentModel::query()->create([
@@ -266,48 +270,15 @@ class WebSessionBookingController extends Controller
             return;
         }
 
-        $service = $appointment->service;
-        $provider = $appointment->provider;
-
         $customerName = trim(($customer->first_name ?? '') . ' ' . ($customer->last_name ?? ''));
         $customerName = $customerName !== '' ? $customerName : ($customer->email ?? 'Customer');
 
-        $appointmentDate = ApiDateTime::formatInBusinessTimezone($appointment->booking_start, 'Y-m-d');
-        $appointmentTime = ApiDateTime::formatInBusinessTimezone($appointment->booking_start, 'H:i');
-
-        $promoLines = $promo !== null
-            ? PromoEmailText::appliedSection(
-                $promo,
-                $subtotalBeforePromo ?? (float) $booking->total_amount,
-                (float) $booking->total_amount,
-            )
-            : '';
-
-        $body = "Thank you for booking with Flexana!\n\n"
-            . "Booking Details\n\n"
-            . "* Name: {$customerName},\n\n"
-            . "* Email: {$customer->email}\n\n"
-            . "* Phone: {$customer->phone}\n\n"
-            . "* Spots: " . ((int) ($booking->party_size ?? 1)) . "\n\n"
-            . "* Class: " . ($service?->name ?? 'Unknown') . "\n\n"
-            . "* Day: {$appointmentDate}\n\n"
-            . "* Time: {$appointmentTime}\n\n"
-            . "* Instructor: " . ($provider?->name ?? 'Unknown') . "\n\n"
-            . "* Type: " . ($service?->description ?? '') . "\n\n"
-            . "* Channel: website\n\n"
-            . $promoLines
-            . "If you need to cancel, please do so at least 24 hours in advance via your Flexana account or by contacting us directly.\n\n"
-            . "You can contact us at +20 122 0221100 to reschedule your session or request a refund.\n\n"
-            . "We look forward to seeing you on the mat!\n\n"
-            . "Flexana Team";
-
-        $subject = 'Your Flexana booking confirmation';
-
         InternalNotificationMail::sendCustomerAndInternalCopy(
-            $body,
-            $subject,
+            BookingConfirmationEmailText::body($booking, $appointment, $customer, $promo, $subtotalBeforePromo, 'website'),
+            BookingConfirmationEmailText::customerSubject(),
             $customer->email,
             $customerName,
+            BookingConfirmationEmailText::internalSubject($appointment),
         );
     }
 
@@ -338,52 +309,6 @@ class WebSessionBookingController extends Controller
         $serviceText = trim(($service->name ?? '') . ' ' . ($service->description ?? ''));
 
         return CategorizeServicesCommand::inferCategoryNameFromText($serviceText) ?? 'Yoga';
-    }
-
-    private function findValidPurchaseForCategory(
-        int $customerId,
-        ?string $sessionCategory,
-        int $persons,
-        Carbon $sessionDate,
-    ): ?CustomerPackagePurchaseModel {
-        if ($sessionCategory === null) {
-            return null;
-        }
-        $bizTz = (string) config('app.business_timezone');
-        /** @var \Illuminate\Database\Eloquent\Collection<int, CustomerPackagePurchaseModel> $purchases */
-        $purchases = CustomerPackagePurchaseModel::query()
-            ->with(['package.services'])
-            ->where('customer_id', $customerId)
-            ->where('status', 'active')
-            ->where('remaining_sessions', '>=', $persons)
-            ->whereNotNull('package_id')
-            ->orderByDesc('purchase_date')
-            ->get();
-
-        foreach ($purchases as $purchase) {
-            /** @var CustomerPackagePurchaseModel $purchase */
-            $package = $purchase->package;
-            if (! $package) {
-                continue;
-            }
-            $packageCategory = $this->packageCategory($package);
-            if ($packageCategory !== $sessionCategory) {
-                continue;
-            }
-            $expiresAt = PackagePurchaseExpiry::expiresAt(
-                $package,
-                $purchase->purchase_date,
-                $purchase->amelia_package_id,
-                (bool) $purchase->expires_by_months_only,
-            );
-            if (! PackagePurchaseExpiry::coversSessionDate($expiresAt, $sessionDate, $bizTz)) {
-                continue;
-            }
-
-            return $purchase;
-        }
-
-        return null;
     }
 
     private function packageCategory($package): ?string

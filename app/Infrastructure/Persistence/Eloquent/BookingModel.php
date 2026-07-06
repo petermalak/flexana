@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use App\Support\PackagePurchaseLifecycle;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -40,6 +41,8 @@ class BookingModel extends Model
         'notes',
         'booked_at',
         'cancelled_at',
+        'class_reminder_sent_at',
+        'class_reminder_push_sent_at',
     ];
 
     protected $casts = [
@@ -47,6 +50,8 @@ class BookingModel extends Model
         'answers' => 'array',
         'booked_at' => 'datetime',
         'cancelled_at' => 'datetime',
+        'class_reminder_sent_at' => 'datetime',
+        'class_reminder_push_sent_at' => 'datetime',
     ];
 
     protected static function booted(): void
@@ -128,6 +133,7 @@ class BookingModel extends Model
                 }
 
                 $purchase->decrement('remaining_sessions', $spots);
+                PackagePurchaseLifecycle::afterSessionsConsumed($purchase);
                 $fresh->updateQuietly(['customer_package_purchase_id' => $purchase->id]);
             });
         });

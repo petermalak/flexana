@@ -9,7 +9,8 @@ use App\Infrastructure\Persistence\Eloquent\CustomerPackagePurchaseModel;
 use App\Infrastructure\Persistence\Eloquent\ServiceModel;
 use App\Models\Category;
 use App\Support\ApiDateTime;
-use App\Support\PackagePurchaseExpiry;
+use App\Support\BranchSettings;
+use App\Support\ValidPackagePurchaseFinder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -19,13 +20,14 @@ class MobileSessionController extends Controller
 {
     /**
      * Get sessions (appointments) with optional pagination.
-     * Query params: date, category (Yoga | Reformer Pilates | yoga | reformer | reformer-pilates), instructorID, per_page (default 15), page
+     * Query params: date, category (Yoga | Reformer Pilates | yoga | reformer | reformer-pilates), instructorID, branchId, per_page (default 15), page
      */
     public function index(Request $request): JsonResponse
     {
         $date = $request->query('date');
         $category = $request->query('category');
         $instructorID = $request->query('instructorID');
+        $branchId = $request->query('branchId');
         $requestedPerPage = $request->query('per_page');
         $requestedPage = $request->query('page');
         $shouldPaginate = $requestedPerPage !== null || $requestedPage !== null;
@@ -34,7 +36,7 @@ class MobileSessionController extends Controller
         $upcomingCutoff = Carbon::now($scheduleTz);
 
         $query = AppointmentModel::query()
-            ->with(['service.category', 'provider', 'bookings'])
+            ->with(['service.category', 'provider', 'bookings', 'branch'])
             ->where('status', 'approved')
             // Only upcoming sessions — use schedule TZ so SQL + PHP match studio clocks / stored datetimes
             ->where('booking_start', '>', $upcomingCutoff);
@@ -59,6 +61,22 @@ class MobileSessionController extends Controller
         }
         if ($instructorID) {
             $query->where('provider_id', $instructorID);
+        }
+
+        if ($branchId !== null && $branchId !== '') {
+            $requestedBranchId = (int) $branchId;
+
+            // Backwards compatibility: some historical appointments may still have branch_id = null.
+            // Treat those as default branch when filtering by the current default.
+            $defaultBranchId = BranchSettings::defaultBranchId();
+            if ($defaultBranchId !== null && $requestedBranchId === $defaultBranchId) {
+                $query->where(function ($q) use ($requestedBranchId) {
+                    $q->where('branch_id', $requestedBranchId)
+                        ->orWhereNull('branch_id');
+                });
+            } else {
+                $query->where('branch_id', $requestedBranchId);
+            }
         }
 
         $query->orderBy('booking_start');
@@ -114,11 +132,12 @@ class MobileSessionController extends Controller
             $willPay = true;
             if ($customerId && $service instanceof ServiceModel) {
                 $sessionCategory = $this->sessionCategoryFromService($service);
-                $validPurchase = $this->findValidPurchaseForCategory(
+                $validPurchase = ValidPackagePurchaseFinder::forSession(
                     (int) $customerId,
                     $sessionCategory,
                     1,
                     $startInstant,
+                    fn ($package) => $this->packageCategory($package),
                 );
                 $willPay = $validPurchase === null;
             }
@@ -126,10 +145,12 @@ class MobileSessionController extends Controller
             return [
                 'id' => (string) $appointment->id,
                 'bookingId' => $myBooking ? (string) $myBooking->id : null,
+                'branchId' => $appointment->branch_id ? (string) $appointment->branch_id : null,
+                'branchName' => $appointment->branch?->name ?? '',
                 'instructor' => $provider ? $provider->name : '',
                 'service' => $service ? $service->name : '',
                 'serviceType' => $serviceType,
-                'price' => $service ? (float) ($service->price ?? 0) : 0.0,
+                'price' => $service ? $service->priceForBranch($appointment->branch_id ? (int) $appointment->branch_id : null) : 0.0,
                 'date' => ApiDateTime::toBusinessIso8601($appointment->booking_start),
                 'dateUtc' => ApiDateTime::toUtcIso8601($appointment->booking_start),
                 'isBooked' => $isBooked,
@@ -375,55 +396,6 @@ class MobileSessionController extends Controller
         $serviceText = trim(($service->name ?? '') . ' ' . ($service->description ?? ''));
 
         return CategorizeServicesCommand::inferCategoryNameFromText($serviceText) ?? 'Yoga';
-    }
-
-    /**
-     * Find an active customer package purchase with matching category and enough remaining sessions.
-     * Prefers most recently purchased. Excludes expired (by package_duration + purchase_date).
-     * MUST stay in sync with MobileBookingController::findValidPurchaseForCategory().
-     */
-    private function findValidPurchaseForCategory(
-        int $customerId,
-        ?string $sessionCategory,
-        int $persons,
-        Carbon $sessionDate,
-    ): ?CustomerPackagePurchaseModel {
-        if ($sessionCategory === null) {
-            return null;
-        }
-        $bizTz = (string) config('app.business_timezone');
-        $purchases = CustomerPackagePurchaseModel::query()
-            ->with(['package.services'])
-            ->where('customer_id', $customerId)
-            ->where('status', 'active')
-            ->where('remaining_sessions', '>=', $persons)
-            ->whereNotNull('package_id')
-            ->orderByDesc('purchase_date')
-            ->get();
-
-        foreach ($purchases as $purchase) {
-            $package = $purchase->package;
-            if (! $package) {
-                continue;
-            }
-            $packageCategory = $this->packageCategory($package);
-            if ($packageCategory !== $sessionCategory) {
-                continue;
-            }
-            $expiresAt = PackagePurchaseExpiry::expiresAt(
-                $package,
-                $purchase->purchase_date,
-                $purchase->amelia_package_id,
-                (bool) $purchase->expires_by_months_only,
-            );
-            if (! PackagePurchaseExpiry::coversSessionDate($expiresAt, $sessionDate, $bizTz)) {
-                continue;
-            }
-
-            return $purchase;
-        }
-
-        return null;
     }
 
     /**

@@ -2,6 +2,7 @@
 
 namespace App\Application\Amelia\Services;
 
+use App\Support\BranchSettings;
 use App\Infrastructure\Persistence\Eloquent\AmeliaAppointmentModel;
 use App\Infrastructure\Persistence\Eloquent\AmeliaCustomerBookingModel;
 use App\Infrastructure\Persistence\Eloquent\AmeliaPackageModel;
@@ -12,6 +13,7 @@ use App\Infrastructure\Persistence\Eloquent\AmeliaServiceModel;
 use App\Infrastructure\Persistence\Eloquent\AmeliaUserModel;
 use App\Infrastructure\Persistence\Eloquent\AppointmentModel;
 use App\Infrastructure\Persistence\Eloquent\BookingModel;
+use App\Infrastructure\Persistence\Eloquent\BranchModel;
 use App\Infrastructure\Persistence\Eloquent\CustomerModel;
 use App\Infrastructure\Persistence\Eloquent\PackageModel;
 use App\Infrastructure\Persistence\Eloquent\PaymentModel;
@@ -128,11 +130,12 @@ final class AutoSyncAmeliaService
                 'max_capacity' => (int) ($ameliaService->maxCapacity ?? $existing->max_capacity ?? 1),
                 'status' => ($ameliaService->status ?? 'visible') === 'hidden' ? 'hidden' : 'visible',
             ]);
+            $this->ensureServiceHasBranches($existing);
 
             return $existing;
         }
 
-        return ServiceModel::on('mysql')->create([
+        $service = ServiceModel::on('mysql')->create([
             'amelia_service_id' => $ameliaService->id,
             'name' => $ameliaService->name ?? 'Service ' . $ameliaService->id,
             'description' => $ameliaService->description,
@@ -142,6 +145,28 @@ final class AutoSyncAmeliaService
             'max_capacity' => (int) ($ameliaService->maxCapacity ?? 1),
             'status' => ($ameliaService->status ?? 'visible') === 'hidden' ? 'hidden' : 'visible',
         ]);
+        $this->ensureServiceHasBranches($service);
+
+        return $service;
+    }
+
+    private function ensureServiceHasBranches(ServiceModel $service): void
+    {
+        if ($service->branches()->exists()) {
+            return;
+        }
+
+        $branchIds = BranchModel::on('mysql')
+            ->where('is_active', true)
+            ->pluck('id');
+
+        if ($branchIds->isNotEmpty()) {
+            $service->branches()->sync(
+                $branchIds->mapWithKeys(fn ($id) => [
+                    (int) $id => ['price' => (float) ($service->price ?? 0)],
+                ])->all(),
+            );
+        }
     }
 
     /**
@@ -235,6 +260,8 @@ final class AutoSyncAmeliaService
             ? \App\Models\Location::on('mysql')->where('amelia_location_id', $ameliaAppointment->locationId)->value('id')
             : null;
 
+        $branchId = BranchSettings::defaultBranchId();
+
         $existing = AppointmentModel::query()
             ->where('amelia_appointment_id', $ameliaAppointment->id)
             ->first();
@@ -245,6 +272,7 @@ final class AutoSyncAmeliaService
                 'provider_id' => $provider->id,
                 'package_id' => $package?->id,
                 'location_id' => $locationId,
+                'branch_id' => $existing->branch_id ?? $branchId,
                 'booking_start' => $ameliaAppointment->bookingStart,
                 'booking_end' => $ameliaAppointment->bookingEnd,
                 'status' => $this->mapAppointmentStatus($ameliaAppointment->status),
@@ -260,6 +288,7 @@ final class AutoSyncAmeliaService
             'provider_id' => $provider->id,
             'package_id' => $package?->id,
             'location_id' => $locationId,
+            'branch_id' => $branchId,
             'booking_start' => $ameliaAppointment->bookingStart,
             'booking_end' => $ameliaAppointment->bookingEnd,
             'status' => $this->mapAppointmentStatus($ameliaAppointment->status),

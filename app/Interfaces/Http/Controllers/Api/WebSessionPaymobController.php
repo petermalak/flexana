@@ -2,6 +2,7 @@
 
 namespace App\Interfaces\Http\Controllers\Api;
 
+use App\Domain\Promo\Enums\PromoApplicableType;
 use App\Http\Controllers\Controller;
 use App\Infrastructure\Persistence\Eloquent\AppointmentModel;
 use App\Infrastructure\Persistence\Eloquent\BookingModel;
@@ -17,8 +18,8 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use App\Support\ApiDateTime;
+use App\Support\BookingConfirmationEmailText;
 use App\Support\InternalNotificationMail;
-use App\Support\PromoEmailText;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 
@@ -139,15 +140,22 @@ class WebSessionPaymobController extends Controller
             ], 400);
         }
 
-        $servicePrice = $service ? (float) ($service->price ?? 0) : 0;
+        $servicePrice = $service ? $service->priceForBranch($appointment->branch_id ? (int) $appointment->branch_id : null) : 0;
         $subtotalBeforePromo = $servicePrice * $spots;
         $totalPrice = $subtotalBeforePromo;
         $promoRecord = null;
 
         if ($promoCode) {
             $promoRecord = PromoCodeModel::findByCode($promoCode);
-            // Customer is not persisted yet; we validate promo "generally" here, and enforce usage at finalize time.
-            if ($promoRecord) {
+            if (
+                $promoRecord
+                && $promoRecord->invalidReasonForCustomer(
+                    null,
+                    PromoApplicableType::DropIns,
+                    $sessionID,
+                    $appointment->branch_id ? (int) $appointment->branch_id : null,
+                ) === null
+            ) {
                 $totalPrice = $totalPrice * (1 - (float) $promoRecord->percent_discount / 100);
             } else {
                 $promoRecord = null;
@@ -517,12 +525,15 @@ class WebSessionPaymobController extends Controller
         $promoRecord = null;
 
         if ($promoCode) {
-            $promoRecord = PromoCodeModel::findByCode($promoCode);
+            $promoRecord = PromoCodeModel::resolveForCustomer(
+                $promoCode,
+                (int) $customer->id,
+                PromoApplicableType::DropIns,
+                (int) $appointment->id,
+                $appointment->branch_id ? (int) $appointment->branch_id : null,
+            );
             // Promo can become invalid between init and finalize (usage limit, etc).
             // We don't block booking creation if the user already paid successfully.
-            if (! ($promoRecord && $promoRecord->isValidForCustomer((int) $customer->id))) {
-                $promoRecord = null;
-            }
         }
 
         DB::beginTransaction();
@@ -606,48 +617,15 @@ class WebSessionPaymobController extends Controller
             return;
         }
 
-        $service = $appointment->service;
-        $provider = $appointment->provider;
-
         $customerName = trim(($customer->first_name ?? '') . ' ' . ($customer->last_name ?? ''));
         $customerName = $customerName !== '' ? $customerName : ($customer->email ?? 'Customer');
 
-        $appointmentDate = ApiDateTime::formatInBusinessTimezone($appointment->booking_start, 'Y-m-d');
-        $appointmentTime = ApiDateTime::formatInBusinessTimezone($appointment->booking_start, 'H:i');
-
-        $promoLines = $promo !== null
-            ? PromoEmailText::appliedSection(
-                $promo,
-                $subtotalBeforePromo ?? (float) $booking->total_amount,
-                (float) $booking->total_amount,
-            )
-            : '';
-
-        $body = "Thank you for booking with Flexana!\n\n"
-            . "Booking Details\n\n"
-            . "* Name: {$customerName},\n\n"
-            . "* Email: {$customer->email}\n\n"
-            . "* Phone: {$customer->phone}\n\n"
-            . "* Spots: " . ((int) ($booking->party_size ?? 1)) . "\n\n"
-            . "* Class: " . ($service?->name ?? 'Unknown') . "\n\n"
-            . "* Day: {$appointmentDate}\n\n"
-            . "* Time: {$appointmentTime}\n\n"
-            . "* Instructor: " . ($provider?->name ?? 'Unknown') . "\n\n"
-            . "* Type: " . ($service?->description ?? '') . "\n\n"
-            . "* Channel: website\n\n"
-            . $promoLines
-            . "If you need to cancel, please do so at least 24 hours in advance via your Flexana account or by contacting us directly.\n\n"
-            . "You can contact us at +20 122 0221100 to reschedule your session or request a refund.\n\n"
-            . "We look forward to seeing you on the mat!\n\n"
-            . "Flexana Team";
-
-        $subject = 'Your Flexana booking confirmation';
-
         InternalNotificationMail::sendCustomerAndInternalCopy(
-            $body,
-            $subject,
+            BookingConfirmationEmailText::body($booking, $appointment, $customer, $promo, $subtotalBeforePromo, 'website'),
+            BookingConfirmationEmailText::customerSubject(),
             $customer->email,
             $customerName,
+            BookingConfirmationEmailText::internalSubject($appointment),
         );
     }
 }

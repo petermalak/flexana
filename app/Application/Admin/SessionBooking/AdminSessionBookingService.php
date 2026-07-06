@@ -2,13 +2,16 @@
 
 namespace App\Application\Admin\SessionBooking;
 
+use App\Application\Bookings\CancelSessionBookingService;
+use App\Domain\Promo\Enums\PromoApplicableType;
 use App\Infrastructure\Persistence\Eloquent\AppointmentModel;
 use App\Infrastructure\Persistence\Eloquent\BookingModel;
 use App\Infrastructure\Persistence\Eloquent\CustomerPackagePurchaseModel;
 use App\Infrastructure\Persistence\Eloquent\PaymentModel;
 use App\Infrastructure\Persistence\Eloquent\PromoCodeModel;
 use App\Infrastructure\Persistence\Eloquent\ServiceModel;
-use App\Support\PackagePurchaseExpiry;
+use App\Support\PackagePurchaseLifecycle;
+use App\Support\ValidPackagePurchaseFinder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -70,11 +73,12 @@ final class AdminSessionBookingService
         $subtotalBeforePromo = null;
 
         if (! $isDropIn) {
-            $purchaseToUse = $this->findValidPurchaseForCategory(
+            $purchaseToUse = ValidPackagePurchaseFinder::forSession(
                 $customerId,
                 $sessionCategory,
                 $spots,
                 Carbon::parse($appointment->booking_start),
+                fn ($package) => $this->packageCategory($package),
             );
             if (! $purchaseToUse) {
                 throw new \RuntimeException('No package with remaining sessions for this category (Yoga/Reformer Pilates). Book as drop-in or purchase a package.');
@@ -82,16 +86,20 @@ final class AdminSessionBookingService
             $packageId = $purchaseToUse->package_id;
             $customerPackagePurchaseId = $purchaseToUse->id;
         } else {
-            $servicePrice = $service ? (float) ($service->price ?? 0) : 0.0;
+            $servicePrice = $service ? $service->priceForBranch($appointment->branch_id ? (int) $appointment->branch_id : null) : 0.0;
             $subtotalBeforePromo = $servicePrice * $spots;
             $totalPrice = $subtotalBeforePromo;
 
             if ($promoCode) {
-                $promoRecord = PromoCodeModel::findByCode($promoCode);
-                if ($promoRecord && $promoRecord->isValidForCustomer($customerId)) {
+                $promoRecord = PromoCodeModel::resolveForCustomer(
+                    $promoCode,
+                    $customerId,
+                    PromoApplicableType::DropIns,
+                    (int) $appointment->id,
+                    $appointment->branch_id ? (int) $appointment->branch_id : null,
+                );
+                if ($promoRecord) {
                     $totalPrice = $totalPrice * (1 - (float) $promoRecord->percent_discount / 100);
-                } else {
-                    $promoRecord = null;
                 }
             }
         }
@@ -144,6 +152,7 @@ final class AdminSessionBookingService
 
             if ($purchaseToUse) {
                 $purchaseToUse->decrement('remaining_sessions', $spots);
+                PackagePurchaseLifecycle::afterSessionsConsumed($purchaseToUse);
             }
 
             // Mobile parity: payment row is created with status=paid/provider=on_site.
@@ -162,6 +171,19 @@ final class AdminSessionBookingService
         });
     }
 
+    /**
+     * Cancel a session booking from the admin panel.
+     * Frees capacity on the session and restores package sessions when applicable.
+     */
+    public function cancel(BookingModel $booking, bool $sendEmail = true): BookingModel
+    {
+        return app(CancelSessionBookingService::class)->cancel(
+            $booking,
+            enforceCancellationDeadline: false,
+            sendEmail: $sendEmail,
+        );
+    }
+
     private function sessionCategoryFromService(?ServiceModel $service): ?string
     {
         if (! $service || ! $service->name) {
@@ -175,52 +197,6 @@ final class AdminSessionBookingService
             return 'Yoga';
         }
         return 'Yoga';
-    }
-
-    private function findValidPurchaseForCategory(
-        int $customerId,
-        ?string $sessionCategory,
-        int $spots,
-        Carbon $sessionDate,
-    ): ?CustomerPackagePurchaseModel {
-        if ($sessionCategory === null) {
-            return null;
-        }
-        $bizTz = (string) config('app.business_timezone');
-
-        $purchases = CustomerPackagePurchaseModel::query()
-            ->with(['package.services'])
-            ->where('customer_id', $customerId)
-            ->where('status', 'active')
-            ->where('remaining_sessions', '>=', $spots)
-            ->whereNotNull('package_id')
-            ->orderBy('purchase_date')
-            ->get();
-
-        foreach ($purchases as $purchase) {
-            $package = $purchase->package;
-            if (! $package) {
-                continue;
-            }
-            $packageCategory = $this->packageCategory($package);
-            if ($packageCategory !== $sessionCategory) {
-                continue;
-            }
-
-            $expiresAt = PackagePurchaseExpiry::expiresAt(
-                $package,
-                $purchase->purchase_date,
-                $purchase->amelia_package_id,
-                (bool) $purchase->expires_by_months_only,
-            );
-            if (! PackagePurchaseExpiry::coversSessionDate($expiresAt, $sessionDate, $bizTz)) {
-                continue;
-            }
-
-            return $purchase;
-        }
-
-        return null;
     }
 
     private function packageCategory($package): ?string

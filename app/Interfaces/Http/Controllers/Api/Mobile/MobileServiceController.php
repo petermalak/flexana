@@ -15,9 +15,16 @@ class MobileServiceController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
+        $branchId = $request->filled('branchId') ? (int) $request->query('branchId') : null;
+
         $services = ServiceModel::query()
             ->where('status', 'visible')
             ->where('show', true)
+            ->when($branchId, fn ($query) => $query->whereHas(
+                'branches',
+                fn ($branchQuery) => $branchQuery->whereKey($branchId),
+            ))
+            ->with($branchId ? ['branches' => fn ($query) => $query->whereKey($branchId)] : 'branches')
             ->where(function ($query) {
                 $query->where('name', 'LIKE', '%Yoga%')
                     ->orWhere('name', 'LIKE', '%Reformer Pilates%')
@@ -48,7 +55,7 @@ class MobileServiceController extends Controller
                 'brief' => $service->description ?? '',
                 'description' => $service->description ?? '',
                 'duration' => (int) ($service->duration ?? 0),
-                'price' => (float) ($service->price ?? 0),
+                'price' => $service->priceForBranch($branchId),
                 'minCapacity' => (int) ($service->min_capacity ?? 1),
                 'maxCapacity' => (int) ($service->max_capacity ?? 1),
                 'colorHex' => $service->color_hex ?? null,

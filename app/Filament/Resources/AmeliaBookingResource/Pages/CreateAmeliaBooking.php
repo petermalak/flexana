@@ -3,9 +3,9 @@
 namespace App\Filament\Resources\AmeliaBookingResource\Pages;
 
 use App\Filament\Resources\AmeliaBookingResource;
-use Filament\Resources\Pages\CreateRecord;
+use App\Filament\Resources\Pages\StaysOnPageCreateRecord;
 
-class CreateAmeliaBooking extends CreateRecord
+class CreateAmeliaBooking extends StaysOnPageCreateRecord
 {
     protected static string $resource = AmeliaBookingResource::class;
 }

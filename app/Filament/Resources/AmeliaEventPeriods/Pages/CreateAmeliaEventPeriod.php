@@ -3,9 +3,9 @@
 namespace App\Filament\Resources\AmeliaEventPeriods\Pages;
 
 use App\Filament\Resources\AmeliaEventPeriods\AmeliaEventPeriodResource;
-use Filament\Resources\Pages\CreateRecord;
+use App\Filament\Resources\Pages\StaysOnPageCreateRecord;
 
-class CreateAmeliaEventPeriod extends CreateRecord
+class CreateAmeliaEventPeriod extends StaysOnPageCreateRecord
 {
     protected static string $resource = AmeliaEventPeriodResource::class;
 }

@@ -2,8 +2,10 @@
 
 namespace App\Infrastructure\Persistence\Eloquent;
 
+use App\Domain\Promo\Enums\PromoApplicableType;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -22,6 +24,7 @@ class PromoCodeModel extends Model
         'usage_limit_per_user',
         'used_count',
         'is_active',
+        'applicable_to',
     ];
 
     protected $casts = [
@@ -32,6 +35,11 @@ class PromoCodeModel extends Model
         'usage_limit_per_user' => 'integer',
         'used_count' => 'integer',
         'is_active' => 'boolean',
+        'applicable_to' => PromoApplicableType::class,
+    ];
+
+    protected $attributes = [
+        'applicable_to' => PromoApplicableType::Both->value,
     ];
 
     public function payments(): HasMany
@@ -42,6 +50,90 @@ class PromoCodeModel extends Model
     public function redemptions(): HasMany
     {
         return $this->hasMany(PromoCodeRedemptionModel::class, 'promo_code_id');
+    }
+
+    public function appointments(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            AppointmentModel::class,
+            'appointment_promo_code',
+            'promo_code_id',
+            'appointment_id',
+        )->withTimestamps();
+    }
+
+    public function branches(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            BranchModel::class,
+            'branch_promo_code',
+            'promo_code_id',
+            'branch_id',
+        )->withTimestamps();
+    }
+
+    public function packages(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            PackageModel::class,
+            'package_promo_code',
+            'promo_code_id',
+            'package_id',
+        )->withTimestamps();
+    }
+
+    public function isRestrictedToPackages(): bool
+    {
+        if ($this->relationLoaded('packages')) {
+            return $this->packages->isNotEmpty();
+        }
+
+        return $this->packages()->exists();
+    }
+
+    public function appliesToPackage(?int $packageId): bool
+    {
+        if ($packageId === null || ! $this->isRestrictedToPackages()) {
+            return true;
+        }
+
+        return $this->packages()->whereKey($packageId)->exists();
+    }
+
+    public function isRestrictedToBranches(): bool
+    {
+        if ($this->relationLoaded('branches')) {
+            return $this->branches->isNotEmpty();
+        }
+
+        return $this->branches()->exists();
+    }
+
+    public function appliesToBranch(?int $branchId): bool
+    {
+        if ($branchId === null || ! $this->isRestrictedToBranches()) {
+            return true;
+        }
+
+        return $this->branches()->whereKey($branchId)->exists();
+    }
+
+    public function isRestrictedToAppointments(): bool
+    {
+        if ($this->relationLoaded('appointments')) {
+            return $this->appointments->isNotEmpty();
+        }
+
+        return $this->appointments()->exists();
+    }
+
+    public function appliesToAppointment(?int $appointmentId): bool
+    {
+        if ($appointmentId === null || ! $this->isRestrictedToAppointments()) {
+            return true;
+        }
+
+        return $this->appointments()->whereKey($appointmentId)->exists();
     }
 
     /**
@@ -69,16 +161,71 @@ class PromoCodeModel extends Model
             ->count();
     }
 
+    public static function resolveForCustomer(
+        string $code,
+        int $customerId,
+        PromoApplicableType $context,
+        ?int $appointmentId = null,
+        ?int $branchId = null,
+        ?int $packageId = null,
+    ): ?self {
+        $promo = static::findByCode($code);
+        if (! $promo) {
+            return null;
+        }
+
+        if ($promo->invalidReasonForCustomer($customerId, $context, $appointmentId, $branchId, $packageId) !== null) {
+            return null;
+        }
+
+        return $promo;
+    }
+
+    public function isApplicableFor(PromoApplicableType $context): bool
+    {
+        return $this->applicable_to === PromoApplicableType::Both
+            || $this->applicable_to === $context;
+    }
+
     /**
      * Why the code cannot be used for this customer, or null if valid.
      * Per-user usage limit replaces the old global usage_limit / used_count cap.
      *
-     * @return 'inactive'|'not_yet_valid'|'expired'|'usage_limit_reached'|null
+     * @return 'inactive'|'not_yet_valid'|'expired'|'usage_limit_reached'|'wrong_type'|'wrong_appointment'|'wrong_branch'|'wrong_package'|null
      */
-    public function invalidReasonForCustomer(int $customerId): ?string
-    {
+    public function invalidReasonForCustomer(
+        ?int $customerId = null,
+        ?PromoApplicableType $context = null,
+        ?int $appointmentId = null,
+        ?int $branchId = null,
+        ?int $packageId = null,
+    ): ?string {
         if (! $this->is_active) {
             return 'inactive';
+        }
+
+        if ($context !== null && ! $this->isApplicableFor($context)) {
+            return 'wrong_type';
+        }
+
+        if (
+            $appointmentId !== null
+            && $context !== PromoApplicableType::Packages
+            && ! $this->appliesToAppointment($appointmentId)
+        ) {
+            return 'wrong_appointment';
+        }
+
+        if (
+            $packageId !== null
+            && $context !== PromoApplicableType::DropIns
+            && ! $this->appliesToPackage($packageId)
+        ) {
+            return 'wrong_package';
+        }
+
+        if ($branchId !== null && ! $this->appliesToBranch($branchId)) {
+            return 'wrong_branch';
         }
 
         $tz = (string) config('promo.calendar_timezone', 'UTC');
@@ -95,18 +242,24 @@ class PromoCodeModel extends Model
                 return 'expired';
             }
         }
-        if ($this->usage_limit_per_user !== null && $this->usage_limit_per_user > 0) {
-            if ($this->redemptionCountForCustomer($customerId) >= $this->usage_limit_per_user) {
-                return 'usage_limit_reached';
-            }
+        if ($customerId !== null
+            && $this->usage_limit_per_user !== null
+            && $this->usage_limit_per_user > 0
+            && $this->redemptionCountForCustomer($customerId) >= $this->usage_limit_per_user) {
+            return 'usage_limit_reached';
         }
 
         return null;
     }
 
-    public function isValidForCustomer(int $customerId): bool
-    {
-        return $this->invalidReasonForCustomer($customerId) === null;
+    public function isValidForCustomer(
+        int $customerId,
+        ?PromoApplicableType $context = null,
+        ?int $appointmentId = null,
+        ?int $branchId = null,
+        ?int $packageId = null,
+    ): bool {
+        return $this->invalidReasonForCustomer($customerId, $context, $appointmentId, $branchId, $packageId) === null;
     }
 
     /**

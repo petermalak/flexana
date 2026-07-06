@@ -2,6 +2,7 @@
 
 namespace App\Application\Auth;
 
+use App\Support\PhoneNumberNormalizer;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -9,7 +10,7 @@ final class SmsVerificationService implements SmsVerificationServiceInterface
 {
     public function sendCode(string $phone, string $code): bool
     {
-        $phone = $this->normalizeE164($phone);
+        $phone = PhoneNumberNormalizer::normalize($phone);
         $driver = config('sms.driver', 'log');
 
         // When we have a code to send (e.g. phone change), send it via SMS so the user receives that exact code.
@@ -48,7 +49,7 @@ final class SmsVerificationService implements SmsVerificationServiceInterface
 
     public function checkVerification(string $phone, string $code): ?bool
     {
-        $phone = $this->normalizeE164($phone);
+        $phone = PhoneNumberNormalizer::normalize($phone);
         if ($phone === '' || $code === '') {
             return false;
         }
@@ -516,19 +517,4 @@ final class SmsVerificationService implements SmsVerificationServiceInterface
         return true;
     }
 
-    private function normalizeE164(string $phone): string
-    {
-        $phone = preg_replace('/\s+/', '', $phone);
-        if (str_starts_with($phone, '00')) {
-            $phone = '+' . substr($phone, 2);
-        }
-        if (str_starts_with($phone, '0')) {
-            $phone = '+20' . substr($phone, 1); // Egyptian local
-        }
-        if (! str_starts_with($phone, '+')) {
-            $phone = '+' . $phone;
-        }
-
-        return $phone;
-    }
 }

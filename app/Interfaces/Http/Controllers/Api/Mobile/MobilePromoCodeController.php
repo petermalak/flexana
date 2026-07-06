@@ -2,31 +2,58 @@
 
 namespace App\Interfaces\Http\Controllers\Api\Mobile;
 
+use App\Domain\Promo\Enums\PromoApplicableType;
 use App\Http\Controllers\Controller;
+use App\Infrastructure\Persistence\Eloquent\AppointmentModel;
+use App\Infrastructure\Persistence\Eloquent\PackageModel;
 use App\Infrastructure\Persistence\Eloquent\PromoCodeModel;
 use App\Support\ApiDateTime;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rule;
 
 class MobilePromoCodeController extends Controller
 {
     /**
      * Verify a promo code.
      * Returns whether the code exists, is valid/expired/inactive/limit reached, and details when valid.
+     *
+     * Body: { code, IsPackage, sessionID | packageId }
+     * Branch is resolved automatically — from the session (appointment) or from the package's branch assignment.
+     * Legacy: { code, context } with context=packages|drop_ins|both still accepted.
      */
     public function verify(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
             'code' => 'required|string|max:64',
+            'IsPackage' => 'nullable|boolean',
+            'isPackage' => 'nullable|boolean',
+            'context' => ['nullable', 'string', Rule::in(array_column(PromoApplicableType::cases(), 'value'))],
+            'sessionID' => 'nullable|integer|exists:appointments,id',
+            'appointmentId' => 'nullable|integer|exists:appointments,id',
+            'packageId' => 'nullable|integer|exists:packages,id',
+            'packageID' => 'nullable|integer|exists:packages,id',
         ]);
 
         if ($validator->fails()) {
             return response()->json([
                 'valid' => false,
                 'reason' => 'invalid_request',
-                'message' => 'Code is required.',
+                'message' => 'Code and IsPackage are required.',
                 'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $context = $this->resolvePromoContext($request);
+        if ($context === null) {
+            return response()->json([
+                'valid' => false,
+                'reason' => 'invalid_request',
+                'message' => 'IsPackage is required (true for package purchase, false for drop-in booking).',
+                'errors' => [
+                    'IsPackage' => ['The IsPackage field is required.'],
+                ],
             ], 422);
         }
 
@@ -43,7 +70,16 @@ class MobilePromoCodeController extends Controller
 
         /** @var \App\Models\Customer $customer */
         $customer = $request->user();
-        $reason = $promo->invalidReasonForCustomer((int) $customer->id);
+        $appointmentId = $this->resolveAppointmentId($request);
+        $packageId = $this->resolvePackageId($request);
+        $branchId = $this->resolveBranchId($appointmentId, $packageId, $promo);
+        $reason = $promo->invalidReasonForCustomer(
+            (int) $customer->id,
+            $context,
+            $appointmentId,
+            $branchId,
+            $packageId,
+        );
         if ($reason !== null) {
             $payload = [
                 'valid' => false,
@@ -55,6 +91,22 @@ class MobilePromoCodeController extends Controller
                 'inactive' => response()->json([
                     ...$payload,
                     'message' => 'This promo code is not active.',
+                ], 200),
+                'wrong_type' => response()->json([
+                    ...$payload,
+                    'message' => $this->wrongTypeMessage($promo),
+                ], 200),
+                'wrong_appointment' => response()->json([
+                    ...$payload,
+                    'message' => (string) config('promo.wrong_appointment_message', 'This promo code is not valid for the selected session.'),
+                ], 200),
+                'wrong_branch' => response()->json([
+                    ...$payload,
+                    'message' => (string) config('promo.wrong_branch_message', 'This promo code is not valid for the selected branch.'),
+                ], 200),
+                'wrong_package' => response()->json([
+                    ...$payload,
+                    'message' => (string) config('promo.wrong_package_message', 'This promo code is not valid for the selected package.'),
                 ], 200),
                 'not_yet_valid' => response()->json([
                     ...$payload,
@@ -86,15 +138,140 @@ class MobilePromoCodeController extends Controller
         ], 200);
     }
 
+    /**
+     * IsPackage=true → package purchase; false → drop-in booking.
+     * Falls back to legacy `context` when IsPackage is omitted.
+     */
+    private function resolvePromoContext(Request $request): ?PromoApplicableType
+    {
+        if ($request->has('IsPackage') || $request->has('isPackage')) {
+            $isPackage = filter_var(
+                $request->input('IsPackage', $request->input('isPackage')),
+                FILTER_VALIDATE_BOOLEAN,
+                FILTER_NULL_ON_FAILURE,
+            );
+
+            if ($isPackage === null) {
+                return null;
+            }
+
+            return $isPackage ? PromoApplicableType::Packages : PromoApplicableType::DropIns;
+        }
+
+        if ($request->filled('context')) {
+            return PromoApplicableType::from((string) $request->input('context'));
+        }
+
+        return null;
+    }
+
+    private function resolveAppointmentId(Request $request): ?int
+    {
+        $raw = $request->input('sessionID', $request->input('appointmentId'));
+
+        if ($raw === null || $raw === '') {
+            return null;
+        }
+
+        return (int) $raw;
+    }
+
+    private function resolvePackageId(Request $request): ?int
+    {
+        $raw = $request->input('packageId', $request->input('packageID'));
+
+        if ($raw === null || $raw === '') {
+            return null;
+        }
+
+        return (int) $raw;
+    }
+
+    private function resolveBranchId(?int $appointmentId, ?int $packageId, PromoCodeModel $promo): ?int
+    {
+        if ($appointmentId !== null) {
+            $branchId = AppointmentModel::query()
+                ->whereKey($appointmentId)
+                ->value('branch_id');
+
+            return $branchId !== null ? (int) $branchId : null;
+        }
+
+        if ($packageId === null) {
+            return null;
+        }
+
+        $package = PackageModel::query()
+            ->with('branches')
+            ->find($packageId);
+
+        if (! $package) {
+            return null;
+        }
+
+        $packageBranchIds = $package->branches
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->values();
+
+        if ($packageBranchIds->count() === 1) {
+            return $packageBranchIds->first();
+        }
+
+        if ($promo->isRestrictedToBranches()) {
+            $promo->loadMissing('branches');
+            $promoBranchIds = $promo->branches
+                ->pluck('id')
+                ->map(fn ($id) => (int) $id);
+
+            $intersection = $packageBranchIds->intersect($promoBranchIds)->values();
+            if ($intersection->count() === 1) {
+                return $intersection->first();
+            }
+        }
+
+        return null;
+    }
+
+    private function wrongTypeMessage(PromoCodeModel $promo): string
+    {
+        $messages = config('promo.wrong_type_messages', []);
+        $type = $promo->applicable_to?->value;
+
+        return (string) ($type !== null ? ($messages[$type] ?? 'This promo code is not valid for this purchase.') : 'This promo code is not valid for this purchase.');
+    }
+
     private function promoCodeDetails(PromoCodeModel $promo, ?int $customerId = null): array
     {
         $usesByYou = $customerId !== null ? $promo->redemptionCountForCustomer($customerId) : null;
+        $restrictedToAppointments = $promo->isRestrictedToAppointments();
+        $restrictedToBranches = $promo->isRestrictedToBranches();
+        $restrictedToPackages = $promo->isRestrictedToPackages();
 
         return [
             'id' => $promo->id,
             'code' => $promo->code,
             'name' => $promo->name,
             'percent_discount' => (float) $promo->percent_discount,
+            'applicable_to' => $promo->applicable_to?->value,
+            'restricted_to_appointments' => $restrictedToAppointments,
+            'allowed_appointment_ids' => $restrictedToAppointments
+                ? ($promo->relationLoaded('appointments')
+                    ? $promo->appointments->pluck('id')->map(fn ($id) => (int) $id)->values()->all()
+                    : $promo->appointments()->pluck('appointments.id')->map(fn ($id) => (int) $id)->values()->all())
+                : [],
+            'restricted_to_branches' => $restrictedToBranches,
+            'allowed_branch_ids' => $restrictedToBranches
+                ? ($promo->relationLoaded('branches')
+                    ? $promo->branches->pluck('id')->map(fn ($id) => (int) $id)->values()->all()
+                    : $promo->branches()->pluck('branches.id')->map(fn ($id) => (int) $id)->values()->all())
+                : [],
+            'restricted_to_packages' => $restrictedToPackages,
+            'allowed_package_ids' => $restrictedToPackages
+                ? ($promo->relationLoaded('packages')
+                    ? $promo->packages->pluck('id')->map(fn ($id) => (int) $id)->values()->all()
+                    : $promo->packages()->pluck('packages.id')->map(fn ($id) => (int) $id)->values()->all())
+                : [],
             'valid_from' => ApiDateTime::toBusinessIso8601($promo->valid_from),
             'valid_from_utc' => ApiDateTime::toUtcIso8601($promo->valid_from),
             'valid_until' => ApiDateTime::toBusinessIso8601($promo->valid_until),

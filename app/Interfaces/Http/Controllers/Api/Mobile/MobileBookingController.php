@@ -2,6 +2,8 @@
 
 namespace App\Interfaces\Http\Controllers\Api\Mobile;
 
+use App\Application\Bookings\CancelSessionBookingService;
+use App\Domain\Promo\Enums\PromoApplicableType;
 use App\Http\Controllers\Controller;
 use App\Infrastructure\Persistence\Eloquent\AppointmentModel;
 use App\Infrastructure\Persistence\Eloquent\BookingModel;
@@ -11,9 +13,10 @@ use App\Infrastructure\Persistence\Eloquent\PromoCodeModel;
 use App\Infrastructure\Persistence\Eloquent\ServiceModel;
 use App\Models\Customer;
 use App\Support\ApiDateTime;
-use App\Support\PackagePurchaseExpiry;
+use App\Support\BookingConfirmationEmailText;
+use App\Support\PackagePurchaseLifecycle;
+use App\Support\ValidPackagePurchaseFinder;
 use App\Support\InternalNotificationMail;
-use App\Support\PromoEmailText;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -38,7 +41,7 @@ class MobileBookingController extends Controller
 
         $bookings = BookingModel::query()
             ->where('customer_id', $customer->id)
-            ->with(['appointment.service', 'appointment.provider', 'service'])
+            ->with(['appointment.service', 'appointment.provider', 'appointment.branch', 'service'])
             ->orderByDesc('booked_at')
             ->paginate($perPage, ['*'], 'page', $page);
 
@@ -73,6 +76,8 @@ class MobileBookingController extends Controller
             return [
                 'id' => (string) $booking->id,
                 'sessionID' => $booking->appointment_id ? (string) $booking->appointment_id : null,
+                'branchId' => $appointment?->branch_id ? (string) $appointment->branch_id : null,
+                'branchName' => $appointment?->branch?->name ?? '',
                 'serviceName' => $service?->name,
                 'instructorName' => $provider?->name,
                 'bookedAt' => ApiDateTime::toBusinessIso8601($booking->booked_at),
@@ -178,11 +183,12 @@ class MobileBookingController extends Controller
         $subtotalBeforePromo = null;
 
         if (! $isDropIn) {
-            $purchaseToUse = $this->findValidPurchaseForCategory(
+            $purchaseToUse = ValidPackagePurchaseFinder::forSession(
                 $customer->id,
                 $sessionCategory,
                 $spots,
                 Carbon::parse($appointment->booking_start),
+                fn ($package) => $this->packageCategory($package),
             );
             if (! $purchaseToUse) {
                 return response()->json([
@@ -193,16 +199,20 @@ class MobileBookingController extends Controller
             $packageId = $purchaseToUse->package_id;
             $customerPackagePurchaseId = $purchaseToUse->id;
         } else {
-            $servicePrice = $service ? (float) ($service->price ?? 0) : 0;
+            $servicePrice = $service ? $service->priceForBranch($appointment->branch_id ? (int) $appointment->branch_id : null) : 0;
             $subtotalBeforePromo = $servicePrice * $spots;
             $totalPrice = $subtotalBeforePromo;
             $promoRecord = null;
             if ($promoCode) {
-                $promoRecord = PromoCodeModel::findByCode($promoCode);
-                if ($promoRecord && $promoRecord->isValidForCustomer((int) $customer->id)) {
+                $promoRecord = PromoCodeModel::resolveForCustomer(
+                    $promoCode,
+                    (int) $customer->id,
+                    PromoApplicableType::DropIns,
+                    $sessionID,
+                    $appointment->branch_id ? (int) $appointment->branch_id : null,
+                );
+                if ($promoRecord) {
                     $totalPrice = $totalPrice * (1 - (float) $promoRecord->percent_discount / 100);
-                } else {
-                    $promoRecord = null;
                 }
             }
         }
@@ -244,6 +254,7 @@ class MobileBookingController extends Controller
 
             if ($purchaseToUse) {
                 $purchaseToUse->decrement('remaining_sessions', $spots);
+                PackagePurchaseLifecycle::afterSessionsConsumed($purchaseToUse);
             }
 
             \App\Infrastructure\Persistence\Eloquent\PaymentModel::query()->create([
@@ -335,14 +346,6 @@ class MobileBookingController extends Controller
             ], 404);
         }
 
-        $canCancelUntil = $this->cancellationDeadlineForAppointment($appointment);
-        if (Carbon::now()->gt($canCancelUntil)) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Cancellation deadline has passed',
-            ], 400);
-        }
-
         $query = BookingModel::query()
             ->where('appointment_id', $sessionID)
             ->where('customer_id', $customer->id)
@@ -361,83 +364,25 @@ class MobileBookingController extends Controller
             ], 404);
         }
 
-        DB::beginTransaction();
         try {
-            $creditedDropIn = false;
+            app(CancelSessionBookingService::class)->cancel($booking);
 
-            // If this was a PAID drop-in booking, convert the cancellation into a package credit
-            // so the customer can rebook using isDropIn=false within normal expiry rules.
-            if ((bool) $booking->is_drop_in) {
-                $paidStatuses = ['paid', 'completed'];
-                if (in_array((string) $booking->payment_status, $paidStatuses, true)) {
-                    $service = $appointment->service;
-                    $serviceType = $this->sessionCategoryFromService($service) ?? 'Yoga';
-                    $packageTitle = "Drop-in Credit - {$serviceType}";
+            return response()->json([
+                'success' => true,
+                'message' => 'Booking canceled successfully',
+            ], 200);
+        } catch (\RuntimeException $e) {
+            $status = match ($e->getMessage()) {
+                'Session not found.' => 404,
+                'Cancellation deadline has passed.' => 400,
+                default => 400,
+            };
 
-                    $creditPackage = PackageModel::query()
-                        ->where('status', 'active')
-                        ->where('title', $packageTitle)
-                        ->where('service_type', $serviceType)
-                        ->first();
-
-                    if (! $creditPackage) {
-                        $creditPackage = PackageModel::query()->create([
-                            'title' => $packageTitle,
-                            'description' => 'Auto-generated credit created when a paid drop-in booking is cancelled.',
-                            'service_type' => $serviceType,
-                            'total_sessions' => (int) $booking->party_size,
-                            'discount' => 0,
-                            'price' => 0,
-                            'package_duration' => 3, // months
-                            'status' => 'active',
-                        ]);
-                    }
-
-                    CustomerPackagePurchaseModel::query()->create([
-                        'customer_id' => $booking->customer_id,
-                        'package_id' => $creditPackage->id,
-                        'total_sessions' => (int) $booking->party_size,
-                        'remaining_sessions' => (int) $booking->party_size,
-                        'purchase_date' => now(),
-                        'status' => 'active',
-                        'expires_by_months_only' => true,
-                    ]);
-                    $creditedDropIn = true;
-                }
-            }
-
-            // Restore package sessions when this booking was made from a package.
-            // Primary link is customer_package_purchase_id; fallback to latest purchase for (customer, package)
-            // because older bookings may not have the purchase id stored.
-            if (! $creditedDropIn && ! $booking->is_drop_in && $booking->package_id) {
-                $purchase = null;
-                if ($booking->customer_package_purchase_id) {
-                    $purchase = CustomerPackagePurchaseModel::query()->find($booking->customer_package_purchase_id);
-                }
-                if (! $purchase) {
-                    $purchase = CustomerPackagePurchaseModel::query()
-                        ->where('customer_id', $booking->customer_id)
-                        ->where('package_id', $booking->package_id)
-                        ->orderBy('purchase_date')
-                        ->first();
-                }
-                if ($purchase) {
-                    $purchase->increment('remaining_sessions', (int) $booking->party_size);
-                }
-            }
-            $booking->update(['status' => 'cancelled', 'cancelled_at' => now()]);
-            DB::commit();
-                try {
-                    $this->sendBookingCancelledEmail($booking, $appointment, $customer);
-                } catch (\Throwable $e) {
-                    report($e);
-                }
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Booking canceled successfully',
-                ], 200);
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], $status);
         } catch (\Throwable $e) {
-            DB::rollBack();
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to cancel booking',
@@ -449,27 +394,12 @@ class MobileBookingController extends Controller
     /**
      * Latest moment the customer may cancel (inclusive): session start minus service time_before.
      */
-    private function cancellationDeadlineForAppointment(AppointmentModel $appointment): Carbon
-    {
-        $service = $appointment->service;
-        $minutesBeforeCancellation = (int) ($service?->time_before ?? 0);
-
-        return Carbon::parse($appointment->booking_start)->subMinutes($minutesBeforeCancellation);
-    }
-
     /**
      * Whether this booking may be cancelled via the mobile API (same rules as cancel()).
      */
     private function customerCanCancelBooking(BookingModel $booking, ?AppointmentModel $appointment): bool
     {
-        if (! $appointment || ! $appointment->booking_start) {
-            return false;
-        }
-        if (! in_array($booking->status, ['confirmed', 'pending'], true)) {
-            return false;
-        }
-
-        return Carbon::now()->lte($this->cancellationDeadlineForAppointment($appointment));
+        return app(CancelSessionBookingService::class)->customerCanCancelBooking($booking, $appointment);
     }
 
     /**
@@ -488,53 +418,6 @@ class MobileBookingController extends Controller
             return 'Yoga';
         }
         return 'Yoga';
-    }
-
-    /**
-     * Find an active customer package purchase with matching category and enough remaining sessions.
-     * Prefers most recently purchased. Excludes expired (by package_duration + purchase_date).
-     */
-    private function findValidPurchaseForCategory(
-        int $customerId,
-        ?string $sessionCategory,
-        int $persons,
-        Carbon $sessionDate,
-    ): ?CustomerPackagePurchaseModel {
-        if ($sessionCategory === null) {
-            return null;
-        }
-        $bizTz = (string) config('app.business_timezone');
-        $purchases = CustomerPackagePurchaseModel::query()
-            ->with(['package.services'])
-            ->where('customer_id', $customerId)
-            ->where('status', 'active')
-            ->where('remaining_sessions', '>=', $persons)
-            ->whereNotNull('package_id')
-            ->orderBy('purchase_date')
-            ->get();
-
-        foreach ($purchases as $purchase) {
-            $package = $purchase->package;
-            if (! $package) {
-                continue;
-            }
-            $packageCategory = $this->packageCategory($package);
-            if ($packageCategory !== $sessionCategory) {
-                continue;
-            }
-            $expiresAt = PackagePurchaseExpiry::expiresAt(
-                $package,
-                $purchase->purchase_date,
-                $purchase->amelia_package_id,
-                (bool) $purchase->expires_by_months_only,
-            );
-            if (! PackagePurchaseExpiry::coversSessionDate($expiresAt, $sessionDate, $bizTz)) {
-                continue;
-            }
-            return $purchase;
-        }
-
-        return null;
     }
 
     /**
@@ -593,79 +476,16 @@ class MobileBookingController extends Controller
             return;
         }
 
-        $service = $appointment->service;
-        $provider = $appointment->provider;
-
         $customerName = trim(($customer->first_name ?? '') . ' ' . ($customer->last_name ?? ''));
         $customerName = $customerName !== '' ? $customerName : ($customer->email ?? 'Customer');
 
-        $appointmentDate = ApiDateTime::formatInBusinessTimezone($appointment->booking_start, 'Y-m-d');
-        $appointmentTime = ApiDateTime::formatInBusinessTimezone($appointment->booking_start, 'H:i');
-
-        $promoLines = $promo !== null
-            ? PromoEmailText::appliedSection(
-                $promo,
-                $subtotalBeforePromo ?? (float) $booking->total_amount,
-                (float) $booking->total_amount,
-            )
-            : '';
-
-        $body = "Thank you for booking with Flexana!\n\n"
-            . "Booking Details\n\n"
-            . "* Name: {$customerName},\n\n"
-            . "* Email: {$customer->email}\n\n"
-            . "* Phone: {$customer->phone}\n\n"
-            . "* Spots: " . ((int) ($booking->party_size ?? 1)) . "\n\n"
-            . "* Class: " . ($service?->name ?? 'Unknown') . "\n\n"
-            . "* Day: {$appointmentDate}\n\n"
-            . "* Time: {$appointmentTime}\n\n"
-            . "* Instructor: " . ($provider?->name ?? 'Unknown') . "\n\n"
-            . "* Type: " . ($service?->description ?? '') . "\n\n"
-            . $promoLines
-            . "If you need to cancel, please do so at least 24 hours in advance via your Flexana account or by contacting us directly.\n\n"
-            . "You can contact us at +20 122 0221100 to reschedule your session or request a refund.\n\n"
-            . "We look forward to seeing you on the mat!\n\n"
-            . "Flexana Team";
-
-        $subject = 'Your Flexana booking confirmation';
-
         InternalNotificationMail::sendCustomerAndInternalCopy(
-            $body,
-            $subject,
+            BookingConfirmationEmailText::body($booking, $appointment, $customer, $promo, $subtotalBeforePromo),
+            BookingConfirmationEmailText::customerSubject(),
             $customer->email,
             $customerName,
+            BookingConfirmationEmailText::internalSubject($appointment),
         );
     }
 
-    /**
-     * Send cancellation email after a booking is cancelled.
-     */
-    private function sendBookingCancelledEmail(BookingModel $booking, AppointmentModel $appointment, Customer $customer): void
-    {
-        if (! $customer->email) {
-            return;
-        }
-
-        $service = $appointment->service;
-
-        $customerName = trim(($customer->first_name ?? '') . ' ' . ($customer->last_name ?? ''));
-        $customerName = $customerName !== '' ? $customerName : ($customer->email ?? 'Customer');
-
-        $appointmentDateTime = ApiDateTime::formatInBusinessTimezone($appointment->booking_start, 'Y-m-d H:i');
-
-        $body = "Dear {$customerName},\n"
-            . "Phone {$customer->phone}\n"
-            . "Your " . ($service?->name ?? 'session') . " appointment, scheduled on {$appointmentDateTime} has been canceled.\n"
-            . "Thank you for choosing our company,\n"
-            . "Flexana Team";
-
-        $subject = 'Your Flexana booking has been cancelled';
-
-        InternalNotificationMail::sendCustomerAndInternalCopy(
-            $body,
-            $subject,
-            $customer->email,
-            $customerName,
-        );
-    }
 }

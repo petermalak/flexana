@@ -9,12 +9,17 @@ class Banner extends Model
 {
     use HasFactory;
 
+    public const CATEGORY_HOME = 'home';
+
+    public const CATEGORY_POPUP = 'popup';
+
     protected $fillable = [
         'title',
         'image_url',
         'link_url',
         'is_active',
         'sort_order',
+        'category',
     ];
 
     protected $casts = [

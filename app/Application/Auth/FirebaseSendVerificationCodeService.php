@@ -2,6 +2,7 @@
 
 namespace App\Application\Auth;
 
+use App\Support\PhoneNumberNormalizer;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -27,9 +28,9 @@ final class FirebaseSendVerificationCodeService
      */
     public function sendCode(string $phoneNumber, array $options = []): array
     {
-        $phoneNumber = $this->normalizeToE164($phoneNumber);
-        if (empty($phoneNumber)) {
-            return ['success' => false, 'message' => 'Invalid phone number.'];
+        $phoneNumber = PhoneNumberNormalizer::normalize($phoneNumber);
+        if ($phoneNumber === '' || ! PhoneNumberNormalizer::isValidE164($phoneNumber)) {
+            return ['success' => false, 'message' => 'Invalid phone number. Use international format with country code (e.g. +201274235122 or +447911123456).'];
         }
 
         $recaptchaVersion = $this->mapRecaptchaVersionForFirebase($options['recaptchaVersion'] ?? null);
@@ -108,20 +109,6 @@ final class FirebaseSendVerificationCodeService
         };
     }
 
-    private function normalizeToE164(string $phone): string
-    {
-        $phone = preg_replace('/\s+/', '', $phone);
-        if (str_starts_with($phone, '0')) {
-            // Egyptian local: 01274235122 -> +201274235122
-            $phone = '+20' . substr($phone, 1);
-        }
-        if (! str_starts_with($phone, '+')) {
-            $phone = '+' . $phone;
-        }
-
-        return $phone;
-    }
-
     /**
      * Map Firebase error code/message to a user- and developer-friendly message.
      * See docs/FIREBASE_PHONE_ANDROID_SETUP.md for how to fix Android/Play Integrity issues.
@@ -143,7 +130,7 @@ final class FirebaseSendVerificationCodeService
             return 'Too many attempts. Please try again later.';
         }
         if (str_contains($msg, 'INVALID_PHONE')) {
-            return 'Invalid phone number format. Use E.164 (e.g. +201274235122).';
+            return 'Invalid phone number format. Use E.164 with country code (e.g. +201274235122 or +447911123456).';
         }
         if (str_contains($msg, 'INVALID_APP_CREDENTIAL') || str_contains($msg, 'APP_NOT_VERIFIED')) {
             return 'App not verified. Add your app SHA-256 (Android) or bundle ID (iOS) in Firebase Console.';
