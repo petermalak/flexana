@@ -142,15 +142,22 @@ class MobileSessionController extends Controller
                 $willPay = $validPurchase === null;
             }
 
+            $branch = BranchSettings::sessionBranchFields(
+                $appointment->branch_id ? (int) $appointment->branch_id : null,
+                $appointment->branch?->name,
+            );
+
             return [
                 'id' => (string) $appointment->id,
                 'bookingId' => $myBooking ? (string) $myBooking->id : null,
-                'branchId' => $appointment->branch_id ? (string) $appointment->branch_id : null,
-                'branchName' => $appointment->branch?->name ?? '',
+                'branchId' => $branch['id'],
+                'branchName' => $branch['name'],
                 'instructor' => $provider ? $provider->name : '',
                 'service' => $service ? $service->name : '',
                 'serviceType' => $serviceType,
-                'price' => $service ? $service->priceForBranch($appointment->branch_id ? (int) $appointment->branch_id : null) : 0.0,
+                'price' => $service ? $service->priceForBranch(
+                    BranchSettings::resolveBranchId($appointment->branch_id ? (int) $appointment->branch_id : null),
+                ) : 0.0,
                 'date' => ApiDateTime::toBusinessIso8601($appointment->booking_start),
                 'dateUtc' => ApiDateTime::toUtcIso8601($appointment->booking_start),
                 'isBooked' => $isBooked,

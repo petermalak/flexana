@@ -74,11 +74,16 @@ class MobileBookingController extends Controller
 
             $minutesBeforeCancellation = (int) ($appointment?->service?->time_before ?? 0);
 
+            $branch = BranchSettings::sessionBranchFields(
+                $appointment?->branch_id ? (int) $appointment->branch_id : null,
+                $appointment?->branch?->name,
+            );
+
             return [
                 'id' => (string) $booking->id,
                 'sessionID' => $booking->appointment_id ? (string) $booking->appointment_id : null,
-                'branchId' => $appointment?->branch_id ? (string) $appointment->branch_id : null,
-                'branchName' => $appointment?->branch?->name ?? '',
+                'branchId' => $branch['id'],
+                'branchName' => $branch['name'],
                 'serviceName' => $service?->name,
                 'instructorName' => $provider?->name,
                 'bookedAt' => ApiDateTime::toBusinessIso8601($booking->booked_at),
