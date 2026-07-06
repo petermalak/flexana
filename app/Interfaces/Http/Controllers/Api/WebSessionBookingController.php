@@ -3,6 +3,7 @@
 namespace App\Interfaces\Http\Controllers\Api;
 
 use App\Console\Commands\CategorizeServicesCommand;
+use App\Domain\Promo\Enums\PromoApplicableType;
 use App\Http\Controllers\Controller;
 use App\Infrastructure\Persistence\Eloquent\AppointmentModel;
 use App\Infrastructure\Persistence\Eloquent\BookingModel;
@@ -10,6 +11,7 @@ use App\Infrastructure\Persistence\Eloquent\PromoCodeModel;
 use App\Infrastructure\Persistence\Eloquent\ServiceModel;
 use App\Models\Customer;
 use App\Support\BookingConfirmationEmailText;
+use App\Support\BranchSettings;
 use App\Support\InternalNotificationMail;
 use App\Support\PackagePurchaseLifecycle;
 use App\Support\ValidPackagePurchaseFinder;
@@ -158,7 +160,9 @@ class WebSessionBookingController extends Controller
                     (int) $customer->id,
                     PromoApplicableType::DropIns,
                     $sessionID,
-                    $appointment->branch_id ? (int) $appointment->branch_id : null,
+                    BranchSettings::resolveBranchId(
+                        $appointment->branch_id ? (int) $appointment->branch_id : null,
+                    ),
                 );
                 if ($promoRecord) {
                     $totalPrice = $totalPrice * (1 - (float) $promoRecord->percent_discount / 100);

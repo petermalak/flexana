@@ -19,6 +19,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use App\Support\ApiDateTime;
 use App\Support\BookingConfirmationEmailText;
+use App\Support\BranchSettings;
 use App\Support\InternalNotificationMail;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
@@ -153,7 +154,9 @@ class WebSessionPaymobController extends Controller
                     null,
                     PromoApplicableType::DropIns,
                     $sessionID,
-                    $appointment->branch_id ? (int) $appointment->branch_id : null,
+                    BranchSettings::resolveBranchId(
+                        $appointment->branch_id ? (int) $appointment->branch_id : null,
+                    ),
                 ) === null
             ) {
                 $totalPrice = $totalPrice * (1 - (float) $promoRecord->percent_discount / 100);
@@ -530,7 +533,9 @@ class WebSessionPaymobController extends Controller
                 (int) $customer->id,
                 PromoApplicableType::DropIns,
                 (int) $appointment->id,
-                $appointment->branch_id ? (int) $appointment->branch_id : null,
+                BranchSettings::resolveBranchId(
+                    $appointment->branch_id ? (int) $appointment->branch_id : null,
+                ),
             );
             // Promo can become invalid between init and finalize (usage limit, etc).
             // We don't block booking creation if the user already paid successfully.

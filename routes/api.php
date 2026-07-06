@@ -91,6 +91,8 @@ Route::prefix('v1')
             'throttle:web-sessions',
         ])->group(function (): void {
             Route::get('web-sessions', [WebSessionController::class, 'index']);
+            Route::get('web-branches', [MobileBranchController::class, 'index']);
+            Route::get('web-branches/simple', [MobileBranchController::class, 'simple']);
             Route::post('web-session-bookings', [WebSessionBookingController::class, 'store']);
             Route::post('web-session-paymob/init', [WebSessionPaymobController::class, 'init']);
         });

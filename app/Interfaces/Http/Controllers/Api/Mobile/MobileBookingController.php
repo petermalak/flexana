@@ -14,6 +14,7 @@ use App\Infrastructure\Persistence\Eloquent\ServiceModel;
 use App\Models\Customer;
 use App\Support\ApiDateTime;
 use App\Support\BookingConfirmationEmailText;
+use App\Support\BranchSettings;
 use App\Support\PackagePurchaseLifecycle;
 use App\Support\ValidPackagePurchaseFinder;
 use App\Support\InternalNotificationMail;
@@ -209,7 +210,9 @@ class MobileBookingController extends Controller
                     (int) $customer->id,
                     PromoApplicableType::DropIns,
                     $sessionID,
-                    $appointment->branch_id ? (int) $appointment->branch_id : null,
+                    BranchSettings::resolveBranchId(
+                        $appointment->branch_id ? (int) $appointment->branch_id : null,
+                    ),
                 );
                 if ($promoRecord) {
                     $totalPrice = $totalPrice * (1 - (float) $promoRecord->percent_discount / 100);

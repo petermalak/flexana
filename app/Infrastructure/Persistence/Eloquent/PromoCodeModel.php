@@ -224,8 +224,10 @@ class PromoCodeModel extends Model
             return 'wrong_package';
         }
 
-        if ($branchId !== null && ! $this->appliesToBranch($branchId)) {
-            return 'wrong_branch';
+        if ($this->isRestrictedToBranches()) {
+            if ($branchId === null || ! $this->appliesToBranch($branchId)) {
+                return 'wrong_branch';
+            }
         }
 
         $tz = (string) config('promo.calendar_timezone', 'UTC');

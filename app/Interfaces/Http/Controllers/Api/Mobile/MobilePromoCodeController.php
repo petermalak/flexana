@@ -8,6 +8,7 @@ use App\Infrastructure\Persistence\Eloquent\AppointmentModel;
 use App\Infrastructure\Persistence\Eloquent\PackageModel;
 use App\Infrastructure\Persistence\Eloquent\PromoCodeModel;
 use App\Support\ApiDateTime;
+use App\Support\BranchSettings;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
@@ -194,7 +195,9 @@ class MobilePromoCodeController extends Controller
                 ->whereKey($appointmentId)
                 ->value('branch_id');
 
-            return $branchId !== null ? (int) $branchId : null;
+            return BranchSettings::resolveBranchId(
+                $branchId !== null ? (int) $branchId : null,
+            );
         }
 
         if ($packageId === null) {

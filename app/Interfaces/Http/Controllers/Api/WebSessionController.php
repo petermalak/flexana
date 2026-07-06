@@ -9,6 +9,7 @@ use App\Infrastructure\Persistence\Eloquent\CustomerPackagePurchaseModel;
 use App\Infrastructure\Persistence\Eloquent\ServiceModel;
 use App\Models\Category;
 use App\Support\ApiDateTime;
+use App\Support\BranchSettings;
 use App\Support\ValidPackagePurchaseFinder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -19,7 +20,7 @@ use Illuminate\Support\Facades\Log;
  * Web-only sessions endpoint.
  *
  * Keeps the mobile /api/v1/sessions contract untouched, but provides extra fields needed by the website
- * (e.g. location_name) and allows filtering by location_id.
+ * (e.g. location_name, branchId) and allows filtering by location_id or branchId.
  */
 class WebSessionController extends Controller
 {
@@ -29,6 +30,7 @@ class WebSessionController extends Controller
         $category = $request->query('category');
         $instructorID = $request->query('instructorID');
         $locationId = $request->query('location_id');
+        $branchId = $request->query('branchId');
         $requestedPerPage = $request->query('per_page');
         $requestedPage = $request->query('page');
         $shouldPaginate = $requestedPerPage !== null || $requestedPage !== null;
@@ -37,7 +39,7 @@ class WebSessionController extends Controller
         $upcomingCutoff = Carbon::now($scheduleTz);
 
         $query = AppointmentModel::query()
-            ->with(['service.category', 'provider', 'bookings', 'location'])
+            ->with(['service.category', 'provider', 'bookings', 'location', 'branch'])
             ->where('status', 'approved')
             // Only upcoming sessions — use schedule TZ so SQL + PHP match studio clocks / stored datetimes
             ->where('booking_start', '>', $upcomingCutoff);
@@ -66,6 +68,22 @@ class WebSessionController extends Controller
         }
         if ($instructorID) {
             $query->where('provider_id', $instructorID);
+        }
+
+        if ($branchId !== null && $branchId !== '') {
+            $requestedBranchId = (int) $branchId;
+
+            // Backwards compatibility: some historical appointments may still have branch_id = null.
+            // Treat those as default branch when filtering by the current default.
+            $defaultBranchId = BranchSettings::defaultBranchId();
+            if ($defaultBranchId !== null && $requestedBranchId === $defaultBranchId) {
+                $query->where(function ($q) use ($requestedBranchId) {
+                    $q->where('branch_id', $requestedBranchId)
+                        ->orWhereNull('branch_id');
+                });
+            } else {
+                $query->where('branch_id', $requestedBranchId);
+            }
         }
 
         $query->orderBy('booking_start');
@@ -135,6 +153,8 @@ class WebSessionController extends Controller
             return [
                 'id' => (string) $appointment->id,
                 'bookingId' => $myBooking ? (string) $myBooking->id : null,
+                'branchId' => $appointment->branch_id ? (string) $appointment->branch_id : null,
+                'branchName' => $appointment->branch?->name ?? '',
                 'instructor' => $provider ? $provider->name : '',
                 'service' => $service ? $service->name : '',
                 'serviceType' => $serviceType,
