@@ -6,12 +6,9 @@ use App\Console\Commands\CategorizeServicesCommand;
 use App\Http\Controllers\Controller;
 use App\Infrastructure\Persistence\Eloquent\AppointmentModel;
 use App\Infrastructure\Persistence\Eloquent\BookingModel;
-use App\Infrastructure\Persistence\Eloquent\CustomerPackagePurchaseModel;
 use App\Infrastructure\Persistence\Eloquent\PromoCodeModel;
 use App\Infrastructure\Persistence\Eloquent\ServiceModel;
-use App\Models\Category;
 use App\Models\Customer;
-use App\Support\ApiDateTime;
 use App\Support\BookingConfirmationEmailText;
 use App\Support\InternalNotificationMail;
 use App\Support\PackagePurchaseLifecycle;
@@ -72,7 +69,7 @@ class WebSessionBookingController extends Controller
                 'success' => false,
                 'message' => 'Drop-in bookings are only created after successful payment.',
             ], 400);
-        }   
+        }
 
         $customerPayload = $data['customer'] ?? [];
         $email = strtolower(trim((string) ($customerPayload['email'] ?? '')));
