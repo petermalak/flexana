@@ -9,7 +9,8 @@ final class BranchSettings
 {
     private const CACHE_KEY = 'branches.default_id';
 
-    private const CACHE_KEY_META = 'branches.default_meta';
+    // Versioned key to avoid stale cached empty default branch meta.
+    private const CACHE_KEY_META = 'branches.default_meta.v2';
 
     public static function defaultBranchId(): ?int
     {

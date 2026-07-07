@@ -155,6 +155,8 @@ class WebSessionController extends Controller
                 $appointment->branch?->name,
             );
 
+            $locationName = $location ? (string) ($location->name ?? '') : '';
+
             return [
                 'id' => (string) $appointment->id,
                 'bookingId' => $myBooking ? (string) $myBooking->id : null,
@@ -177,9 +179,10 @@ class WebSessionController extends Controller
                 'minutesBeforeCancellation' => $minutesBeforeCancellation,
                 // Web additions:
                 'location_id' => $appointment->location_id ? (int) $appointment->location_id : null,
-                'location_name' => $location ? (string) ($location->name ?? '') : '',
+                // Website UI currently labels this as "Location". If location is empty, show branch name.
+                'location_name' => $locationName !== '' ? $locationName : $branch['name'],
                 // Prefer branch for UI display (fallback to location).
-                'displayPlaceName' => $branch['name'] !== '' ? $branch['name'] : ($location ? (string) ($location->name ?? '') : ''),
+                'displayPlaceName' => $branch['name'] !== '' ? $branch['name'] : $locationName,
             ];
         });
 
