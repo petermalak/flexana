@@ -178,6 +178,8 @@ class WebSessionController extends Controller
                 // Web additions:
                 'location_id' => $appointment->location_id ? (int) $appointment->location_id : null,
                 'location_name' => $location ? (string) ($location->name ?? '') : '',
+                // Prefer branch for UI display (fallback to location).
+                'displayPlaceName' => $branch['name'] !== '' ? $branch['name'] : ($location ? (string) ($location->name ?? '') : ''),
             ];
         });
 
