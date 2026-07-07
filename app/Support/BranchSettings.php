@@ -28,7 +28,17 @@ final class BranchSettings
                 ->first(['id', 'name']);
 
             if (! $branch) {
-                return ['id' => null, 'name' => ''];
+                // Fallback: if no branch is marked default, use the first active branch so
+                // legacy sessions with null branch_id still have a stable branch label.
+                $branch = BranchModel::query()
+                    ->where('is_active', true)
+                    ->orderBy('sort_order')
+                    ->orderBy('name')
+                    ->first(['id', 'name']);
+
+                if (! $branch) {
+                    return ['id' => null, 'name' => ''];
+                }
             }
 
             return [
