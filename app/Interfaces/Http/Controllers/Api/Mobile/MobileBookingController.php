@@ -28,28 +28,63 @@ class MobileBookingController extends Controller
 {
     /**
      * GET /api/v1/appointments/history
-     * Returns the authenticated customer's appointment/booking history (paginated).
+     * Returns the authenticated customer's session booking history (paginated).
      * Each item includes canCancel (true when cancellation is still allowed) and
      * minutesBeforeCancellation from the service (time_before), matching POST cancel rules.
+     *
+     * Query:
+     *  - upcoming=1 → only future sessions (by appointment start)
+     *  - include_packages=1 → also include package purchases (no session fields)
      */
     public function history(Request $request): JsonResponse
     {
         $perPage = min((int) $request->get('per_page', 15), 50);
         $page = max(1, (int) $request->get('page', 1));
+        $upcomingOnly = filter_var($request->query('upcoming'), FILTER_VALIDATE_BOOLEAN);
+        $includePackages = filter_var($request->query('include_packages'), FILTER_VALIDATE_BOOLEAN);
 
         /** @var Customer $customer */
         $customer = $request->user();
 
-        $bookings = BookingModel::query()
+        $scheduleTz = (string) config('sessions.schedule_timezone', config('app.timezone'));
+        $now = Carbon::now($scheduleTz);
+
+        $query = BookingModel::query()
             ->where('customer_id', $customer->id)
-            ->with(['appointment.service', 'appointment.provider', 'appointment.branch', 'service'])
-            ->orderByDesc('booked_at')
-            ->paginate($perPage, ['*'], 'page', $page);
+            ->with([
+                'appointment.service',
+                'appointment.provider',
+                'appointment.branch',
+                'service',
+                'provider',
+                'package',
+            ]);
+
+        // Default: session bookings only. Package purchases have no appointment and look "empty" in the app.
+        // whereHas also drops orphan rows whose appointment was deleted.
+        if (! $includePackages) {
+            $query->whereNotNull('appointment_id')->whereHas('appointment');
+        }
+
+        if ($upcomingOnly) {
+            $query->whereHas('appointment', function ($q) use ($now): void {
+                $q->where('booking_start', '>', $now);
+            })->orderBy(
+                AppointmentModel::query()
+                    ->select('booking_start')
+                    ->whereColumn('appointments.id', 'bookings.appointment_id')
+                    ->limit(1)
+            );
+        } else {
+            $query->orderByDesc('booked_at');
+        }
+
+        $bookings = $query->paginate($perPage, ['*'], 'page', $page);
 
         $data = $bookings->getCollection()->map(function (BookingModel $booking) {
             $appointment = $booking->appointment;
             $service = $appointment?->service ?? $booking->service;
-            $provider = $appointment?->provider;
+            $provider = $appointment?->provider ?? $booking->provider;
 
             $sessionDate = null;
             $sessionTime = null;
@@ -72,19 +107,25 @@ class MobileBookingController extends Controller
 
             $isDropIn = $booking->is_drop_in ?? ($booking->answers['isDropIn'] ?? false);
 
-            $minutesBeforeCancellation = (int) ($appointment?->service?->time_before ?? 0);
+            $minutesBeforeCancellation = (int) ($service?->time_before ?? 0);
 
             $branch = BranchSettings::sessionBranchFields(
                 $appointment?->branch_id ? (int) $appointment->branch_id : null,
                 $appointment?->branch?->name,
             );
 
+            $serviceName = $service?->name;
+            if (($serviceName === null || $serviceName === '') && $booking->package) {
+                $serviceName = $booking->package->title;
+            }
+
             return [
                 'id' => (string) $booking->id,
                 'sessionID' => $booking->appointment_id ? (string) $booking->appointment_id : null,
-                'branchId' => $branch['id'],
-                'branchName' => $branch['name'],
-                'serviceName' => $service?->name,
+                'type' => $booking->appointment_id ? 'session' : 'package',
+                'branchId' => $appointment ? $branch['id'] : null,
+                'branchName' => $appointment ? $branch['name'] : '',
+                'serviceName' => $serviceName,
                 'instructorName' => $provider?->name,
                 'bookedAt' => ApiDateTime::toBusinessIso8601($booking->booked_at),
                 'bookedAtUtc' => ApiDateTime::toUtcIso8601($booking->booked_at),
@@ -210,7 +251,7 @@ class MobileBookingController extends Controller
             $totalPrice = $subtotalBeforePromo;
             $promoRecord = null;
             if ($promoCode) {
-                $promoRecord = PromoCodeModel::resolveForCustomer(
+                [$promoRecord, $promoReason] = PromoCodeModel::resolveOrInvalidReason(
                     $promoCode,
                     (int) $customer->id,
                     PromoApplicableType::DropIns,
@@ -219,9 +260,14 @@ class MobileBookingController extends Controller
                         $appointment->branch_id ? (int) $appointment->branch_id : null,
                     ),
                 );
-                if ($promoRecord) {
-                    $totalPrice = $totalPrice * (1 - (float) $promoRecord->percent_discount / 100);
+                if ($promoReason !== null) {
+                    return response()->json([
+                        'success' => false,
+                        'reason' => $promoReason,
+                        'message' => PromoCodeModel::messageForReason($promoReason, $promoRecord),
+                    ], 400);
                 }
+                $totalPrice = $totalPrice * (1 - (float) $promoRecord->percent_discount / 100);
             }
         }
 
@@ -230,7 +276,9 @@ class MobileBookingController extends Controller
             // Count promo use for drop-ins whenever a valid promo was applied (including 100% off → totalPrice 0).
             if ($isDropIn && $promoRecord) {
                 if (! $promoRecord->incrementUsageIfAllowed((int) $customer->id)) {
-                    throw new \RuntimeException('Promo code usage limit was reached.');
+                    $blocked = $promoRecord->redemptionBlockedReason((int) $customer->id)
+                        ?? 'usage_limit_reached';
+                    throw new \RuntimeException(PromoCodeModel::messageForReason($blocked, $promoRecord));
                 }
             }
 
@@ -303,10 +351,10 @@ class MobileBookingController extends Controller
         } catch (\Throwable $e) {
             DB::rollBack();
             $message = $e->getMessage();
-            if (str_contains($message, 'Promo code usage limit')) {
+            if (str_contains(strtolower($message), 'promo code')) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'You have already used this promo code the maximum number of times.',
+                    'message' => $message,
                 ], 400);
             }
 

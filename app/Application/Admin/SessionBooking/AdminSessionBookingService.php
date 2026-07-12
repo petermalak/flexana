@@ -92,7 +92,7 @@ final class AdminSessionBookingService
             $totalPrice = $subtotalBeforePromo;
 
             if ($promoCode) {
-                $promoRecord = PromoCodeModel::resolveForCustomer(
+                [$promoRecord, $promoReason] = PromoCodeModel::resolveOrInvalidReason(
                     $promoCode,
                     $customerId,
                     PromoApplicableType::DropIns,
@@ -101,9 +101,10 @@ final class AdminSessionBookingService
                         $appointment->branch_id ? (int) $appointment->branch_id : null,
                     ),
                 );
-                if ($promoRecord) {
-                    $totalPrice = $totalPrice * (1 - (float) $promoRecord->percent_discount / 100);
+                if ($promoReason !== null) {
+                    throw new \RuntimeException(PromoCodeModel::messageForReason($promoReason, $promoRecord));
                 }
+                $totalPrice = $totalPrice * (1 - (float) $promoRecord->percent_discount / 100);
             }
         }
 
@@ -123,7 +124,9 @@ final class AdminSessionBookingService
         ): BookingModel {
             if ($isDropIn && $promoRecord) {
                 if (! $promoRecord->incrementUsageIfAllowed($customerId)) {
-                    throw new \RuntimeException('Promo code usage limit was reached.');
+                    $blocked = $promoRecord->redemptionBlockedReason($customerId)
+                        ?? 'usage_limit_reached';
+                    throw new \RuntimeException(PromoCodeModel::messageForReason($blocked, $promoRecord));
                 }
             }
 

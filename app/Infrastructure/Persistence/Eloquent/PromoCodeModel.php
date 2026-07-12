@@ -181,6 +181,73 @@ class PromoCodeModel extends Model
         return $promo;
     }
 
+    /**
+     * Resolve a provided promo code, or return why it cannot be used.
+     * When invalid, the promo model is still returned (except not_found) for messaging.
+     *
+     * @return array{0: ?self, 1: ?string} [promo, reason]
+     */
+    public static function resolveOrInvalidReason(
+        string $code,
+        ?int $customerId,
+        PromoApplicableType $context,
+        ?int $appointmentId = null,
+        ?int $branchId = null,
+        ?int $packageId = null,
+    ): array {
+        $promo = static::findByCode($code);
+        if (! $promo) {
+            return [null, 'not_found'];
+        }
+
+        $reason = $promo->invalidReasonForCustomer(
+            $customerId,
+            $context,
+            $appointmentId,
+            $branchId,
+            $packageId,
+        );
+
+        if ($reason !== null) {
+            return [$promo, $reason];
+        }
+
+        return [$promo, null];
+    }
+
+    public static function messageForReason(?string $reason, ?self $promo = null): string
+    {
+        return match ($reason) {
+            'not_found' => (string) config('promo.not_found_message', 'Promo code does not exist.'),
+            'inactive' => (string) config('promo.inactive_message', 'This promo code is not active.'),
+            'not_yet_valid' => (string) config('promo.not_yet_valid_message', 'This promo code is not yet valid.'),
+            'expired' => (string) config('promo.expired_message', 'This promo code has expired.'),
+            'usage_limit_reached' => (string) config(
+                'promo.usage_limit_reached_message',
+                'You have already used this promo code the maximum number of times.',
+            ),
+            'wrong_type' => (string) (
+                ($promo?->applicable_to?->value !== null
+                    ? (config('promo.wrong_type_messages')[$promo->applicable_to->value] ?? null)
+                    : null)
+                ?? 'This promo code is not valid for this purchase.'
+            ),
+            'wrong_appointment' => (string) config(
+                'promo.wrong_appointment_message',
+                'This promo code is not valid for the selected session.',
+            ),
+            'wrong_branch' => (string) config(
+                'promo.wrong_branch_message',
+                'This promo code is not valid for the selected branch.',
+            ),
+            'wrong_package' => (string) config(
+                'promo.wrong_package_message',
+                'This promo code is not valid for the selected package.',
+            ),
+            default => 'This promo code is not valid.',
+        };
+    }
+
     public function isApplicableFor(PromoApplicableType $context): bool
     {
         return $this->applicable_to === PromoApplicableType::Both
@@ -267,6 +334,10 @@ class PromoCodeModel extends Model
     /**
      * Atomically record a redemption for this customer if still under per-user limit.
      * Increments global used_count for admin totals.
+     *
+     * Only re-checks active / dates / usage limit here. Branch, appointment, package, and
+     * type restrictions must already be validated when the promo is applied (resolveOrInvalidReason).
+     * Passing no branch into invalidReasonForCustomer would falsely reject branch-restricted codes.
      */
     public function incrementUsageIfAllowed(int $customerId): bool
     {
@@ -274,7 +345,7 @@ class PromoCodeModel extends Model
             static::query()->whereKey($this->id)->lockForUpdate()->first();
             $this->refresh();
 
-            if ($this->invalidReasonForCustomer($customerId) !== null) {
+            if ($this->redemptionBlockedReason($customerId) !== null) {
                 return false;
             }
 
@@ -287,5 +358,39 @@ class PromoCodeModel extends Model
 
             return true;
         });
+    }
+
+    /**
+     * Reasons that should block recording a redemption after apply-time validation already passed.
+     *
+     * @return 'inactive'|'not_yet_valid'|'expired'|'usage_limit_reached'|null
+     */
+    public function redemptionBlockedReason(int $customerId): ?string
+    {
+        if (! $this->is_active) {
+            return 'inactive';
+        }
+
+        $tz = (string) config('promo.calendar_timezone', 'UTC');
+
+        if ($this->valid_from) {
+            $fromStart = $this->valid_from->copy()->timezone($tz)->startOfDay();
+            if (Carbon::now($tz)->lt($fromStart)) {
+                return 'not_yet_valid';
+            }
+        }
+        if ($this->valid_until) {
+            $untilEnd = $this->valid_until->copy()->timezone($tz)->endOfDay();
+            if (Carbon::now($tz)->gt($untilEnd)) {
+                return 'expired';
+            }
+        }
+        if ($this->usage_limit_per_user !== null
+            && $this->usage_limit_per_user > 0
+            && $this->redemptionCountForCustomer($customerId) >= $this->usage_limit_per_user) {
+            return 'usage_limit_reached';
+        }
+
+        return null;
     }
 }

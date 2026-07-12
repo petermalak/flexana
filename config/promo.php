@@ -38,4 +38,14 @@ return [
 
     'wrong_package_message' => 'This promo code is not valid for the selected package.',
 
+    'usage_limit_reached_message' => 'You have already used this promo code the maximum number of times.',
+
+    'not_found_message' => 'Promo code does not exist.',
+
+    'inactive_message' => 'This promo code is not active.',
+
+    'not_yet_valid_message' => 'This promo code is not yet valid.',
+
+    'expired_message' => 'This promo code has expired.',
+
 ];

@@ -80,6 +80,20 @@ final class BranchSettings
         ];
     }
 
+    /**
+     * Resolve branch model for an appointment (null branch_id → default / first active).
+     * Used by booking confirmation and reminder emails.
+     */
+    public static function resolveBranchModel(?int $branchId): ?BranchModel
+    {
+        $resolvedId = self::resolveBranchId($branchId);
+        if ($resolvedId === null) {
+            return null;
+        }
+
+        return BranchModel::query()->find($resolvedId);
+    }
+
     public static function forgetCache(): void
     {
         Cache::forget(self::CACHE_KEY);

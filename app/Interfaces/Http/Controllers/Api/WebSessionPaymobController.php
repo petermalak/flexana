@@ -147,22 +147,30 @@ class WebSessionPaymobController extends Controller
         $promoRecord = null;
 
         if ($promoCode) {
-            $promoRecord = PromoCodeModel::findByCode($promoCode);
-            if (
-                $promoRecord
-                && $promoRecord->invalidReasonForCustomer(
-                    null,
-                    PromoApplicableType::DropIns,
-                    $sessionID,
-                    BranchSettings::resolveBranchId(
-                        $appointment->branch_id ? (int) $appointment->branch_id : null,
-                    ),
-                ) === null
-            ) {
-                $totalPrice = $totalPrice * (1 - (float) $promoRecord->percent_discount / 100);
-            } else {
-                $promoRecord = null;
+            $email = strtolower(trim((string) ($data['customer']['email'] ?? '')));
+            $existingCustomerId = $email !== ''
+                ? Customer::query()->where('email', $email)->value('id')
+                : null;
+
+            [$promoRecord, $promoReason] = PromoCodeModel::resolveOrInvalidReason(
+                $promoCode,
+                $existingCustomerId !== null ? (int) $existingCustomerId : null,
+                PromoApplicableType::DropIns,
+                $sessionID,
+                BranchSettings::resolveBranchId(
+                    $appointment->branch_id ? (int) $appointment->branch_id : null,
+                ),
+            );
+
+            if ($promoReason !== null) {
+                return response()->json([
+                    'success' => false,
+                    'reason' => $promoReason,
+                    'message' => PromoCodeModel::messageForReason($promoReason, $promoRecord),
+                ], 400);
             }
+
+            $totalPrice = $totalPrice * (1 - (float) $promoRecord->percent_discount / 100);
         }
 
         $currency = (string) config('paymob.currency', 'EGP');

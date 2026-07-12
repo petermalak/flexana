@@ -16,8 +16,8 @@ final class BookingConfirmationEmailText
 
     public static function internalSubject(AppointmentModel $appointment): string
     {
-        $appointment->loadMissing('branch');
-        $branchName = trim((string) ($appointment->branch?->name ?? ''));
+        $branch = self::resolveBranch($appointment);
+        $branchName = trim((string) ($branch?->name ?? ''));
 
         if ($branchName === '') {
             return self::customerSubject();
@@ -38,7 +38,7 @@ final class BookingConfirmationEmailText
 
         $service = $appointment->service;
         $provider = $appointment->provider;
-        $branch = $appointment->branch;
+        $branch = self::resolveBranch($appointment);
 
         $customerName = trim(($customer->first_name ?? '') . ' ' . ($customer->last_name ?? ''));
         $customerName = $customerName !== '' ? $customerName : ($customer->email ?? 'Customer');
@@ -77,6 +77,17 @@ final class BookingConfirmationEmailText
             . "You can contact us at +20 122 0221100 to reschedule your session or request a refund.\n\n"
             . "We look forward to seeing you on the mat!\n\n"
             . "Flexana Team";
+    }
+
+    private static function resolveBranch(AppointmentModel $appointment): ?\App\Infrastructure\Persistence\Eloquent\BranchModel
+    {
+        if ($appointment->relationLoaded('branch') && $appointment->branch) {
+            return $appointment->branch;
+        }
+
+        return BranchSettings::resolveBranchModel(
+            $appointment->branch_id ? (int) $appointment->branch_id : null,
+        );
     }
 
     private static function branchSection(?string $name, ?string $address): string

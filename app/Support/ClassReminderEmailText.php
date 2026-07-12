@@ -19,7 +19,10 @@ final class ClassReminderEmailText
 
         $service = $appointment->service;
         $provider = $appointment->provider;
-        $branch = $appointment->branch;
+        $branch = $appointment->branch
+            ?? BranchSettings::resolveBranchModel(
+                $appointment->branch_id ? (int) $appointment->branch_id : null,
+            );
 
         $customerName = trim(($customer->first_name ?? '') . ' ' . ($customer->last_name ?? ''));
         $customerName = $customerName !== '' ? $customerName : ($customer->email ?? 'Customer');

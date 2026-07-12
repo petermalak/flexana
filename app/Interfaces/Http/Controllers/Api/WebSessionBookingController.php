@@ -155,7 +155,7 @@ class WebSessionBookingController extends Controller
             $totalPrice = $subtotalBeforePromo;
             $promoRecord = null;
             if ($promoCode) {
-                $promoRecord = PromoCodeModel::resolveForCustomer(
+                [$promoRecord, $promoReason] = PromoCodeModel::resolveOrInvalidReason(
                     $promoCode,
                     (int) $customer->id,
                     PromoApplicableType::DropIns,
@@ -164,9 +164,14 @@ class WebSessionBookingController extends Controller
                         $appointment->branch_id ? (int) $appointment->branch_id : null,
                     ),
                 );
-                if ($promoRecord) {
-                    $totalPrice = $totalPrice * (1 - (float) $promoRecord->percent_discount / 100);
+                if ($promoReason !== null) {
+                    return response()->json([
+                        'success' => false,
+                        'reason' => $promoReason,
+                        'message' => PromoCodeModel::messageForReason($promoReason, $promoRecord),
+                    ], 400);
                 }
+                $totalPrice = $totalPrice * (1 - (float) $promoRecord->percent_discount / 100);
             }
         }
 
@@ -174,7 +179,9 @@ class WebSessionBookingController extends Controller
         try {
             if ($isDropIn && $promoRecord) {
                 if (! $promoRecord->incrementUsageIfAllowed((int) $customer->id)) {
-                    throw new \RuntimeException('Promo code usage limit was reached.');
+                    $blocked = $promoRecord->redemptionBlockedReason((int) $customer->id)
+                        ?? 'usage_limit_reached';
+                    throw new \RuntimeException(PromoCodeModel::messageForReason($blocked, $promoRecord));
                 }
             }
 
@@ -248,10 +255,10 @@ class WebSessionBookingController extends Controller
         } catch (\Throwable $e) {
             DB::rollBack();
             $message = $e->getMessage();
-            if (str_contains($message, 'Promo code usage limit')) {
+            if (str_contains(strtolower($message), 'promo code')) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'You have already used this promo code the maximum number of times.',
+                    'message' => $message,
                 ], 400);
             }
 
