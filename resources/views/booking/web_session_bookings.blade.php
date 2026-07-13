@@ -875,8 +875,8 @@
                     <input id="email" type="email" autocomplete="email" required>
                 </div>
                 <div class="field" style="grid-column: 1 / -1;">
-                    <label for="phone">Phone (optional)</label>
-                    <input id="phone" autocomplete="tel">
+                    <label for="phone">Phone</label>
+                    <input id="phone" type="tel" autocomplete="tel" required>
                 </div>
                 <div class="field">
                     <label for="spots">Spots</label>
@@ -1065,6 +1065,11 @@
 
         const promoRaw = document.getElementById('promo').value.trim();
         const phoneRaw = document.getElementById('phone').value.trim();
+        if (!phoneRaw) {
+            showBanner('Phone number is required.', 'error');
+            btn.disabled = false;
+            return;
+        }
 
         const payload = {
             sessionID: Number(selected.id),
@@ -1076,7 +1081,7 @@
                 firstName: document.getElementById('firstName').value.trim(),
                 lastName: document.getElementById('lastName').value.trim(),
                 email: document.getElementById('email').value.trim(),
-                ...(phoneRaw ? { phone: phoneRaw } : {}),
+                phone: phoneRaw,
             },
         };
 

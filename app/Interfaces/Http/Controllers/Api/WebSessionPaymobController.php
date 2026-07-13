@@ -21,6 +21,7 @@ use App\Support\ApiDateTime;
 use App\Support\BookingConfirmationEmailText;
 use App\Support\BranchSettings;
 use App\Support\InternalNotificationMail;
+use App\Support\PhoneNumberNormalizer;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 
@@ -89,7 +90,13 @@ class WebSessionPaymobController extends Controller
             'customer.lastName' => 'required|string|max:80',
             // Avoid DNS validation for embed checkout (dev/offline/test domains).
             'customer.email' => 'required|email:rfc|max:190',
-            'customer.phone' => 'nullable|string|max:40',
+            // Required: Paymob SMS / OTP uses billing phone.
+            'customer.phone' => ['required', 'string', 'max:40', function (string $attribute, mixed $value, \Closure $fail): void {
+                $normalized = PhoneNumberNormalizer::normalizeNullable(trim((string) $value));
+                if ($normalized === null || ! PhoneNumberNormalizer::isValidE164($normalized)) {
+                    $fail('A valid phone number is required.');
+                }
+            }],
         ]);
 
         if ($validator->fails()) {
@@ -101,6 +108,9 @@ class WebSessionPaymobController extends Controller
         }
 
         $data = $validator->validated();
+        $data['customer']['phone'] = PhoneNumberNormalizer::normalize(
+            trim((string) ($data['customer']['phone'] ?? '')),
+        );
         $isDropIn = array_key_exists('isDropIn', $data) ? (bool) $data['isDropIn'] : true;
         if (! $isDropIn) {
             return response()->json([
@@ -257,6 +267,16 @@ class WebSessionPaymobController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Payment gateway is unreachable. Please try again.',
+            ], 502);
+        } catch (\Throwable $e) {
+            Log::error('Paymob payment key failed', [
+                'error' => $e->getMessage(),
+                'session_id' => $sessionID,
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Could not start payment. Please try again.',
             ], 502);
         }
 
@@ -494,12 +514,18 @@ class WebSessionPaymobController extends Controller
 
         /** @var Customer $customer */
         $customer = Customer::query()->where('email', $email)->first();
+        $phone = PhoneNumberNormalizer::normalize(
+            trim((string) ($customerPayload['phone'] ?? '')),
+        );
+        if ($phone === '' || ! PhoneNumberNormalizer::isValidE164($phone)) {
+            throw new \RuntimeException('A valid phone number is required.');
+        }
         if (! $customer) {
             $customer = Customer::query()->create([
                 'first_name' => (string) ($customerPayload['firstName'] ?? ''),
                 'last_name' => (string) ($customerPayload['lastName'] ?? ''),
                 'email' => $email,
-                'phone' => (string) ($customerPayload['phone'] ?? ''),
+                'phone' => $phone,
                 'source' => 'web',
                 'timezone' => (string) config('app.timezone'),
             ]);
@@ -507,7 +533,7 @@ class WebSessionPaymobController extends Controller
             $customer->fill([
                 'first_name' => (string) ($customerPayload['firstName'] ?? $customer->first_name),
                 'last_name' => (string) ($customerPayload['lastName'] ?? $customer->last_name),
-                'phone' => (string) ($customerPayload['phone'] ?? $customer->phone),
+                'phone' => $phone,
                 'source' => $customer->source ?: 'web',
             ])->save();
         }

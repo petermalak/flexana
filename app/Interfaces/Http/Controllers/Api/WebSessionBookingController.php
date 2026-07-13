@@ -14,6 +14,7 @@ use App\Support\BookingConfirmationEmailText;
 use App\Support\BranchSettings;
 use App\Support\InternalNotificationMail;
 use App\Support\PackagePurchaseLifecycle;
+use App\Support\PhoneNumberNormalizer;
 use App\Support\ValidPackagePurchaseFinder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -37,7 +38,7 @@ class WebSessionBookingController extends Controller
      *  - spots (optional int, default 1)
      *  - promoCode (optional string)
      *  - isDropIn (optional bool, default true)
-     *  - customer: { firstName, lastName, email, phone? }
+     *  - customer: { firstName, lastName, email, phone }
      */
     public function store(Request $request): JsonResponse
     {
@@ -49,7 +50,12 @@ class WebSessionBookingController extends Controller
             'customer.firstName' => 'required|string|max:80',
             'customer.lastName' => 'required|string|max:80',
             'customer.email' => 'required|email:rfc|max:190',
-            'customer.phone' => 'nullable|string|max:40',
+            'customer.phone' => ['required', 'string', 'max:40', function (string $attribute, mixed $value, \Closure $fail): void {
+                $normalized = PhoneNumberNormalizer::normalizeNullable(trim((string) $value));
+                if ($normalized === null || ! PhoneNumberNormalizer::isValidE164($normalized)) {
+                    $fail('A valid phone number is required.');
+                }
+            }],
         ]);
 
         if ($validator->fails()) {
@@ -61,6 +67,9 @@ class WebSessionBookingController extends Controller
         }
 
         $data = $validator->validated();
+        $data['customer']['phone'] = PhoneNumberNormalizer::normalize(
+            trim((string) ($data['customer']['phone'] ?? '')),
+        );
         $sessionID = (int) $data['sessionID'];
         $spots = (int) ($data['spots'] ?? 1);
         $promoCode = $data['promoCode'] ?? null;
@@ -75,6 +84,7 @@ class WebSessionBookingController extends Controller
 
         $customerPayload = $data['customer'] ?? [];
         $email = strtolower(trim((string) ($customerPayload['email'] ?? '')));
+        $phone = (string) ($customerPayload['phone'] ?? '');
 
         /** @var Customer $customer */
         $customer = Customer::query()->where('email', $email)->first();
@@ -83,7 +93,7 @@ class WebSessionBookingController extends Controller
                 'first_name' => (string) ($customerPayload['firstName'] ?? ''),
                 'last_name' => (string) ($customerPayload['lastName'] ?? ''),
                 'email' => $email,
-                'phone' => (string) ($customerPayload['phone'] ?? ''),
+                'phone' => $phone,
                 'source' => 'web',
                 'timezone' => (string) config('app.timezone'),
             ]);
@@ -91,7 +101,7 @@ class WebSessionBookingController extends Controller
             $customer->fill([
                 'first_name' => (string) ($customerPayload['firstName'] ?? $customer->first_name),
                 'last_name' => (string) ($customerPayload['lastName'] ?? $customer->last_name),
-                'phone' => (string) ($customerPayload['phone'] ?? $customer->phone),
+                'phone' => $phone,
                 'source' => $customer->source ?: 'web',
             ])->save();
         }
