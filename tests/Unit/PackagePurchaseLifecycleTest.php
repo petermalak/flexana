@@ -4,7 +4,7 @@ namespace Tests\Unit;
 
 use App\Infrastructure\Persistence\Eloquent\CustomerPackagePurchaseModel;
 use App\Support\PackagePurchaseLifecycle;
-use PHPUnit\Framework\TestCase;
+use Tests\TestCase;
 
 class PackagePurchaseLifecycleTest extends TestCase
 {
@@ -48,6 +48,45 @@ class PackagePurchaseLifecycleTest extends TestCase
         $this->assertSame('expired', $purchase->status);
         $this->assertFalse($purchase->wasUpdated);
     }
+
+    public function test_reactivates_expired_purchase_when_sessions_restored(): void
+    {
+        $purchase = new TestableCustomerPackagePurchase([
+            'remaining_sessions' => 1,
+            'status' => 'expired',
+        ]);
+
+        PackagePurchaseLifecycle::afterSessionsRestored($purchase);
+
+        $this->assertSame('active', $purchase->status);
+        $this->assertTrue($purchase->wasUpdated);
+    }
+
+    public function test_keeps_expired_purchase_when_no_sessions_restored(): void
+    {
+        $purchase = new TestableCustomerPackagePurchase([
+            'remaining_sessions' => 0,
+            'status' => 'expired',
+        ]);
+
+        PackagePurchaseLifecycle::afterSessionsRestored($purchase);
+
+        $this->assertSame('expired', $purchase->status);
+        $this->assertFalse($purchase->wasUpdated);
+    }
+
+    public function test_does_not_reactivate_inactive_purchase_when_sessions_restored(): void
+    {
+        $purchase = new TestableCustomerPackagePurchase([
+            'remaining_sessions' => 2,
+            'status' => 'inactive',
+        ]);
+
+        PackagePurchaseLifecycle::afterSessionsRestored($purchase);
+
+        $this->assertSame('inactive', $purchase->status);
+        $this->assertFalse($purchase->wasUpdated);
+    }
 }
 
 /**
@@ -65,6 +104,11 @@ final class TestableCustomerPackagePurchase extends CustomerPackagePurchaseModel
     }
 
     public function refresh(): static
+    {
+        return $this;
+    }
+
+    public function loadMissing($relations)
     {
         return $this;
     }

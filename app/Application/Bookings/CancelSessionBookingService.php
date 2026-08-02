@@ -10,6 +10,7 @@ use App\Infrastructure\Persistence\Eloquent\ServiceModel;
 use App\Support\ApiDateTime;
 use App\Support\InternalNotificationMail;
 use App\Support\PackagePurchaseExpiry;
+use App\Support\PackagePurchaseLifecycle;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -100,6 +101,7 @@ final class CancelSessionBookingService
                 }
                 if ($purchase) {
                     $purchase->increment('remaining_sessions', (int) $booking->party_size);
+                    PackagePurchaseLifecycle::afterSessionsRestored($purchase);
                 }
             }
 
