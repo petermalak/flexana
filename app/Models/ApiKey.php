@@ -2,7 +2,9 @@
 
 namespace App\Models;
 
+use App\Infrastructure\Persistence\Eloquent\BranchModel;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Str;
 
@@ -12,6 +14,7 @@ class ApiKey extends Model
     protected $fillable = [
         'uuid',
         'name',
+        'branch_id',
         'key_id',
         'secret_key',
         'is_active',
@@ -35,14 +38,19 @@ class ApiKey extends Model
     /**
      * Generate a new API key pair
      */
-    public static function generate(string $name, ?array $allowedIps = null, ?\DateTime $expiresAt = null): array
-    {
+    public static function generate(
+        string $name,
+        ?array $allowedIps = null,
+        ?\DateTime $expiresAt = null,
+        ?int $branchId = null,
+    ): array {
         $keyId = 'fk_' . Str::random(32);
         $secretKey = Str::random(64);
 
         $apiKey = self::create([
             'uuid' => (string) Str::uuid(),
             'name' => $name,
+            'branch_id' => $branchId,
             'key_id' => $keyId,
             'secret_key' => Crypt::encryptString($secretKey), // Encrypt (not hash) so we can decrypt for HMAC
             'is_active' => true,
@@ -55,10 +63,16 @@ class ApiKey extends Model
             'id' => $apiKey->id,
             'uuid' => $apiKey->uuid,
             'name' => $apiKey->name,
+            'branch_id' => $apiKey->branch_id,
             'key_id' => $keyId,
             'secret_key' => $secretKey, // Only shown once!
             'created_at' => $apiKey->created_at,
         ];
+    }
+
+    public function branch(): BelongsTo
+    {
+        return $this->belongsTo(BranchModel::class, 'branch_id');
     }
 
     /**

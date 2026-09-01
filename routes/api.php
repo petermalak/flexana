@@ -16,6 +16,7 @@ use App\Interfaces\Http\Controllers\Api\Mobile\MobilePromoCodeController;
 use App\Interfaces\Http\Controllers\Api\Mobile\MobileServiceController;
 use App\Interfaces\Http\Controllers\Api\Mobile\MobileSessionController;
 use App\Interfaces\Http\Controllers\Api\PackageController;
+use App\Interfaces\Http\Controllers\Api\PosTransactionsController;
 use App\Interfaces\Http\Controllers\Api\ServiceController;
 use App\Interfaces\Http\Controllers\Api\StaffController;
 use App\Interfaces\Http\Controllers\Api\WebSessionController;
@@ -72,6 +73,13 @@ Route::prefix('v1')
         Route::delete('packages/{package}', [PackageController::class, 'destroy']);
 
         Route::post('users/customers', [CustomerController::class, 'storeFlutter']);
+    });
+
+// Mall / POS integration — username + secret key headers (no HMAC)
+Route::prefix('v1')
+    ->middleware(['pos.credentials', 'throttle:60,1'])
+    ->group(function (): void {
+        Route::get('pos/transactions', [PosTransactionsController::class, 'index']);
     });
 
 // Mobile / App API under /api/v1 — all data endpoints require Bearer token

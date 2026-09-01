@@ -15,7 +15,8 @@ class GenerateApiKey extends Command
     protected $signature = 'api:generate-key 
                             {name : The name/identifier for this API key}
                             {--ips=* : Comma-separated list of allowed IP addresses (optional)}
-                            {--expires= : Expiration date (Y-m-d format, optional)}';
+                            {--expires= : Expiration date (Y-m-d format, optional)}
+                            {--branch= : Branch ID for POS / branch-scoped keys (optional)}';
 
     /**
      * The console command description.
@@ -32,6 +33,7 @@ class GenerateApiKey extends Command
         $name = $this->argument('name');
         $ips = $this->option('ips');
         $expires = $this->option('expires');
+        $branch = $this->option('branch');
 
         // Parse IPs
         $allowedIps = null;
@@ -55,8 +57,25 @@ class GenerateApiKey extends Command
             }
         }
 
+        $branchId = null;
+        if ($branch !== null && $branch !== '') {
+            $branchId = (int) $branch;
+            if ($branchId <= 0) {
+                $this->error('Invalid branch ID. Use a positive integer from the branches table.');
+
+                return Command::FAILURE;
+            }
+
+            $branchExists = \App\Infrastructure\Persistence\Eloquent\BranchModel::query()->whereKey($branchId)->exists();
+            if (! $branchExists) {
+                $this->error("Branch ID {$branchId} was not found.");
+
+                return Command::FAILURE;
+            }
+        }
+
         // Generate the key
-        $result = ApiKey::generate($name, $allowedIps, $expiresAt);
+        $result = ApiKey::generate($name, $allowedIps, $expiresAt, $branchId);
 
         $this->info('API Key generated successfully!');
         $this->newLine();
@@ -71,7 +90,8 @@ class GenerateApiKey extends Command
             [
                 ['ID', $result['id']],
                 ['UUID', $result['uuid']],
-                ['Name', $result['name']],
+                ['Username', $result['name']],
+                ['Branch ID', $result['branch_id'] !== null ? (string) $result['branch_id'] : 'Any'],
                 ['Key ID', $result['key_id']],
                 ['Secret Key', $result['secret_key']],
                 ['Created At', $result['created_at']],

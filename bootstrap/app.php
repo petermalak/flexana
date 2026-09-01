@@ -29,6 +29,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'firebase.auth' => EnsureFirebaseAuthenticated::class,
             'api.signature' => \App\Http\Middleware\VerifyApiSignature::class,
+            'pos.credentials' => \App\Http\Middleware\VerifyPosCredentials::class,
             'booking.embed' => \App\Http\Middleware\AllowBookingEmbed::class,
         ]);
     })
